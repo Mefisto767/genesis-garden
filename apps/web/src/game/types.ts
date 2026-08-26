@@ -1,0 +1,24 @@
+export interface SeedDef {
+  id: string;
+  name: string;
+  emoji: string;
+  growMs: number;
+  buyCost: number;
+  sellValue: number;
+}
+
+export interface Plot {
+  id: number;
+  unlocked: boolean;
+  seedId: string | null;
+  plantedAt: number | null;
+}
+
+export interface GameState {
+  coins: number;
+  plots: Plot[];
+  inventory: Record<string, number>;
+}
+
+export const MAX_PLOTS = 24;
+export const START_UNLOCKED_PLOTS = 6;
