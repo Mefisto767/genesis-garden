@@ -7,7 +7,7 @@ import { overhaulEvents } from '../../overhaul/events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
 import { track } from '../../analytics/track';
 import {
-  clampToWorld,
+  clampToBounds,
   facingFromDelta,
   moveWithCollisions,
   pointBlocked,
@@ -15,22 +15,27 @@ import {
   type Facing,
   type Point,
 } from '../../overhaul/movement';
+import { deriveLumiState, lumiFollowStep, type LumiState } from '../../overhaul/lumiBehavior';
 import {
+  BOUNDARY_TRANSITIONS,
   BUILDINGS,
+  CAMERA_BOUNDS,
   DECOR,
-  EXPANSION_GATE,
   LAB_BUILDING,
+  LANDMARK_CENTRAL_POS,
+  LUMI_STATION_POS,
   NPC_PATROL,
   PLAYER_SPAWN,
   PLOT_SLOTS,
+  RENDER_COLS,
+  RENDER_COL_START,
+  RENDER_ROWS,
+  RENDER_ROW_START,
   TILE,
-  WORLD_COLS,
-  WORLD_HEIGHT,
-  WORLD_ROWS,
-  WORLD_WIDTH,
   collisionRects,
   pathTileKeySet,
   terrainAt,
+  type BoundaryTransition,
 } from '../../overhaul/worldConfig';
 
 const STAGE2_THRESHOLD = 0.45;
@@ -40,6 +45,12 @@ const FONT_BODY = "'Nunito', sans-serif";
 const PLAYER_SPEED = 130; // px/s
 const PLAYER_HALF_W = 9;
 const PLAYER_HALF_H = 8;
+// Защита от "прошивания" тонкой полосы коллизии на границе сектора при
+// внезапном скачке delta (например, вкладка была в фоне) — см.
+// worldConfig.test.ts "blocks movement... " и обсуждение в CLAUDE.md про
+// троттлинг rAF в headless-среде. 50ms — с запасом меньше ширины полосы
+// зарослей (64px) даже на максимальной скорости персонажа.
+const MAX_FRAME_MS = 50;
 
 function formatRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -48,19 +59,32 @@ function formatRemaining(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+type EstateDebugApi = {
+  getEstateState: () => { cameraScrollX: number; cameraScrollY: number; playerX: number; playerY: number };
+};
+
 /**
  * EstateScene — внешний мир overhaul-режима (см. docs/FINAL_VISION.md 4.1,
- * техпромт "Vertical Overhaul, этап 1"). Один законченный сектор поместья:
- * дом, 6 грядок (те же сущности gameStore, что и в классическом GardenScene),
- * дорожка, интерактивная лаборатория, пруд, декор, ворота будущего
- * расширения, NPC-патруль. Персонаж: WASD/стрелки + click/tap-to-move,
- * коллизии со зданиями/прудом, камера следует за персонажем в границах мира.
+ * docs/ESTATE_LAYOUT_BLUEPRINT.md). Рисует и делает проходимой ОДНУ открытую
+ * зону поместья (zone_starting_garden из estateBlueprint.ts): дом, склад,
+ * лабораторию, 6 грядок (те же сущности gameStore, что и в классическом
+ * GardenScene), дорожку, пруд, декор, станцию и самого помощника Люми,
+ * NPC-патруль, и 4 честные "заглушки будущего" по периметру сектора
+ * (BOUNDARY_TRANSITIONS) — заросли/разрушенные проходы, за которые выйти
+ * нельзя (см. worldConfig.collisionRects()). Персонаж: WASD/стрелки +
+ * click/tap-to-move, коллизии со зданиями/прудом/границей сектора, камера
+ * следует за персонажем в пределах CAMERA_BOUNDS (заметно меньше полного
+ * 48×48 мира — весь мир одновременно никогда не показывается).
  */
 export class EstateScene extends Phaser.Scene {
   private plotsContainer!: Phaser.GameObjects.Container;
   private player!: Phaser.GameObjects.Container;
   private facingIndicator!: Phaser.GameObjects.Image;
   private npc!: Phaser.GameObjects.Container;
+  private lumi!: Phaser.GameObjects.Container;
+  private lumiGlow!: Phaser.GameObjects.Image;
+  private lumiPos: Point = { ...LUMI_STATION_POS };
+  private lumiState: LumiState = 'idle';
   private promptImage?: Phaser.GameObjects.Image;
   private promptText?: Phaser.GameObjects.Text;
   private unsubscribeStore?: () => void;
@@ -70,7 +94,7 @@ export class EstateScene extends Phaser.Scene {
   private facing: Facing = 'down';
   private obstacles = collisionRects();
   private nearLab = false;
-  private nearGate = false;
+  private nearTransition: BoundaryTransition | null = null;
   private transitioning = false;
   private readonly handleResize = () => this.layoutHud();
 
@@ -80,16 +104,23 @@ export class EstateScene extends Phaser.Scene {
 
   create() {
     this.transitioning = false;
+    this.lumiPos = { ...LUMI_STATION_POS };
+    this.lumiState = 'idle';
     this.cameras.main.setBackgroundColor(PALETTE.leafDark);
     this.renderTerrain();
+    this.renderLandmarkClearing();
     this.renderDecor();
     this.renderBuildings();
+    this.renderLumiStation();
+    this.renderBoundaryTransitions();
     this.plotsContainer = this.add.container(0, 0);
     this.renderPlots();
     this.createPlayer();
     this.createNpc();
+    this.createLumi();
     this.setupCamera();
     this.setupInput();
+    this.exposeDebugHook();
 
     this.unsubscribeStore = gameStore.subscribe(() => this.renderPlots());
     this.time.addEvent({ delay: 250, loop: true, callback: () => this.renderPlots() });
@@ -107,14 +138,32 @@ export class EstateScene extends Phaser.Scene {
     // (сейчас всё в мировых координатах и camera.setBounds уже достаточно).
   }
 
+  /** Только для e2e/ручной проверки — read-only снимок состояния сцены на
+   * `window`, не влияет на игровую логику. Позволяет тестам вычислять точные
+   * экранные координаты (мировые - scroll камеры) вместо хрупких магических
+   * чисел, продублированных в тестовом файле (см. test-e2e-overhaul.mjs). */
+  private exposeDebugHook() {
+    if (typeof window === 'undefined') return;
+    const api: EstateDebugApi = {
+      getEstateState: () => ({
+        cameraScrollX: this.cameras.main.scrollX,
+        cameraScrollY: this.cameras.main.scrollY,
+        playerX: this.player.x,
+        playerY: this.player.y,
+      }),
+    };
+    (window as unknown as { __overhaulDebug?: EstateDebugApi }).__overhaulDebug = api;
+  }
+
   // ---- мир: террейн/декор/здания ------------------------------------------
 
   private renderTerrain() {
     const pathTiles = pathTileKeySet();
-    for (let row = 0; row < WORLD_ROWS; row++) {
-      for (let col = 0; col < WORLD_COLS; col++) {
+    for (let row = RENDER_ROW_START; row < RENDER_ROW_START + RENDER_ROWS; row++) {
+      for (let col = RENDER_COL_START; col < RENDER_COL_START + RENDER_COLS; col++) {
         const kind = terrainAt(col, row, pathTiles);
-        const key = kind === 'grass' ? 'tile_grass' : kind === 'path' ? 'tile_path' : 'tile_water';
+        const key =
+          kind === 'grass' ? 'tile_grass' : kind === 'path' ? 'tile_path' : kind === 'water' ? 'tile_water' : 'tile_thicket';
         const img = this.add.image(col * TILE, row * TILE, key).setOrigin(0, 0);
         img.setDepth(-1000);
         if (kind === 'water') {
@@ -132,6 +181,13 @@ export class EstateScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /** Зарезервированная площадка landmark_central — только расчищенная
+   * поляна, без монумента (см. estateBlueprint.ts LANDMARK_SLOTS). */
+  private renderLandmarkClearing() {
+    const img = this.add.image(LANDMARK_CENTRAL_POS.x, LANDMARK_CENTRAL_POS.y, 'landmark_clearing');
+    img.setDepth(-900);
   }
 
   private renderDecor() {
@@ -153,8 +209,29 @@ export class EstateScene extends Phaser.Scene {
       img.setDepth(b.y);
       if (b.interactive) {
         img.setInteractive({ useHandCursor: true });
-        img.on('pointerdown', () => this.tryInteractWith(b.id));
+        img.on('pointerdown', () => this.tryInteractWithBuilding(b.id));
       }
+    }
+  }
+
+  /** Станция Люми — декоративная, без коллизии и без интерактивности
+   * (см. lumiBehavior.ts — вся идея Люми в том, что она никогда не мешает). */
+  private renderLumiStation() {
+    const img = this.add
+      .image(LUMI_STATION_POS.x, LUMI_STATION_POS.y, 'building_lumi_station')
+      .setOrigin(0.5, 0.92);
+    img.setDepth(LUMI_STATION_POS.y - 1);
+  }
+
+  private renderBoundaryTransitions() {
+    for (const t of BOUNDARY_TRANSITIONS) {
+      const img = this.add
+        .image(t.x, t.y, t.assetId)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(t.displayWidth, t.displayHeight)
+        .setInteractive({ useHandCursor: true });
+      img.setDepth(t.y);
+      img.on('pointerdown', () => this.tryInteractWithTransition(t.id));
     }
   }
 
@@ -314,8 +391,26 @@ export class EstateScene extends Phaser.Scene {
     });
   }
 
+  /** Люми — постоянный помощник поместья (см. docs/ESTATE_LAYOUT_BLUEPRINT.md
+   * "Люми" и apps/web/src/overhaul/lumiBehavior.ts). НЕ интерактивна и НЕ
+   * добавлена в obstacles/collisionRects — намеренно: не блокирует движение
+   * персонажа и не может случайно вызвать игровое действие. */
+  private createLumi() {
+    const body = this.add.image(0, 0, 'companion_lumi_idle').setOrigin(0.5, 0.92);
+    this.lumiGlow = this.add.image(0, -body.displayHeight * 0.62, 'companion_lumi_glow').setAlpha(0.7);
+    this.lumi = this.add.container(this.lumiPos.x, this.lumiPos.y, [body, this.lumiGlow]);
+    this.lumi.setDepth(this.lumiPos.y);
+    this.tweens.add({
+      targets: this.lumiGlow,
+      alpha: 0.25,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
   private setupCamera() {
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    this.cameras.main.setBounds(CAMERA_BOUNDS.x, CAMERA_BOUNDS.y, CAMERA_BOUNDS.w, CAMERA_BOUNDS.h);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
   }
 
@@ -331,21 +426,22 @@ export class EstateScene extends Phaser.Scene {
         if (currentlyOver.length > 0) return; // клик поймал интерактивный объект (грядка/здание) — не двигаем персонажа сквозь него
         const target = { x: pointer.worldX, y: pointer.worldY };
         if (pointBlocked(target, this.obstacles)) return;
-        this.moveTarget = {
-          x: Math.min(Math.max(target.x, 0), WORLD_WIDTH),
-          y: Math.min(Math.max(target.y, 0), WORLD_HEIGHT),
-        };
+        this.moveTarget = clampToBounds(target.x, target.y, 0, 0, CAMERA_BOUNDS);
       }
     );
   }
 
-  private tryInteractWith(buildingId: string) {
-    if (buildingId === 'lab') {
+  private tryInteractWithBuilding(buildingId: string) {
+    if (buildingId === LAB_BUILDING.id) {
       if (this.nearLab) this.enterLaboratory();
       else gardenEvents.emit('toast', { text: 'Подойди ближе ко входу в лабораторию' });
-    } else if (buildingId === 'gate') {
-      gardenEvents.emit('toast', { text: 'Расширение территории появится позже' });
     }
+  }
+
+  private tryInteractWithTransition(transitionId: string) {
+    const t = BOUNDARY_TRANSITIONS.find((x) => x.id === transitionId);
+    if (!t) return;
+    gardenEvents.emit('toast', { text: t.label });
   }
 
   private enterLaboratory() {
@@ -363,7 +459,7 @@ export class EstateScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (this.transitioning) return;
-    const dt = delta / 1000;
+    const dt = Math.min(delta, MAX_FRAME_MS) / 1000;
     let dx = 0;
     let dy = 0;
     const left = this.cursors?.left.isDown || this.wasd?.A.isDown;
@@ -375,7 +471,8 @@ export class EstateScene extends Phaser.Scene {
     if (up) dy -= 1;
     if (down) dy += 1;
 
-    if (dx !== 0 || dy !== 0) {
+    const keyboardActive = dx !== 0 || dy !== 0;
+    if (keyboardActive) {
       this.moveTarget = null;
       const len = Math.hypot(dx, dy) || 1;
       dx = (dx / len) * PLAYER_SPEED * dt;
@@ -387,9 +484,10 @@ export class EstateScene extends Phaser.Scene {
       if (step.arrived) this.moveTarget = null;
     }
 
-    if (dx !== 0 || dy !== 0) {
+    const playerIsMoving = dx !== 0 || dy !== 0;
+    if (playerIsMoving) {
       const moved = moveWithCollisions(this.player.x, this.player.y, dx, dy, PLAYER_HALF_W, PLAYER_HALF_H, this.obstacles);
-      const clamped = clampToWorld(moved.x, moved.y, PLAYER_HALF_W, PLAYER_HALF_H, WORLD_WIDTH, WORLD_HEIGHT);
+      const clamped = clampToBounds(moved.x, moved.y, PLAYER_HALF_W, PLAYER_HALF_H, CAMERA_BOUNDS);
       this.player.setPosition(clamped.x, clamped.y);
       this.player.setDepth(clamped.y);
       this.facing = facingFromDelta(dx, dy, this.facing);
@@ -397,13 +495,14 @@ export class EstateScene extends Phaser.Scene {
     }
 
     this.updateProximity();
+    this.updateLumi(dt, playerIsMoving);
 
     const interactPressed =
       (this.wasd && (Phaser.Input.Keyboard.JustDown(this.wasd.E) || Phaser.Input.Keyboard.JustDown(this.wasd.ENTER))) ??
       false;
     if (interactPressed) {
-      if (this.nearLab) this.tryInteractWith('lab');
-      else if (this.nearGate) this.tryInteractWith('gate');
+      if (this.nearLab) this.tryInteractWithBuilding(LAB_BUILDING.id);
+      else if (this.nearTransition) this.tryInteractWithTransition(this.nearTransition.id);
     }
   }
 
@@ -419,31 +518,65 @@ export class EstateScene extends Phaser.Scene {
     this.facingIndicator.setRotation(rot);
   }
 
+  /** Люми следует за игроком с небольшим отставанием (см. lumiBehavior.ts).
+   * Не участвует в коллизиях, не интерактивна — только чтение позиции
+   * игрока и позиционирование собственного Container. */
+  private updateLumi(dt: number, playerIsMoving: boolean) {
+    const prev = this.lumiPos;
+    const next = lumiFollowStep(this.lumiPos, { x: this.player.x, y: this.player.y }, dt);
+    const lumiIsMoving = next.x !== prev.x || next.y !== prev.y;
+    this.lumiPos = next;
+    this.lumi.setPosition(next.x, next.y);
+    this.lumi.setDepth(next.y);
+
+    const nearInteractable = this.nearLab || !!this.nearTransition;
+    const state = deriveLumiState({ playerIsMoving, nearInteractable, lumiIsMoving });
+    if (state !== this.lumiState) {
+      this.lumiState = state;
+      // "Простое временное представление" по ТЗ — единственная визуальная
+      // реакция на состояние 'point' на этом этапе: свечение меняет тон.
+      this.lumiGlow.setTint(state === 'point' ? PALETTE.amber : 0xffffff);
+    }
+  }
+
   private updateProximity() {
     const distLab = Phaser.Math.Distance.Between(this.player.x, this.player.y, LAB_BUILDING.x, LAB_BUILDING.y);
-    const distGate = Phaser.Math.Distance.Between(this.player.x, this.player.y, EXPANSION_GATE.x, EXPANSION_GATE.y);
     const nowNearLab = distLab <= LAB_BUILDING.interactionRadius;
-    const nowNearGate = !nowNearLab && distGate <= EXPANSION_GATE.interactionRadius;
+    let nowNearTransition: BoundaryTransition | null = null;
+    if (!nowNearLab) {
+      for (const t of BOUNDARY_TRANSITIONS) {
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, t.x, t.y);
+        if (dist <= t.interactionRadius) {
+          nowNearTransition = t;
+          break;
+        }
+      }
+    }
     if (nowNearLab !== this.nearLab) {
       this.nearLab = nowNearLab;
       overhaulEvents.emit('nearLabChanged', { near: nowNearLab });
     }
-    if (nowNearGate !== this.nearGate) {
-      this.nearGate = nowNearGate;
-      overhaulEvents.emit('nearGateChanged', { near: nowNearGate });
+    const transitionChanged = nowNearTransition?.id !== this.nearTransition?.id;
+    if (transitionChanged) {
+      this.nearTransition = nowNearTransition;
+      overhaulEvents.emit('nearGateChanged', { near: !!nowNearTransition });
     }
     this.renderPrompt();
   }
 
   private renderPrompt() {
-    const target = this.nearLab ? LAB_BUILDING : this.nearGate ? EXPANSION_GATE : null;
+    const target = this.nearLab
+      ? { x: LAB_BUILDING.x, y: LAB_BUILDING.y, height: LAB_BUILDING.displayHeight }
+      : this.nearTransition
+        ? { x: this.nearTransition.x, y: this.nearTransition.y, height: this.nearTransition.displayHeight }
+        : null;
     if (!target) {
       this.promptImage?.setVisible(false);
       this.promptText?.setVisible(false);
       return;
     }
-    const label = target === LAB_BUILDING ? 'E / тап — войти в лабораторию' : 'E / тап — Скоро';
-    const py = target.y - target.displayHeight - 14;
+    const label = this.nearLab ? 'E / тап — войти в лабораторию' : this.nearTransition!.label;
+    const py = target.y - target.height - 14;
     if (!this.promptImage) {
       this.promptImage = this.add.image(target.x, py, 'hud_interact_prompt');
       this.promptText = this.add
