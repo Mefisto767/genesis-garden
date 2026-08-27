@@ -25,12 +25,15 @@
 | `tile_water` | procedural: `generateWaterTile` (2 кадра мерцания) | temporary | пруд |
 | `tile_soil` | `assets/tiles/tile_soil.png` | approved | открытая грядка (без изменений) |
 | `tile_soil_locked` | `assets/tiles/tile_soil_locked.png` | approved | заблокированная грядка (без изменений) |
+| `tile_thicket` | procedural: `generateThicketTile` | temporary | заросли за границей открытого сектора — непроходимо |
 
 ## paths/water/fences
 
 | id | source | status | назначение |
 |---|---|---|---|
-| `fence_gate` | procedural: `generateGateTexture` | temporary | ворота будущего расширения, подпись «Скоро» |
+| `fence_gate` | procedural: `generateGateTexture` | temporary | ворота на границе сектора (2 из 4 переходов — восток/юг) |
+| `prop_ruined_passage` | procedural: `generateRuinedPassageTexture` | temporary | разрушенный проход на границе сектора (2 из 4 переходов — север/запад) |
+| `landmark_clearing` | procedural: `generateLandmarkClearingTexture` | temporary | расчищенная поляна на месте зарезервированного `landmark_central` — без монумента |
 
 ## buildings
 
@@ -38,8 +41,9 @@
 |---|---|---|---|
 | `building_house` | `assets/buildings/building_storage.png` (замещение) | temporary | дом владельца — реального ассета дома нет |
 | `building_house_final` | `assets/buildings/building_house.png` (не существует) | **missing** | целевой ассет дома |
-| `building_lab` | `assets/buildings/building_lab.png` | approved | здание лаборатории на карте |
-| `building_greenhouse` | `assets/buildings/building_greenhouse.png` | approved | теплица, видна как декор сектора, не интерактивна в срезе |
+| `building_lab` | `assets/buildings/building_lab.png` | approved | здание лаборатории на карте (building_laboratory slot) |
+| `building_storage_shed` | procedural: `generateStorageShedTexture` | temporary | небольшой склад стартового сада (building_storage slot), отдельный силуэт от дома |
+| `building_greenhouse` | `assets/buildings/building_greenhouse.png` | approved | reserved building slot зоны «Рабочая ферма» — в Stage-1 не рендерится (зона закрыта) |
 
 ## character movement/actions
 
@@ -52,6 +56,17 @@
 | id | source | status | назначение |
 |---|---|---|---|
 | `npc_mascot_patrol` | `assets/ui/mascot_neutral.png` | temporary | существующий маскот на коротком патрульном маршруте вместо полноценного NPC |
+
+## companion Lumi
+
+| id | source | status | назначение |
+|---|---|---|---|
+| `companion_lumi_idle` | procedural: `generateLumiIdleTexture` | temporary | базовый вид Люми — используется и для idle, и для follow |
+| `companion_lumi_move` | — | **missing** | отдельная поза движения (пока переиспользуется idle) |
+| `companion_lumi_point` | — | **missing** | отдельная поза «указывает на объект» (пока только состояние, без новой графики) |
+| `companion_lumi_work` | — | **missing** | поза «занята помощью» — поздняя функция, не реализована |
+| `companion_lumi_glow` | procedural: `generateLumiGlowTexture` | temporary | пульсирующее свечение живого ростка внутри колбы |
+| `building_lumi_station` | procedural: `generateLumiStationTexture` | temporary | станция/насест Люми в стартовом саду — без коллизии |
 
 ## plant stages / phenotype layers
 
@@ -100,3 +115,5 @@
 3. Нет финального персонажа (4 направления, анимации ходьбы/полива/сбора/переноса) — геометрический токен.
 4. Погодная система и частицы — не в объёме вертикального среза.
 5. NPC — один переиспользованный маскот на патруле, не полноценный набор из 6-7 NPC (раздел 10 GDD).
+6. Люди (Lumi) — только `idle`/`follow` (одна и та же текстура) и свечение реализованы; `move`/`point`/`work` — честно `missing`, ждут отдельного арт-прохода (см. docs/ESTATE_LAYOUT_BLUEPRINT.md).
+7. 6 из 9 building slots (`building_greenhouse`, `building_compost`, `building_seed_nursery`, `building_apiary`, `building_exhibition_pavilion`, `building_genesis_conservatory`) и 2 из 3 landmark slots (`landmark_pond`, `landmark_exhibition`) существуют только как reserved-данные в `estateBlueprint.ts` — не отрисованы, их зоны ещё закрыты.

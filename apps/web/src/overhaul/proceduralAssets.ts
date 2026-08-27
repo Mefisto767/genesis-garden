@@ -61,6 +61,68 @@ export function generateWaterTile(scene: Phaser.Scene): void {
   alt.destroy();
 }
 
+/** Заросли/дикая полоса за границей открытого сектора (см. worldConfig.ts
+ * CAMERA_BOUNDS/collisionRects) — нарочито темнее и гуще травы, чтобы честно
+ * читаться как "сюда пока нельзя", а не как обычный газон. */
+export function generateThicketTile(scene: Phaser.Scene): void {
+  if (already(scene, 'tile_thicket')) return;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.leafDark, 1).fillRect(0, 0, 32, 32);
+  g.fillStyle(0x1c2e1a, 1).fillRect(0, 0, 32, 30);
+  const clumps: [number, number, number][] = [
+    [4, 4, 6], [16, 8, 7], [26, 6, 5], [8, 18, 6], [22, 20, 7], [3, 26, 5], [28, 27, 5],
+  ];
+  g.fillStyle(0x122011, 0.85);
+  for (const [cx, cy, r] of clumps) g.fillCircle(cx, cy, r);
+  g.generateTexture('tile_thicket', 32, 32);
+  g.destroy();
+}
+
+/** Небольшой склад-сарай (building_storage) — отдельная от дома силуэт-форма
+ * (дом временно переиспользует building_storage.png из v0.3-pack; этот сарай
+ * — второй, более скромный объект, чтобы не дублировать один и тот же PNG на
+ * двух разных зданиях подряд). Честный процедурный плейсхолдер. */
+export function generateStorageShedTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'building_storage_shed')) return;
+  const w = 70;
+  const h = 70;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.ink, 0.25).fillEllipse(w / 2, h - 4, w * 0.6, 10);
+  g.fillStyle(PALETTE.wood, 1).fillRect(w * 0.16, h * 0.42, w * 0.68, h * 0.5);
+  g.lineStyle(2, PALETTE.ink, 1).strokeRect(w * 0.16, h * 0.42, w * 0.68, h * 0.5);
+  g.fillStyle(PALETTE.woodShade, 1).fillTriangle(w * 0.08, h * 0.42, w * 0.92, h * 0.42, w * 0.5, h * 0.1);
+  g.lineStyle(2, PALETTE.ink, 1).strokeTriangle(w * 0.08, h * 0.42, w * 0.92, h * 0.42, w * 0.5, h * 0.1);
+  g.fillStyle(PALETTE.ink, 0.8).fillRect(w * 0.44, h * 0.66, w * 0.14, h * 0.26);
+  g.generateTexture('building_storage_shed', w, h);
+  g.destroy();
+}
+
+/** "Разрушенный проход" — вторая честная заглушка будущей зоны, вариация
+ * fence_gate (см. Task4: "воротами ИЛИ разрушенными проходами"). */
+export function generateRuinedPassageTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'prop_ruined_passage')) return;
+  const w = 90;
+  const h = 70;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.neutral, 1);
+  g.fillRect(4, 24, 16, h - 24);
+  g.fillRect(w - 20, 10, 16, h - 10);
+  g.lineStyle(2, PALETTE.ink, 1);
+  g.strokeRect(4, 24, 16, h - 24);
+  g.strokeRect(w - 20, 10, 16, h - 10);
+  // Осыпавшиеся камни у основания — читается как "давно не расчищали".
+  g.fillStyle(PALETTE.neutral, 0.8);
+  g.fillCircle(30, h - 6, 6);
+  g.fillCircle(44, h - 4, 5);
+  g.fillCircle(60, h - 8, 7);
+  g.lineStyle(2, PALETTE.ink, 0.6);
+  g.strokeCircle(30, h - 6, 6);
+  g.strokeCircle(44, h - 4, 5);
+  g.strokeCircle(60, h - 8, 7);
+  g.generateTexture('prop_ruined_passage', w, h);
+  g.destroy();
+}
+
 export function generateGateTexture(scene: Phaser.Scene): void {
   if (already(scene, 'fence_gate')) return;
   const w = 110;
@@ -109,6 +171,57 @@ export function generateFacingIndicator(scene: Phaser.Scene): void {
   g.fillStyle(PALETTE.ink, 0.9);
   g.fillTriangle(0, -4, 0, 4, 7, 0);
   g.generateTexture('char_facing_indicator', 8, 8);
+  g.destroy();
+}
+
+// ---- Люми (companion_lumi_*, building_lumi_station) — см. lumiBehavior.ts --
+// Только базовые состояния реализованы честным простым плейсхолдером
+// (companion_lumi_idle используется и для 'follow', и для 'idle' — Lumi
+// просто перемещается, поза не меняется на этом этапе; companion_lumi_glow —
+// отдельная пульсирующая текстура светящегося ростка). move/point/work —
+// намеренно НЕ генерируются здесь (см. assetManifest.ts, status: 'missing') —
+// честно ждут отдельного арт-прохода, а не заменяются похожей текстурой.
+
+export function generateLumiIdleTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'companion_lumi_idle')) return;
+  const w = 28;
+  const h = 36;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  // Латунный корпус в форме семени.
+  g.fillStyle(0xb08a4a, 1).fillEllipse(w / 2, h * 0.62, w * 0.42, h * 0.34);
+  g.lineStyle(1.5, PALETTE.ink, 0.8).strokeEllipse(w / 2, h * 0.62, w * 0.42, h * 0.34);
+  // Стеклянная колба сверху.
+  g.fillStyle(0xdff5fb, 0.55).fillCircle(w / 2, h * 0.32, w * 0.34);
+  g.lineStyle(1.5, 0xdff5fb, 0.9).strokeCircle(w / 2, h * 0.32, w * 0.34);
+  // Живой росток внутри колбы.
+  g.fillStyle(PALETTE.leaf, 1).fillCircle(w / 2, h * 0.32, w * 0.12);
+  g.generateTexture('companion_lumi_idle', w, h);
+  g.destroy();
+}
+
+/** Мягкое пульсирующее свечение ростка — единственная "анимация" Люми на
+ * этом этапе (alpha-tween, как у water shimmer), не отдельный спрайт-лист. */
+export function generateLumiGlowTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'companion_lumi_glow')) return;
+  const size = 20;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.leafLight, 0.55).fillCircle(size / 2, size / 2, size / 2);
+  g.generateTexture('companion_lumi_glow', size, size);
+  g.destroy();
+}
+
+/** Маленький насест/станция Люми в стартовом саду — building_lumi_station. */
+export function generateLumiStationTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'building_lumi_station')) return;
+  const w = 44;
+  const h = 56;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.ink, 0.2).fillEllipse(w / 2, h - 4, w * 0.5, 8);
+  g.fillStyle(PALETTE.wood, 1).fillRect(w / 2 - 3, h * 0.35, 6, h * 0.55);
+  g.lineStyle(1.5, PALETTE.ink, 0.9).strokeRect(w / 2 - 3, h * 0.35, 6, h * 0.55);
+  g.fillStyle(0xdff5fb, 0.5).fillCircle(w / 2, h * 0.28, w * 0.28);
+  g.lineStyle(1.5, 0xdff5fb, 0.8).strokeCircle(w / 2, h * 0.28, w * 0.28);
+  g.generateTexture('building_lumi_station', w, h);
   g.destroy();
 }
 
@@ -206,6 +319,19 @@ export function generateRevealBackdrop(scene: Phaser.Scene): void {
   generateFullscreenBackdrop(scene, 'reveal_backdrop', 0x241a33, 0x0c0714);
 }
 
+/** Расчищенная поляна, зарезервированная под будущий монумент (landmark_central,
+ * см. estateBlueprint.ts). Никакого монумента здесь не рисуется — только
+ * нейтрально расчищенный участок земли, честно "пусто и зарезервировано". */
+export function generateLandmarkClearingTexture(scene: Phaser.Scene): void {
+  if (already(scene, 'landmark_clearing')) return;
+  const size = 64;
+  const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  g.fillStyle(PALETTE.wood, 0.35).fillCircle(size / 2, size / 2, size / 2 - 2);
+  g.lineStyle(2, PALETTE.woodShade, 0.6).strokeCircle(size / 2, size / 2, size / 2 - 6);
+  g.generateTexture('landmark_clearing', size, size);
+  g.destroy();
+}
+
 export function generateRevealPedestal(scene: Phaser.Scene): void {
   if (already(scene, 'reveal_pedestal')) return;
   const w = 280;
@@ -225,9 +351,16 @@ export function generateAllProceduralTextures(scene: Phaser.Scene): void {
   generateGrassTile(scene);
   generatePathTile(scene);
   generateWaterTile(scene);
+  generateThicketTile(scene);
   generateGateTexture(scene);
+  generateRuinedPassageTexture(scene);
+  generateStorageShedTexture(scene);
   generateCharacterPlaceholder(scene);
   generateFacingIndicator(scene);
+  generateLumiIdleTexture(scene);
+  generateLumiGlowTexture(scene);
+  generateLumiStationTexture(scene);
+  generateLandmarkClearingTexture(scene);
   generateAllHotspotIcons(scene);
   generateInteractPrompt(scene);
   generateLabBackdrop(scene);
