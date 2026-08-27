@@ -289,3 +289,207 @@
 .coin-icon {
   image-rendering: pixelated;
 }
+
+/* ---- Генетика: специмен-миниатюры, Лаборатория, Альбом ---- */
+
+.specimen-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.specimen-canvas,
+.specimen-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.specimen-frame {
+  pointer-events: none;
+}
+
+.specimen-grid,
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.specimen-card {
+  background: none;
+  border: 3px solid transparent;
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.specimen-card.is-selected {
+  border-color: #f5a623;
+  background: rgba(245, 166, 35, 0.18);
+}
+
+.specimen-card:active {
+  transform: translateY(1px);
+}
+
+.lab-hint {
+  margin-bottom: 12px;
+}
+
+.lab-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 2px solid rgba(74, 46, 23, 0.25);
+}
+
+.lab-footer-cost {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  color: #4a2e17;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.lab-reveal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 20px;
+  text-align: center;
+}
+
+.lab-reveal-card {
+  opacity: 0;
+  transform: scale(0.4) rotate(-6deg);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.lab-reveal-card.is-revealed {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.lab-reveal-rarity {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  animation: reveal-pop 0.3s ease;
+}
+
+.lab-reveal-mutation {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #b678d9;
+  animation: reveal-pop 0.3s ease;
+}
+
+.lab-reveal-dust {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b5e3c;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.lab-reveal-btn {
+  margin-top: 8px;
+}
+
+@keyframes reveal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.album-dust {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  color: #4a2e17;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.album-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 10px;
+  image-rendering: pixelated;
+  border-width: 8px;
+  border-image-source: url('/assets/ui/panel_cream.png');
+  border-image-slice: 24 fill;
+  border-image-width: 8px;
+}
+
+.album-card-rarity {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+}
+
+.album-card-mutation {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b678d9;
+  text-align: center;
+}
+
+.album-card-sell {
+  margin-top: 2px;
+  border: none;
+  background: none;
+  color: #8b5e3c;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rarity-common {
+  color: #8b5e3c;
+}
+
+.rarity-uncommon {
+  color: #57993a;
+}
+
+.rarity-rare {
+  color: #3f7fb0;
+}
+
+.rarity-epic {
+  color: #9457bc;
+}
+
+.rarity-legendary {
+  color: #f5a623;
+}

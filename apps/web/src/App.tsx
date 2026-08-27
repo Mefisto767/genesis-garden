@@ -6,10 +6,12 @@ import { HUD } from './ui/HUD';
 import { ShopPanel } from './ui/ShopPanel';
 import { InventoryPanel } from './ui/InventoryPanel';
 import { PlantPicker } from './ui/PlantPicker';
+import { LabPanel } from './ui/LabPanel';
+import { AlbumPanel } from './ui/AlbumPanel';
 import { Toast } from './ui/Toast';
 import './App.css';
 
-type Panel = 'shop' | 'inventory' | null;
+type Panel = 'shop' | 'inventory' | 'lab' | 'album' | null;
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null);
@@ -44,10 +46,22 @@ function App() {
   return (
     <div className="app-shell">
       <div id="game-root" ref={gameContainerRef} />
-      <HUD coins={state.coins} onOpenShop={() => setPanel('shop')} onOpenInventory={() => setPanel('inventory')} />
+      <HUD
+        coins={state.coins}
+        onOpenShop={() => setPanel('shop')}
+        onOpenInventory={() => setPanel('inventory')}
+        onOpenLab={() => setPanel('lab')}
+        onOpenAlbum={() => setPanel('album')}
+      />
 
       {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
       {panel === 'inventory' && <InventoryPanel inventory={state.inventory} onClose={() => setPanel(null)} />}
+      {panel === 'lab' && (
+        <LabPanel specimens={state.specimens} coins={state.coins} onClose={() => setPanel(null)} />
+      )}
+      {panel === 'album' && (
+        <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
+      )}
       {plantPlotId !== null && (
         <PlantPicker
           plotId={plantPlotId}
