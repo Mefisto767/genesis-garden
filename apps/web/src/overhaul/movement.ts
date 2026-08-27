@@ -71,6 +71,18 @@ export function clampToWorld(
   };
 }
 
+/** То же самое, что clampToWorld, но для прямоугольника с произвольным
+ * origin (не обязательно (0,0)) — нужно с тех пор, как отрисовываемая/
+ * проходимая область (CAMERA_BOUNDS в worldConfig.ts) стала смещённым
+ * прямоугольником внутри гораздо большего 48×48 логического мира, а не
+ * самим миром от (0,0). */
+export function clampToBounds(x: number, y: number, halfW: number, halfH: number, bounds: Rect): Point {
+  return {
+    x: Math.min(Math.max(x, bounds.x + halfW), bounds.x + bounds.w - halfW),
+    y: Math.min(Math.max(y, bounds.y + halfH), bounds.y + bounds.h - halfH),
+  };
+}
+
 export type Facing = 'up' | 'down' | 'left' | 'right';
 
 export function facingFromDelta(dx: number, dy: number, prev: Facing): Facing {

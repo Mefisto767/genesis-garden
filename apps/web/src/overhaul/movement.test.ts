@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   characterRect,
+  clampToBounds,
   clampToWorld,
   facingFromDelta,
   moveWithCollisions,
@@ -46,6 +47,17 @@ describe('clampToWorld', () => {
   });
   it('leaves in-bounds points untouched', () => {
     expect(clampToWorld(100, 100, 10, 10, 640, 480)).toEqual({ x: 100, y: 100 });
+  });
+});
+
+describe('clampToBounds', () => {
+  const bounds = { x: 400, y: 500, w: 700, h: 640 };
+  it('clamps within an off-origin rect', () => {
+    expect(clampToBounds(-100, -100, 10, 10, bounds)).toEqual({ x: 410, y: 510 });
+    expect(clampToBounds(100000, 100000, 10, 10, bounds)).toEqual({ x: 1090, y: 1130 });
+  });
+  it('leaves in-bounds points untouched', () => {
+    expect(clampToBounds(700, 800, 10, 10, bounds)).toEqual({ x: 700, y: 800 });
   });
 });
 
