@@ -20,24 +20,18 @@
 // сторона игрока (specimens[]) не меняются.
 // ============================================================================
 
+import { GENETICS_CONFIG, MUTATIONS_CONFIG, RARITY_SCORING, type MutationDef } from './config';
+import type { RngFn } from './rng';
+import { defaultRng } from './rng';
+
 export type Pattern = 'solid' | 'duotone';
 export type SizeTier = 'small' | 'normal' | 'large' | 'giant';
 export type AuraTier = 'none' | 'faint' | 'glow' | 'radiant';
 export type RarityTier = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
-export interface Mutation {
-  id: string;
-  name: string;
-  /** Принудительно поднимает редкость минимум до этого уровня. */
-  minRarity: RarityTier;
-}
+export type Mutation = MutationDef;
 
-export const MUTATIONS: Mutation[] = [
-  { id: 'golden_vein', name: 'Золотая жилка', minRarity: 'rare' },
-  { id: 'stardust', name: 'Звёздная пыльца', minRarity: 'epic' },
-  { id: 'prism', name: 'Призма', minRarity: 'epic' },
-  { id: 'phoenix', name: 'Феникс', minRarity: 'legendary' },
-];
+export const MUTATIONS: Mutation[] = MUTATIONS_CONFIG;
 
 export interface Genome {
   shape: number; // 1-8
@@ -50,19 +44,19 @@ export interface Genome {
   mutationId: string | null;
 }
 
-const SHAPES = [1, 2, 3, 4, 5, 6, 7, 8];
+// Пулы и пороги — из единого конфига баланса (src/game/config.ts), не менять
+// здесь напрямую. Цветовые пулы берём строго из палитры style guide, чтобы
+// новые особи всегда попадали в фирменную гамму проекта.
+const SHAPES: number[] = [...GENETICS_CONFIG.shapes];
+const PRIMARY_POOL: string[] = [...GENETICS_CONFIG.primaryPool];
+const SECONDARY_POOL: string[] = [...GENETICS_CONFIG.secondaryPool];
+const LEAF_POOL: string[] = [...GENETICS_CONFIG.leafPool];
+const SIZE_TIERS: SizeTier[] = [...GENETICS_CONFIG.sizeTiers];
+const AURA_TIERS: AuraTier[] = [...GENETICS_CONFIG.auraTiers];
 
-// Цветовые пулы — берём строго из палитры style guide, чтобы новые особи
-// всегда попадали в фирменную гамму проекта.
-const PRIMARY_POOL = ['#FF8C77', '#FF6F59', '#F5A623', '#FFC85C', '#B678D9', '#CFA1E8', '#89D65C', '#CBE9F2'];
-const SECONDARY_POOL = ['#F5A623', '#FF6F59', '#9457BC', '#57993A', '#E05543', '#A9D4E2', '#D98C12'];
-const LEAF_POOL = ['#6FBE44', '#89D65C', '#57993A'];
-const SIZE_TIERS: SizeTier[] = ['small', 'normal', 'normal', 'large', 'giant']; // giant редкий по весу
-const AURA_TIERS: AuraTier[] = ['none', 'none', 'none', 'faint', 'faint', 'glow'];
-
-const PITY_THRESHOLD = 10; // гарантированная мутация после стольки скрещиваний без неё
-const MUTATION_CHANCE = 0.06; // базовый шанс мутации на скрещивание
-const GENE_MUTATE_CHANCE = 0.08; // шанс отдельному гену "сойти с рельс" при скрещивании
+const PITY_THRESHOLD = GENETICS_CONFIG.pityThreshold; // гарантированная мутация после стольки скрещиваний без неё
+const MUTATION_CHANCE = GENETICS_CONFIG.mutationChance; // базовый шанс мутации на скрещивание
+const GENE_MUTATE_CHANCE = GENETICS_CONFIG.geneMutateChance; // шанс отдельному гену "сойти с рельс" при скрещивании
 
 function pick<T>(pool: T[], rng: () => number): T {
   return pool[Math.floor(rng() * pool.length)];
@@ -72,7 +66,7 @@ function inherit<T>(a: T, b: T, rng: () => number): T {
   return rng() < 0.5 ? a : b;
 }
 
-export function randomGenome(rng: () => number = Math.random): Genome {
+export function randomGenome(rng: RngFn = defaultRng): Genome {
   const primary = pick(PRIMARY_POOL, rng);
   let secondary = pick(SECONDARY_POOL, rng);
   const pattern: Pattern = rng() < 0.5 ? 'solid' : 'duotone';
@@ -96,6 +90,15 @@ export interface BreedResult {
   nextPityCounter: number;
 }
 
+/** Гены, которые можно зафиксировать за пыль перед скрещиванием (Этап 5). mutationId — не ген наследования, а исход, его нельзя зафиксировать. */
+export type LockableGene = 'shape' | 'primary' | 'secondary' | 'leaf' | 'pattern' | 'size' | 'aura';
+
+/** Какой ген зафиксировать и от какого родителя взять значение (пыль списывается вызывающей стороной — GameStore). */
+export interface GeneLock {
+  gene: LockableGene;
+  source: 'a' | 'b';
+}
+
 /**
  * Скрещивание: каждый ген независимо наследуется 50/50 от одного из
  * родителей, с шансом GENE_MUTATE_CHANCE «сорваться» на случайное значение
@@ -103,14 +106,28 @@ export interface BreedResult {
  * Плюс pity-система: если давно не было ни одной мутации гена — следующее
  * скрещивание гарантированно даёт мутацию хотя бы одного гена и подбирает
  * итоговой особи специальный mutationId.
+ *
+ * `lock` (Этап 5, за генетическую пыль) — один named-ген можно зафиксировать:
+ * он гарантированно наследуется от выбранного родителя без шанса на мутацию
+ * этого конкретного гена. Остальные гены и pity-система работают как обычно.
  */
-export function breed(a: Genome, b: Genome, pityCounter: number, rng: () => number = Math.random): BreedResult {
+export function breed(
+  a: Genome,
+  b: Genome,
+  pityCounter: number,
+  rng: RngFn = defaultRng,
+  lock?: GeneLock
+): BreedResult {
   let mutated = false;
   const forceGeneMutation = pityCounter >= PITY_THRESHOLD;
   let forcedOnce = false;
 
-  function gene<T>(pa: T, pb: T, pool: T[]): T {
-    const shouldMutate = rng() < GENE_MUTATE_CHANCE || (forceGeneMutation && !forcedOnce && rng() < 0.7);
+  function gene<T>(pa: T, pb: T, pool: T[], key?: LockableGene): T {
+    if (key && lock && lock.gene === key) {
+      return lock.source === 'a' ? pa : pb;
+    }
+    const shouldMutate =
+      rng() < GENE_MUTATE_CHANCE || (forceGeneMutation && !forcedOnce && rng() < GENETICS_CONFIG.pityMutationChance);
     if (shouldMutate) {
       mutated = true;
       forcedOnce = true;
@@ -119,13 +136,13 @@ export function breed(a: Genome, b: Genome, pityCounter: number, rng: () => numb
     return inherit(pa, pb, rng);
   }
 
-  const shape = gene(a.shape, b.shape, SHAPES);
-  const primary = gene(a.primary, b.primary, PRIMARY_POOL);
-  let secondary = gene(a.secondary, b.secondary, SECONDARY_POOL);
-  const leaf = gene(a.leaf, b.leaf, LEAF_POOL);
-  const pattern = gene(a.pattern, b.pattern, ['solid', 'duotone'] as Pattern[]);
-  const size = gene(a.size, b.size, SIZE_TIERS);
-  const aura = gene(a.aura, b.aura, AURA_TIERS);
+  const shape = gene(a.shape, b.shape, SHAPES, 'shape');
+  const primary = gene(a.primary, b.primary, PRIMARY_POOL, 'primary');
+  let secondary = gene(a.secondary, b.secondary, SECONDARY_POOL, 'secondary');
+  const leaf = gene(a.leaf, b.leaf, LEAF_POOL, 'leaf');
+  const pattern = gene(a.pattern, b.pattern, ['solid', 'duotone'] as Pattern[], 'pattern');
+  const size = gene(a.size, b.size, SIZE_TIERS, 'size');
+  const aura = gene(a.aura, b.aura, AURA_TIERS, 'aura');
   if (pattern === 'solid') secondary = primary;
 
   const pityTriggered = forceGeneMutation && mutated;
@@ -139,7 +156,7 @@ export function breed(a: Genome, b: Genome, pityCounter: number, rng: () => numb
   if (pityTriggered && !mutationId) {
     // pity гарантирует хотя бы визуальную мутацию гена; шанс на именной
     // трейт тут ниже полного MUTATION_CHANCE, чтобы не обесценивать редкость.
-    if (rng() < 0.35) mutationId = pick(MUTATIONS, rng).id;
+    if (rng() < GENETICS_CONFIG.pityTraitChance) mutationId = pick(MUTATIONS, rng).id;
   }
 
   const genome: Genome = { shape, primary, secondary, leaf, pattern, size, aura, mutationId };
@@ -152,15 +169,15 @@ export function rarityOf(genome: Genome): RarityTier {
     if (m) return m.minRarity;
   }
   let score = 0;
-  if (genome.size === 'giant') score += 2;
-  if (genome.size === 'large') score += 1;
-  if (genome.aura === 'radiant') score += 3;
-  if (genome.aura === 'glow') score += 2;
-  if (genome.aura === 'faint') score += 1;
-  if (genome.pattern === 'duotone') score += 1;
-  if (score >= 5) return 'epic';
-  if (score >= 3) return 'rare';
-  if (score >= 1) return 'uncommon';
+  if (genome.size === 'giant') score += RARITY_SCORING.giantSize;
+  if (genome.size === 'large') score += RARITY_SCORING.largeSize;
+  if (genome.aura === 'radiant') score += RARITY_SCORING.radiantAura;
+  if (genome.aura === 'glow') score += RARITY_SCORING.glowAura;
+  if (genome.aura === 'faint') score += RARITY_SCORING.faintAura;
+  if (genome.pattern === 'duotone') score += RARITY_SCORING.duotonePattern;
+  if (score >= RARITY_SCORING.epicThreshold) return 'epic';
+  if (score >= RARITY_SCORING.rareThreshold) return 'rare';
+  if (score >= RARITY_SCORING.uncommonThreshold) return 'uncommon';
   return 'common';
 }
 

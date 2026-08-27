@@ -1,8 +1,20 @@
-import { chromium } from '/home/claude/.npm-global/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.argv[2] || 'http://localhost:4173';
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// В этой sandbox-сессии Chromium предустановлен по фиксированному пути (см.
+// системный промт разработки) — используем его напрямую, чтобы не тянуть
+// заново. В CI (.github/workflows/ci.yml) этого пути нет: там браузер ставит
+// `npx playwright install --with-deps chromium`, и Playwright сам находит
+// его через стандартный механизм — тогда executablePath просто не передаём.
+const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium';
+const launchOptions = existsSync(SANDBOX_CHROMIUM) ? { executablePath: SANDBOX_CHROMIUM } : {};
+
+const browser = await chromium.launch(launchOptions);
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
 const errors = [];
@@ -12,13 +24,23 @@ page.on('console', (msg) => {
 });
 
 async function screenshot(name) {
-  await page.screenshot({ path: `/home/claude/game/genesis-garden/shots/${name}.png` });
+  await page.screenshot({ path: path.join(SCRIPT_DIR, 'shots', `${name}.png`) });
 }
 
 // --- Test A: fresh state, plant + buy + inventory + persistence ---
 await page.goto(URL, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 5000 });
 await page.waitForTimeout(1500); // дать Phaser-сцене отрисовать сетку по финальному размеру канваса
+
+// Этап 9 — первый визит на "устройстве" (свежий контекст без localStorage)
+// показывает онбординг поверх игры, как и должно быть у реального нового
+// игрока. Закрываем его один раз — дальше localStorage помнит, что он
+// показан, и ни один из последующих page.reload() его больше не покажет.
+const onboardingVisible = await page.locator('.onboarding-backdrop').isVisible().catch(() => false);
+if (onboardingVisible) {
+  await page.locator('.onboarding-skip').click();
+  await page.waitForTimeout(200);
+}
 
 const coinsInitial = await page.locator('.hud-coins').innerText();
 console.log('Initial coins:', coinsInitial);

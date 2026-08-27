@@ -81,6 +81,17 @@
 .hud-buttons {
   display: flex;
   gap: 8px;
+  /* Этап 6 добавляет пятую кнопку ("Друзья") — на узких экранах пяти ярлыков
+     на кириллице в 64px HUD может не хватить ширины. Даём горизонтальный
+     скролл ЭТОЙ полоске, а не всей странице (общее правило "нет horizontal
+     scroll на телефоне" — про body, не про внутренний тулбар). */
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+
+.hud-buttons::-webkit-scrollbar {
+  display: none;
 }
 
 .hud-btn {
@@ -96,6 +107,7 @@
   border-image-source: url('/assets/ui/panel_cream.png');
   border-image-slice: 24 fill;
   border-image-width: 10px;
+  flex-shrink: 0;
 }
 
 .hud-btn:active {
@@ -148,8 +160,8 @@
   border: none;
   background: none;
   font-size: 18px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   color: #4a2e17;
   cursor: pointer;
 }
@@ -248,6 +260,71 @@
   font-size: 14px;
   font-weight: 600;
   margin: 0;
+}
+
+/* Этап 4 — экран входа/сравнения прогресса (AuthGate). Переиспользует
+   .sheet/.sheet-backdrop/.sheet-buy-btn, добавляет только то, чего не было. */
+.auth-gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto;
+  max-height: none;
+  width: min(420px, calc(100% - 32px));
+  border-image-width: 16px;
+  border-bottom: 16px solid transparent;
+  border-bottom-image-source: url('/assets/ui/panel_cream.png');
+}
+
+.auth-gate-panel h2 {
+  margin: 0;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  color: #4a2e17;
+  font-size: 20px;
+}
+
+.auth-gate-panel p {
+  margin: 0;
+  color: #8b5e3c;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-gate-hint {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.auth-gate-error {
+  color: #e05543;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-gate-email-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  border: 2px solid #b7afa0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.auth-gate-guest-btn {
+  width: 100%;
+}
+
+.auth-gate-choice-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
 }
 
 .sheet-empty-block {
@@ -434,6 +511,7 @@
 }
 
 .album-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -444,6 +522,27 @@
   border-image-source: url('/assets/ui/panel_cream.png');
   border-image-slice: 24 fill;
   border-image-width: 8px;
+}
+
+.album-card-favorite {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2; /* поверх канваса миниатюры растения — иначе canvas перехватывает клики */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: #c9a875;
+  cursor: pointer;
+}
+
+.album-card-favorite.is-favorite {
+  color: #f5a623;
 }
 
 .album-card-rarity {
@@ -460,7 +559,15 @@
   text-align: center;
 }
 
-.album-card-sell {
+.album-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.album-card-sell,
+.album-card-share {
   margin-top: 2px;
   border: none;
   background: none;
@@ -471,7 +578,15 @@
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
+  min-height: 44px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.album-card-share {
+  color: #3f7fb0;
 }
 
 .rarity-common {
@@ -492,4 +607,590 @@
 
 .rarity-legendary {
   color: #f5a623;
+}
+
+/* ==========================================================================
+   Этап 5 — полировка reveal-loop: видимый pity-счётчик, блокировка гена за
+   пыль, повтор скрещивания без лишней навигации, пропуск анимации, избранное.
+   ========================================================================== */
+
+.lab-pity {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b5e3c;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+.specimen-card {
+  position: relative;
+}
+
+.specimen-card-favorite {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 13px;
+  color: #f5a623;
+  pointer-events: none;
+}
+
+.lab-gene-lock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.lab-gene-lock-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a2e17;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lab-gene-lock-select {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  padding: 6px 8px;
+  min-height: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+}
+
+.lab-gene-lock-source {
+  display: flex;
+  gap: 8px;
+}
+
+.lab-gene-lock-source button {
+  flex: 1;
+  min-height: 40px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  border-radius: 4px;
+  background: #fff;
+  color: #4a2e17;
+  cursor: pointer;
+}
+
+.lab-gene-lock-source button.is-selected {
+  border-color: #f5a623;
+  background: rgba(245, 166, 35, 0.18);
+}
+
+.lab-gene-lock-warning {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c0392b;
+  margin: 0;
+}
+
+.lab-reveal-card {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lab-reveal-skip {
+  border: none;
+  background: none;
+  color: #8b5e3c;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 4px 8px;
+}
+
+.lab-reveal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.lab-reveal-btn-secondary {
+  border-image-source: url('/assets/ui/panel_cream.png');
+  color: #4a2e17;
+  text-shadow: none;
+}
+
+/* Уважаем системную настройку "меньше движения" — отключаем декоративные
+   анимации/переходы reveal-карточки и всплывающих подписей повсюду в игре.
+   Логика уже отдельно пропускает паузу перед реролом (см. LabPanel.tsx
+   prefersReducedMotion()); здесь — визуальный уровень на случай, если
+   какой-то переход всё же успеет начаться. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Этап 6 — социальный обмен (SocialPanel.tsx). Видно только когда включён
+   и настроен облачный аккаунт (см. HUD.tsx onOpenSocial).
+   ========================================================================== */
+
+.social-own-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a2e17;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.social-copy-btn {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.social-section {
+  margin-bottom: 14px;
+}
+
+.social-section-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4a2e17;
+  margin: 0 0 6px;
+}
+
+.social-send-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.social-input {
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  padding: 8px;
+  min-height: 40px;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  flex: 1;
+  min-width: 100px;
+}
+
+.social-input-amount {
+  flex: none;
+  width: 64px;
+}
+
+.social-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.social-recent-chip {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 6px 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.social-gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-gift-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #4a2e17;
+}
+
+.social-gift-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.social-decline-btn {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #8b5e3c;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.social-hint {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   Этап 7 — монетизация (PurchasesPanel.tsx).
+   ========================================================================== */
+
+.purchases-mock-banner {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a2e17;
+  background: rgba(245, 166, 35, 0.18);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 12px;
+}
+
+.purchases-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.purchases-card {
+  padding: 10px;
+  image-rendering: pixelated;
+  border-width: 8px;
+  border-image-source: url('/assets/ui/panel_cream.png');
+  border-image-slice: 24 fill;
+  border-image-width: 8px;
+}
+
+.purchases-card-name {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #4a2e17;
+}
+
+.purchases-card-desc {
+  font-size: 12px;
+  color: #8b5e3c;
+  margin: 4px 0 8px;
+}
+
+.purchases-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.purchases-card-price {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #4a2e17;
+}
+
+.purchases-coming-soon {
+  margin-bottom: 14px;
+}
+
+.purchases-coming-soon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8b5e3c;
+  padding: 6px 4px;
+  opacity: 0.7;
+}
+
+.purchases-coming-soon-tag {
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Этап 8 — admin-дашборд (AdminPanel.tsx). Только для profiles.is_admin.
+   ========================================================================== */
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.admin-stat {
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.admin-stat-value {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #4a2e17;
+}
+
+.admin-stat-label {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 2px;
+}
+
+.admin-funnel-line {
+  color: #4a2e17;
+}
+
+.admin-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #4a2e17;
+}
+
+.admin-truncated-note {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 6px;
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Этап 9 — safe-area (вырезы/чёлки, viewport-fit=cover в index.html),
+   quests/цели, онбординг, офлайн-баннер.
+   ========================================================================== */
+
+.hud-bar {
+  padding-top: calc(8px + env(safe-area-inset-top));
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
+  height: calc(64px + env(safe-area-inset-top));
+}
+
+.toast {
+  bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.hud-btn-quests {
+  position: relative;
+}
+
+.hud-btn-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e0563a;
+  border: 2px solid #fdf3d9;
+}
+
+.quest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.quest-row-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #4a2e17;
+}
+
+.quest-row-desc {
+  font-size: 12px;
+  color: #8b5e3c;
+}
+
+.quest-progress-track {
+  height: 8px;
+  background: rgba(74, 46, 23, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  background: #f5a623;
+  transition: width 0.3s ease;
+}
+
+.quest-row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.quest-row-count {
+  color: #8b5e3c;
+  font-weight: 700;
+}
+
+.quest-claimed-label {
+  color: #4a2e17;
+  font-weight: 700;
+}
+
+.quest-reward-hint {
+  color: #8b5e3c;
+  font-style: italic;
+}
+
+.quest-claim-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 36px;
+}
+
+.onboarding-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(74, 46, 23, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+  box-sizing: border-box;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.onboarding-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  background: #fdf3d9;
+  border: 4px solid #4a2e17;
+  border-radius: 8px;
+  padding: 28px 20px 20px;
+  box-sizing: border-box;
+  text-align: center;
+  box-shadow: 0 6px 0 rgba(74, 46, 23, 0.4);
+}
+
+.onboarding-skip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #8b5e3c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px;
+  min-height: 32px;
+}
+
+.onboarding-emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.onboarding-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 18px;
+  color: #4a2e17;
+  margin: 0 0 10px;
+}
+
+.onboarding-text {
+  font-size: 13px;
+  color: #4a2e17;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(74, 46, 23, 0.25);
+}
+
+.onboarding-dot.is-active {
+  background: #f5a623;
+}
+
+.onboarding-next {
+  width: 100%;
+}
+
+.offline-banner {
+  position: absolute;
+  top: calc(64px + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: #4a2e17;
+  color: #fdf3d9;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 12px;
 }

@@ -4,6 +4,7 @@ import { getSeedDef } from '../seedCatalog';
 import { MAX_PLOTS, type Plot } from '../types';
 import { gardenEvents } from '../events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
+import { track } from '../../analytics/track';
 
 const COLS = 4;
 const ROWS = Math.ceil(MAX_PLOTS / COLS);
@@ -165,9 +166,9 @@ export class GardenScene extends Phaser.Scene {
 
     const def = getSeedDef(plot.seedId);
     if (!def || plot.plantedAt === null) return;
-    const elapsed = Date.now() - plot.plantedAt;
-    const ready = elapsed >= def.growMs;
-    const progress = Phaser.Math.Clamp(elapsed / def.growMs, 0, 1);
+    const status = gameStore.plotStatus(plot);
+    if (!status) return;
+    const { ready, progress, remainingMs } = status;
     const stage = ready ? 3 : progress < STAGE2_THRESHOLD ? 1 : 2;
 
     const tile = this.addTile(x, y, false);
@@ -213,7 +214,7 @@ export class GardenScene extends Phaser.Scene {
         .rectangle(x - barWidth / 2, y + size * 0.33, barWidth * progress, size * 0.08, PALETTE.amber, 1)
         .setOrigin(0, 0.5);
       const timer = this.add
-        .text(x, y + size * 0.48, formatRemaining(def.growMs - elapsed), {
+        .text(x, y + size * 0.48, formatRemaining(remainingMs), {
           fontFamily: FONT_BODY,
           fontSize: `${size * 0.13}px`,
           fontStyle: '700',
@@ -227,7 +228,8 @@ export class GardenScene extends Phaser.Scene {
 
     tile.on('pointerdown', () => {
       if (!ready) return;
-      gameStore.harvest(plot.id);
+      const ok = gameStore.harvest(plot.id);
+      if (ok) track('plant_harvested', { plotId: plot.id, seedId: plot.seedId });
     });
   }
 }

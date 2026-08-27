@@ -2,6 +2,7 @@ import { SEED_CATALOG, seedThumb } from '../game/seedCatalog';
 import { gameStore } from '../game/store';
 import type { GameState } from '../game/types';
 import { gardenEvents } from '../game/events';
+import { track } from '../analytics/track';
 
 interface PlantPickerProps {
   plotId: number;
@@ -44,8 +45,10 @@ export function PlantPicker({ plotId, inventory, onClose, onOpenShop }: PlantPic
                 className="sheet-row sheet-row-clickable"
                 onClick={() => {
                   const ok = gameStore.plantSeed(plotId, seed.id);
-                  if (ok) onClose();
-                  else gardenEvents.emit('toast', { text: 'Не получилось посадить' });
+                  if (ok) {
+                    track('plant_planted', { plotId, seedId: seed.id });
+                    onClose();
+                  } else gardenEvents.emit('toast', { text: 'Не получилось посадить' });
                 }}
               >
                 <div className="sheet-row-info">
