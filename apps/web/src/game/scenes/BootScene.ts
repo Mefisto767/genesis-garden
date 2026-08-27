@@ -14,6 +14,8 @@ export class BootScene extends Phaser.Scene {
     this.load.image('tile_soil', 'assets/tiles/tile_soil.png');
     this.load.image('tile_soil_locked', 'assets/tiles/tile_soil_locked.png');
     this.load.image('icon_coin', 'assets/ui/icon_coin.png');
+    this.load.image('decor_bench', 'assets/decor/decor_bench.png');
+    this.load.image('decor_lantern', 'assets/decor/decor_lantern.png');
 
     const species = new Set(SEED_CATALOG.map((s) => s.speciesId));
     species.forEach((id) => preloadSpecies(this.load, id));

@@ -12,6 +12,9 @@ export function createPhaserGame(parent: HTMLElement): Phaser.Game {
       height: '100%',
     },
     backgroundColor: '#FDF3D9',
+    // Пиксель-арт: чёткие блоки без размытия при масштабировании (nearest-neighbor).
+    pixelArt: true,
+    roundPixels: true,
     scene: [BootScene, GardenScene],
     // Мобильный браузер: не даём странице скроллиться/зумиться жестами по канвасу.
     input: {

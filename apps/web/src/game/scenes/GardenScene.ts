@@ -27,6 +27,7 @@ function formatRemaining(ms: number): string {
 
 export class GardenScene extends Phaser.Scene {
   private gridContainer!: Phaser.GameObjects.Container;
+  private decorContainer!: Phaser.GameObjects.Container;
   private cellSize = 64;
   private unsubscribeStore?: () => void;
 
@@ -36,6 +37,7 @@ export class GardenScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(PALETTE.cream);
+    this.decorContainer = this.add.container(0, 0);
     this.gridContainer = this.add.container(0, 0);
 
     this.layoutAndRender();
@@ -65,6 +67,30 @@ export class GardenScene extends Phaser.Scene {
     const cellByHeight = (availableHeight - CELL_GAP * (ROWS - 1)) / ROWS;
     this.cellSize = Math.max(40, Math.min(cellByWidth, cellByHeight, 110));
     this.renderPlots();
+    this.renderDecor();
+  }
+
+  /** Уютный фоновый декор в свободных полях вокруг сетки грядок (когда места
+   * достаточно — на десктопе и широких телефонах). Чисто атмосферный слой,
+   * без интерактивности, не влияет на игровую логику. */
+  private renderDecor() {
+    this.decorContainer.removeAll(true);
+    const gridWidth = COLS * this.cellSize + (COLS - 1) * CELL_GAP;
+    const marginX = (this.scale.width - gridWidth) / 2;
+    const centerY = HUD_TOP_PADDING + (this.scale.height - HUD_TOP_PADDING) / 2;
+
+    if (marginX > 90) {
+      const size = Math.min(marginX * 0.7, 96);
+      const lx = marginX * 0.42;
+      const ly = centerY - size * 0.3;
+      this.decorContainer.add(this.add.ellipse(lx, ly + size * 0.62, size * 0.7, size * 0.22, PALETTE.ink, 0.18));
+      this.decorContainer.add(this.add.image(lx, ly, 'decor_lantern').setDisplaySize(size, size * 1.3));
+
+      const bx = this.scale.width - marginX * 0.45;
+      const by = centerY + size * 0.5;
+      this.decorContainer.add(this.add.ellipse(bx, by + size * 0.32, size * 1.1, size * 0.22, PALETTE.ink, 0.18));
+      this.decorContainer.add(this.add.image(bx, by, 'decor_bench').setDisplaySize(size * 1.2, size * 0.7));
+    }
   }
 
   private renderPlots() {
