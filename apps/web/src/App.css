@@ -870,3 +870,78 @@
   color: #8b5e3c;
   margin-top: 8px;
 }
+
+/* ==========================================================================
+   Этап 7 — монетизация (PurchasesPanel.tsx).
+   ========================================================================== */
+
+.purchases-mock-banner {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a2e17;
+  background: rgba(245, 166, 35, 0.18);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 12px;
+}
+
+.purchases-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.purchases-card {
+  padding: 10px;
+  image-rendering: pixelated;
+  border-width: 8px;
+  border-image-source: url('/assets/ui/panel_cream.png');
+  border-image-slice: 24 fill;
+  border-image-width: 8px;
+}
+
+.purchases-card-name {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #4a2e17;
+}
+
+.purchases-card-desc {
+  font-size: 12px;
+  color: #8b5e3c;
+  margin: 4px 0 8px;
+}
+
+.purchases-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.purchases-card-price {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #4a2e17;
+}
+
+.purchases-coming-soon {
+  margin-bottom: 14px;
+}
+
+.purchases-coming-soon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8b5e3c;
+  padding: 6px 4px;
+  opacity: 0.7;
+}
+
+.purchases-coming-soon-tag {
+  font-style: italic;
+}

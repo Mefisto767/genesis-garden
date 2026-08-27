@@ -132,6 +132,14 @@ export class GameApi {
     return this.performOrQueue('unblock_user', { p_target_public_code: targetPublicCode });
   }
 
+  // --- Этап 7 — монетизация (только mock-провайдер; реальный grant_purchase
+  // вызывается исключительно платёжным webhook'ом от имени service_role, у
+  // клиента к нему нет и не должно быть доступа — см. миграцию Этапа 7) ---
+
+  mockGrantPurchase(productId: string) {
+    return this.performOrQueue('mock_grant_purchase', { p_product_id: productId });
+  }
+
   /** Дренирует офлайн-очередь — вызывать по событию 'online' и при старте приложения. */
   async drainQueue(): Promise<{ processed: number; remaining: number }> {
     return this.queue.drain(async (action): Promise<ExecuteResult> => {

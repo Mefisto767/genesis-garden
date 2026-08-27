@@ -9,11 +9,13 @@ import { PlantPicker } from './ui/PlantPicker';
 import { LabPanel } from './ui/LabPanel';
 import { AlbumPanel } from './ui/AlbumPanel';
 import { SocialPanel } from './ui/SocialPanel';
+import { PurchasesPanel } from './ui/PurchasesPanel';
 import { Toast } from './ui/Toast';
 import { useAuth } from './auth/useAuth';
+import { isPaymentsEnabled } from './payments/PaymentProvider';
 import './App.css';
 
-type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | null;
+type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | 'purchases' | null;
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +58,9 @@ function App() {
         onOpenLab={() => setPanel('lab')}
         onOpenAlbum={() => setPanel('album')}
         onOpenSocial={auth.status === 'signed_in' ? () => setPanel('social') : undefined}
+        onOpenPurchases={
+          isPaymentsEnabled && auth.status === 'signed_in' ? () => setPanel('purchases') : undefined
+        }
       />
 
       {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
@@ -73,6 +78,7 @@ function App() {
         <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
       )}
       {panel === 'social' && <SocialPanel onClose={() => setPanel(null)} />}
+      {panel === 'purchases' && <PurchasesPanel onClose={() => setPanel(null)} />}
       {plantPlotId !== null && (
         <PlantPicker
           plotId={plantPlotId}
