@@ -37,8 +37,30 @@
   - идемпотентность повторного запроса (двойной `harvest`/`claimQuest` не начисляет награду дважды; `breedSpecimens(id, id)` отклоняется).
 - ✅ Проверка регрессии: `npm run lint`, `npm run build` (tsc+vite), оба существующих Playwright E2E-скрипта (`test-e2e.mjs`, `test-e2e-genetics.mjs`) — все зелёные после рефактора.
 
-## Этап 3 — Supabase
-⬜ Не начато.
+## Этап 3 — Supabase — готово (серверный слой), интеграция с клиентом в Этапе 4
+- ✅ `supabase/migrations/` — 4 миграции, применены и реально протестированы (не просто написаны):
+  1. `20260827120000_init_schema.sql` — все 18 таблиц из мастер-промта (profiles, gardens, plots, plants, plant_ancestry, inventory, breeding_jobs, economy_ledger, quests, quest_progress, seasons, social_connections, gift_transactions, purchases, entitlements, analytics_events, audit_events) + `seed_catalog` + `request_log` (идемпотентность).
+  2. `20260827120100_rls.sql` — RLS на каждой таблице, `REVOKE INSERT/UPDATE/DELETE FROM authenticated` на все игровые таблицы (только RPC может писать), `is_admin()`/`owns_garden()` хелперы.
+  3. `20260827120200_functions.sql` — все обязательные RPC (`plant`, `harvest`, `expand_plot`, `buy_seed`, `breed`, `recycle_plant`, `claim_quest`, `send_gift`, `claim_gift`, `decline_gift`, `grant_purchase`, `log_analytics_event`) — транзакционные, идемпотентные по `request_id`, сами проверяют владение через `auth.uid()`. `breed()` — честный порт `genetics.ts` на PL/pgSQL (те же пулы/шансы/pity), не заглушка. `handle_new_user` триггер на `auth.users` создаёт garden+24 плота+2 специмена+3 ростка ровно как клиентский `createInitialState()`.
+  4. `20260827120300_catalog_data.sql` — `seed_catalog`/`quests` заполнены значениями из `config.ts` (продакшн-контент, не тестовые данные).
+- ✅ **RLS и RPC реально протестированы**, не только написаны: в песочнице разработки нет Docker для полного `supabase start`, поэтому собран честный тестовый стенд — `supabase/tests/00_local_auth_shim_pre.sql` (минимальный шим схемы `auth`+ролей поверх голой PostgreSQL 16, установленной в системе) + `supabase/tests/02_scenario_tests.sql` (14 сценарных ассертов) + `supabase/tests/run_local.sh` (единая команда прогона). Все 14 прошли:
+  - создание пользователя → garden+24 плота+2 специмена+3 ростка;
+  - RLS ограничивает SELECT одной своей строкой;
+  - прямой UPDATE чужой/своей `gardens` запрещён на уровне GRANT (`insufficient_privilege`), не только RLS;
+  - пользователь A не видит сад B напрямую по id;
+  - полный путь plant→harvest начисляет ровно `sellValue`, харвест до созревания отклонён;
+  - повторный `request_id` идемпотентен — награда не задваивается;
+  - `breed()` с чужим растением отклоняется (`parent_not_owned`), с своими — работает и списывает `breedCost`;
+  - подарок (`send_gift`/`claim_gift`) списывается у отправителя и начисляется получателю ровно один раз, повторный `claim_gift` отклоняется;
+  - webhook (`grant_purchase` от `service_role`) идемпотентен по `(provider, provider_transaction_id)` — повтор не плодит entitlements;
+  - `authenticated` не может вызвать `grant_purchase` напрямую;
+  - `anon` не может вызвать `harvest()` и не видит ни одного сада.
+  - ⚠️ Это честная проверка SQL-логики на голой Postgres с шимом Supabase-специфичных вещей (`auth.uid()`, роли) — НЕ замена реального `supabase test db` на полном стеке с Docker. Это нужно перепрогнать на машине/CI с Docker перед продакшеном (см. `docs/TESTING.md`).
+- ✅ `supabase/config.toml`, `supabase/seed.sql` (тестовые аккаунты для локальной разработки через `supabase start`, отдельно от каталога, который теперь в миграции), `apps/web/.env.example`.
+- ✅ `apps/web/src/lib/database.types.ts` — типы TypeScript вручную по схеме (супабейзовский `gen types` требует живого проекта/локального стека — при появлении ключей перегенерировать и сверить).
+- ✅ `docs/DATA_MODEL.md`, `docs/SECURITY.md`, `docs/ECONOMY.md` (включая честный список мест, где числа баланса задублированы клиент/сервер, и сознательное расхождение recycle(пыль)/sell(монеты) до Этапа 5).
+- ⬜ **Клиент пока НЕ подключён к этим RPC** — `GameStore` по-прежнему работает полностью локально (localStorage), это осознанное разделение труда: Этап 3 — доказать, что серверный слой работает и безопасен сам по себе; Этап 4 добавит Supabase JS client + auth и начнёт переключать конкретные действия (`plantSeed`/`harvest`/`breedSpecimens`/...) с локального `GameStore` на вызовы этих RPC, с гостевым режимом и офлайн-очередью.
+- ⛔ Нет реального Supabase-проекта (URL/anon key) — работа велась полностью в виде воспроизводимых миграций+тестов, без привязки к конкретному облачному проекту. Когда владелец создаст проект и пришлёт `SUPABASE_URL`/`SUPABASE_ANON_KEY` (публичные, не секретные), нужно будет: `supabase link`, `supabase db push` (применит эти же 4 миграции), настроить `.env.local` — всё уже готово для этого, инструкция будет в `docs/DEPLOYMENT.md` (Этап 12).
 
 ## Этап 4 — Аккаунты
 ⬜ Не начато.

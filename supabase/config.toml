@@ -1,0 +1,42 @@
+# Supabase CLI project config — минимальный набор для локальной разработки
+# (`supabase start`) и применения миграций (`supabase db push`) к реальному
+# проекту, когда появятся ключи (см. docs/DEPLOYMENT.md).
+
+project_id = "genesis-garden"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 16
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["https://mefisto767.github.io"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+# MVP: magic link — рабочий вариант без внешней настройки (см. docs/PAYMENTS.md
+# нет, см. docs/ARCHITECTURE.md про auth). OAuth (Google/Telegram) добавляется
+# отдельно владельцем через Supabase Dashboard, когда будут ключи провайдера.
+
+[auth.sms]
+enable_signup = false
+
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = ""
