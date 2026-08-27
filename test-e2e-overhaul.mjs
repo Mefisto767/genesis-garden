@@ -116,9 +116,27 @@ const afterKeys = await page.locator('canvas').screenshot();
 assert(!beforeKeys.equals(afterKeys), 'holding D+S (WASD) visibly moves the character in EstateScene');
 
 // --- Test B: клик по грядке в мире (посадка) — существующая механика работает внутри EstateScene ---
+// Вместо хардкода мировых координат PLOT_SLOTS[0] (которые несколько раз
+// менялись между этапами вертикального среза) читаем текущую позицию
+// камеры/игрока через window.__overhaulDebug (EstateScene.ts) и переводим
+// мировые координаты грядки в экранные сами — устойчиво к любым будущим
+// правкам worldConfig.ts, без дублирования магических чисел в этом файле.
 const canvasBox = await page.locator('canvas').boundingBox();
-// PLOT_SLOTS[0] = world (330, 210); камера не скроллит на 1366x768 (мир 960x640 целиком в кадре).
-await page.mouse.click(canvasBox.x + 330, canvasBox.y + 210);
+
+async function worldToScreen(worldX, worldY) {
+  const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
+  if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
+  return {
+    x: canvasBox.x + (worldX - debug.cameraScrollX),
+    y: canvasBox.y + (worldY - debug.cameraScrollY),
+  };
+}
+
+// PLOT_SLOTS[0] world coords (см. worldConfig.ts) — читаем напрямую из страницы,
+// чтобы не дублировать число здесь на случай будущих правок раскладки.
+const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0]
+const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
+await page.mouse.click(plot0Screen.x, plot0Screen.y);
 await page.waitForTimeout(400);
 const plantPickerVisible = await page.locator('.sheet-row-clickable').first().isVisible().catch(() => false);
 assert(plantPickerVisible, 'clicking an empty world plot opens the plant picker (reused PlantPicker)');
@@ -127,14 +145,28 @@ await page.waitForTimeout(300);
 await shot('02-planted-in-world');
 
 // --- Test C: подойти к лаборатории и войти (Estate -> Laboratory), без утечки клика ---
-// Клик по траве рядом со зданием лаборатории (внутри радиуса взаимодействия,
-// но вне hitbox самого спрайта здания) задаёт цель перемещения.
-await page.mouse.click(canvasBox.x + 665, canvasBox.y + 265);
+// worldConfig.LAB_BUILDING = {x:980,y:892}, interactionRadius:100. Кликаем
+// чуть в стороне от здания (внутри радиуса взаимодействия, но вне hitbox
+// самого спрайта), чтобы задать цель перемещения, а не сразу попасть по
+// зданию — так же, как раньше, только координаты теперь вычисляются, а не
+// подобраны вручную под конкретную раскладку.
+const labWorld = { x: 980, y: 892 }; // worldConfig.LAB_BUILDING, interactionRadius:100
+// Точка НИЖЕ anchor-точки здания (спрайт лаборатории растёт вверх от anchor,
+// origin (0.5,1) — см. EstateScene.renderBuildings), значит любая точка с
+// y > labWorld.y гарантированно вне hitbox самого спрайта, но в пределах
+// interactionRadius(100) и не над одной из плиток грядок (PLOT_SLOTS макс.
+// y=812+half24=836 — здесь y=900, уже южнее).
+const nearLabWorld = { x: labWorld.x - 60, y: labWorld.y + 8 };
+const nearLabScreen = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+await page.mouse.click(nearLabScreen.x, nearLabScreen.y);
 // Пока персонаж идёт, периодически "стучимся" в дверь лаборатории — до входа
 // это просто тост "подойди ближе" (безвредно), после входа в радиус — переход.
+// Экранные координаты здания пересчитываем на каждой итерации (камера следует
+// за игроком, поэтому scroll меняется по мере ходьбы).
 let entered = false;
 for (let i = 0; i < 30 && !entered; i++) {
-  await page.mouse.click(canvasBox.x + 760, canvasBox.y + 150);
+  const labScreen = await worldToScreen(labWorld.x, labWorld.y - 40);
+  await page.mouse.click(labScreen.x, labScreen.y);
   await page.waitForTimeout(500);
   entered = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
 }
@@ -211,10 +243,12 @@ await shot('06-back-in-estate');
 // errors[] через page.on('pageerror'). 3 полных цикла туда-обратно — дешёвый,
 // но реальный тест на утечку, а не просто "код выглядит правильно".
 for (let i = 0; i < 3; i++) {
-  await page.mouse.click(canvasBox.x + 665, canvasBox.y + 265);
+  const nearLabScreenAgain = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+  await page.mouse.click(nearLabScreenAgain.x, nearLabScreenAgain.y);
   let enteredAgain = false;
   for (let j = 0; j < 20 && !enteredAgain; j++) {
-    await page.mouse.click(canvasBox.x + 760, canvasBox.y + 150);
+    const labScreenAgain = await worldToScreen(labWorld.x, labWorld.y - 40);
+    await page.mouse.click(labScreenAgain.x, labScreenAgain.y);
     await page.waitForTimeout(400);
     enteredAgain = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
   }
