@@ -39,6 +39,24 @@ function assert(cond, msg) {
   console.log(`OK: ${msg}`);
 }
 
+// --- Test 0: feature flag действительно переключает ClassicApp/OverhaulApp ---
+// Классический (флаг выключен) билд обслуживается на 4173 в этом же тестовом
+// прогоне (см. CLAUDE.md) — проверяем, что там НЕТ overhaul-разметки
+// (`.overhaul-mode-*`), т.е. App.tsx реально рендерит ClassicApp, а не
+// overhaul-код с флагом, спрятанным где-то внутри условия рендера.
+const classicUrl = URL.replace(':4174', ':4173');
+if (classicUrl !== URL) {
+  const classicPage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  await classicPage.goto(classicUrl, { waitUntil: 'networkidle' }).catch(() => {});
+  await classicPage.waitForSelector('canvas', { timeout: 8000 }).catch(() => {});
+  await classicPage.waitForTimeout(800);
+  const hasOverhaulMarkup = await classicPage.locator('[class*="overhaul-mode-"]').count();
+  assert(hasOverhaulMarkup === 0, 'flag OFF (classic build on :4173) renders ClassicApp — no overhaul-mode-* markup at all');
+  await classicPage.close();
+} else {
+  console.log('NOTE: skipped Test 0 (flag toggling) — classic build URL not reachable from the given overhaul URL');
+}
+
 await page.goto(URL, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 8000 });
 await page.waitForTimeout(1200);
@@ -184,6 +202,37 @@ assert(backInEstate, 'exited back to overhaul-mode-estate');
 const coinsAfterExit = await page.locator('.hud-coins').innerText();
 assert(coinsAfterExit === coinsBeforeExit, 'coins unchanged by the scene transition itself (no duplicate side effects)');
 await shot('06-back-in-estate');
+
+// --- Test F: повторные переходы Estate<->Laboratory — освобождение listeners ---
+// LaboratoryScene.layout() читает this.scale/this.add — если бы SHUTDOWN не
+// снимал scale.on('resize', ...) корректно, то после нескольких пересозданий
+// сцены старый (уже уничтоженный) обработчик срабатывал бы на следующий
+// resize и бросал исключение (Phaser-объекты уничтожены) — это попало бы в
+// errors[] через page.on('pageerror'). 3 полных цикла туда-обратно — дешёвый,
+// но реальный тест на утечку, а не просто "код выглядит правильно".
+for (let i = 0; i < 3; i++) {
+  await page.mouse.click(canvasBox.x + 665, canvasBox.y + 265);
+  let enteredAgain = false;
+  for (let j = 0; j < 20 && !enteredAgain; j++) {
+    await page.mouse.click(canvasBox.x + 760, canvasBox.y + 150);
+    await page.waitForTimeout(400);
+    enteredAgain = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
+  }
+  assert(enteredAgain, `repeat transition #${i + 1}: re-entered LaboratoryScene`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  const backAgain = await page.locator('.overhaul-mode-estate').isVisible().catch(() => false);
+  assert(backAgain, `repeat transition #${i + 1}: exited back to Estate`);
+}
+
+const coinsAfterRepeats = await page.locator('.hud-coins').innerText();
+assert(
+  coinsAfterRepeats === coinsAfterExit,
+  `repeated transitions alone did not change coins (${coinsAfterExit} -> ${coinsAfterRepeats})`
+);
+
+const realErrors = errors.filter((e) => !e.includes('ERR_TUNNEL_CONNECTION_FAILED'));
+assert(realErrors.length === 0, `no leaked-listener exceptions after 3 repeat Estate<->Lab transitions (found: ${JSON.stringify(realErrors)})`);
 
 console.log('CONSOLE/PAGE ERRORS:', errors.length ? errors : 'none');
 await browser.close();

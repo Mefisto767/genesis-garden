@@ -11,8 +11,54 @@
 ## Репозиторий и git
 
 - Апстрим — `Mefisto767/genesis-garden` на GitHub, ветки `main` (исходники) + `gh-pages` (билд, публикуется CI).
-- **У этой сессии разработки нет push-доступа** к GitHub (нет PAT, `gh auth` не настроен). Все коммиты этой и предыдущих сессий существуют только локально в рабочей копии (`~/work/genesis-garden`). Если тебе нужно запушить — либо попроси у владельца PAT (repo scope), либо владелец пушит подготовленную ветку/патч сам. Не трать время, пытаясь найти обходной путь — это открытый вопрос владельцу, задокументированный в `docs/IMPLEMENTATION_STATUS.md`.
+- Push-доступ к GitHub зависит от конкретной sandbox-сессии — проверяй `env | grep -i github`/`git ls-remote origin` в начале работы вместо того, чтобы полагаться на память из старых сессий. Сессия техрегламента (см. историю ниже) push-доступа не имела; сессия Visual Overhaul (ветка `visual-overhaul`) — имела (`GH_TOKEN`/`GITHUB_TOKEN` были проброшены средой) и запушила ветку напрямую. Если доступа нет — попроси у владельца PAT (repo scope) или патч, задокументировав это честно, а не тратя время на обходной путь.
 - Коммить только когда изменения одного этапа реально протестированы (lint/tsc/vitest/SQL/e2e) — см. историю коммитов (`git log --oneline`) как образец гранулярности: один коммит на этап техрегламента, с честным описанием, что реально проверено.
+
+## Visual Overhaul (ветка `visual-overhaul`, отдельный трек от техрегламента)
+
+Живое поместье + перемещение персонажа + полноэкранная лаборатория вместо
+классической сетки грядок — см. `docs/FINAL_VISION.md` (GDD-регламент этого
+трека, отдельный от `docs/MASTER_PLAN.md`) и `docs/ASSET_MANIFEST.md`.
+Полностью за feature-флагом `VITE_VISUAL_OVERHAUL_ENABLED` (default false,
+не установлен в production) — см. `apps/web/.env.example`. Флаг реально
+tree-shake'ится Vite/Rolldown при сборке: `grep EstateScene dist/assets/*.js`
+на дефолтной (флаг выключен) сборке возвращает 0 совпадений — overhaul-код
+физически не попадает в production-бандл, а не просто скрыт рантайм-веткой.
+
+Ключевые новые файлы: `apps/web/src/overhaul/` (worldConfig/movement/events/
+assetManifest/proceduralAssets/OverhaulApp — вся логика без Phaser-зависимости
+юнит-тестируется отдельно от Phaser-частей), `apps/web/src/game/scenes/
+EstateScene.ts` + `LaboratoryScene.ts` + `BootSceneOverhaul.ts`, `apps/web/src/
+ClassicApp.tsx` (byte-for-byte старый `App.tsx`, теперь выбирается через
+новый `App.tsx`-переключатель). Игровая модель (`game/store.ts`, `genetics.ts`,
+`config.ts`) НЕ менялась — оба режима читают один и тот же `gameStore`/
+localStorage-сейв, переключение флага не мигрирует сохранение.
+
+Собрать и проверить overhaul-режим локально:
+
+```bash
+cd apps/web
+npm install
+# Обычная (production, флаг выключен) сборка — как и раньше:
+npm run build && npm run preview -- --port 4173 --strictPort &
+
+# Отдельная сборка с включённым флагом, для ручной проверки/e2e:
+VITE_VISUAL_OVERHAUL_ENABLED=true npx vite build --outDir dist-overhaul
+npx vite preview --outDir dist-overhaul --port 4174 --strictPort &
+
+# e2e-сценарии overhaul-режима (корень репозитория, playwright из корневого package.json):
+node test-e2e-overhaul.mjs http://localhost:4174/genesis-garden/
+node test-e2e-overhaul-responsive.mjs http://localhost:4174/genesis-garden/
+```
+
+`dist-overhaul/` в `.gitignore` — это локальный тестовый бандл, не коммитится
+и не деплоится. CI (`.github/workflows/ci.yml`) не менялся: он триггерится
+только на `main`/PR в `main`, поэтому пуш ветки `visual-overhaul` его не
+запускает — все проверки в этой ветке прогонялись вручную в sandbox-сессии
+(см. финальный отчёт в истории чата/коммитах). Если/когда владелец решит
+влить эту ветку — стоит отдельным шагом добавить overhaul-сборку и
+`test-e2e-overhaul*.mjs` в CI, это осознанно не сделано сейчас, чтобы не
+трогать поведение CI для `main` без явного решения.
 
 ## Как всё запускать в песочнице разработки
 
