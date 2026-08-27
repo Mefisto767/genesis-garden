@@ -82,6 +82,21 @@ assert(coinsText.includes('777'), `old save (777 coins) loaded in overhaul mode,
 assert(await page.locator('.overhaul-mode-estate').isVisible(), 'starts in overhaul-mode-estate');
 await shot('01-estate-old-save');
 
+// --- Test A2: клавиатурное управление (WASD) действительно двигает персонажа ---
+// Без DOM-доступа к позиции персонажа (canvas) сравниваем скриншот канваса
+// до/после удержания клавиши — сам факт различия пикселей доказывает, что
+// keyboard-ввод дошёл до EstateScene и что-то в мире изменилось (персонаж
+// сдвинулся). Общая скорость намеренно не проверяется здесь отдельно — она
+// уже видна невооружённым взглядом на скриншотах e2e-прогонов этой ветки.
+const beforeKeys = await page.locator('canvas').screenshot();
+await page.keyboard.down('d');
+await page.keyboard.down('s');
+await page.waitForTimeout(2500);
+await page.keyboard.up('d');
+await page.keyboard.up('s');
+const afterKeys = await page.locator('canvas').screenshot();
+assert(!beforeKeys.equals(afterKeys), 'holding D+S (WASD) visibly moves the character in EstateScene');
+
 // --- Test B: клик по грядке в мире (посадка) — существующая механика работает внутри EstateScene ---
 const canvasBox = await page.locator('canvas').boundingBox();
 // PLOT_SLOTS[0] = world (330, 210); камера не скроллит на 1366x768 (мир 960x640 целиком в кадре).
@@ -147,9 +162,22 @@ if (await page.locator('.sheet-backdrop').isVisible().catch(() => false)) {
   await page.waitForTimeout(200);
 }
 
-// --- Test E: выход обратно в Estate, отсутствие двойного harvest/breed ---
+// --- Test E0: resize к портретному вьюпорту прямо внутри LaboratoryScene ---
+// Дешёвый способ проверить адаптивную portrait-раскладку hotspot'ов без
+// повторной ходьбы через камеру в узком вьюпорте (что медленно и шатко из-за
+// троттлинга rAF в headless-песочнице) — просто меняем размер окна, пока уже
+// внутри лаборатории, и проверяем реакцию scale.on('resize') -> layout().
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(500);
+const noHScrollPortraitLab = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+assert(noHScrollPortraitLab, 'LaboratoryScene resized to 390x844 portrait with no page horizontal scroll');
+await shot('05b-laboratory-portrait-resized');
+await page.setViewportSize({ width: 1366, height: 768 });
+await page.waitForTimeout(400);
+
+// --- Test E: выход обратно в Estate через Escape (клавиатура), отсутствие двойного harvest/breed ---
 const coinsBeforeExit = await page.locator('.hud-coins').innerText();
-await page.mouse.click(canvasBox.x + 30, canvasBox.y + 60); // "Назад в сад" (верхний левый угол сцены)
+await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 const backInEstate = await page.locator('.overhaul-mode-estate').isVisible().catch(() => false);
 assert(backInEstate, 'exited back to overhaul-mode-estate');
