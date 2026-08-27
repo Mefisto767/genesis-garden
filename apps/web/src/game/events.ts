@@ -2,7 +2,7 @@
 // чтобы не тащить в проект отдельную стейт-менеджмент библиотеку ради MVP.
 type Handler<T> = (payload: T) => void;
 
-class Emitter<Events extends object> {
+export class Emitter<Events extends object> {
   private handlers: { [K in keyof Events]?: Set<Handler<Events[K]>> } = {};
 
   on<K extends keyof Events>(event: K, handler: Handler<Events[K]>): () => void {

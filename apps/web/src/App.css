@@ -1194,3 +1194,60 @@
   text-align: center;
   padding: 8px 12px;
 }
+
+/* ===========================================================================
+   Visual Overhaul — RevealScene (см. ui/LabPanel.tsx `fullscreenReveal`).
+   Тот же DOM/логика, что классический .lab-reveal — только полноэкранное,
+   визуально отделённое от обычных sheet-модалок оформление (техпромт этапа:
+   "Визуально отделена от обычных модалок"). Не трогает .sheet-backdrop/.sheet
+   базовые правила выше — только модификаторы, добавляемые условно в JSX.
+   =========================================================================== */
+.sheet-backdrop-reveal-scene {
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #241a33 0%, #0c0714 78%);
+}
+
+.sheet-reveal-scene {
+  width: min(92vw, 420px);
+  max-height: 88vh;
+  border-image-source: none;
+  border-width: 0;
+  background: rgba(20, 12, 28, 0.55);
+  border-radius: 18px;
+  border: 2px solid rgba(223, 245, 251, 0.35);
+  box-shadow: 0 0 60px rgba(140, 100, 220, 0.35), inset 0 0 30px rgba(0, 0, 0, 0.4);
+  padding: 32px 20px 24px;
+}
+
+.lab-reveal-scene {
+  position: relative;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.reveal-scene-close {
+  position: absolute;
+  top: -18px;
+  right: -8px;
+  color: #fdf3d9;
+  background: rgba(74, 46, 23, 0.85);
+  border-radius: 50%;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.lab-reveal-card-scene {
+  padding-bottom: 18px;
+  background: radial-gradient(ellipse at center, rgba(191, 228, 242, 0.28) 0%, transparent 70%);
+  border-bottom: 3px solid rgba(223, 245, 251, 0.5);
+}
+
+.sheet-reveal-scene .lab-reveal-rarity,
+.sheet-reveal-scene .lab-reveal-mutation {
+  color: #fdf3d9;
+}
+
+.sheet-reveal-scene .lab-reveal-dust {
+  color: #d8c8ea;
+}

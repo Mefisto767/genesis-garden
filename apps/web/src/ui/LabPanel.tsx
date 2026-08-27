@@ -29,6 +29,15 @@ interface LabPanelProps {
   geneticDust: number;
   pityCounter: number;
   onClose: () => void;
+  /**
+   * Visual Overhaul (см. overhaul/OverhaulApp.tsx): раскрытие гибрида —
+   * полноэкранное и визуально отделено от обычных sheet-модалок (техпромт
+   * "RevealScene"), а не маленькая карточка внутри панели. Логика (breed(),
+   * pity, skip, prefers-reduced-motion) НЕ меняется — только CSS-модификаторы
+   * на тех же DOM-узлах, поэтому классическая раскладка (флаг выключен)
+   * остаётся byte-for-byte прежней.
+   */
+  fullscreenReveal?: boolean;
 }
 
 const LOCKABLE_GENE_LABELS: Record<LockableGene, string> = {
@@ -49,7 +58,14 @@ function prefersReducedMotion(): boolean {
   }
 }
 
-export function LabPanel({ specimens, coins, geneticDust, pityCounter, onClose }: LabPanelProps) {
+export function LabPanel({
+  specimens,
+  coins,
+  geneticDust,
+  pityCounter,
+  onClose,
+  fullscreenReveal = false,
+}: LabPanelProps) {
   const [selected, setSelected] = useState<string[]>([]);
   const [result, setResult] = useState<BreedOutcome | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -122,21 +138,33 @@ export function LabPanel({ specimens, coins, geneticDust, pityCounter, onClose }
   const canBreed = selected.length === 2 && coins >= BREED_COST && (!wantsLock || canAffordLock);
   const pityRemaining = Math.max(0, GENETICS_CONFIG.pityThreshold - pityCounter);
 
+  const isRevealFullscreen = fullscreenReveal && !!result;
+
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-header">
-          <h2>Лаборатория скрещивания</h2>
-          <button className="sheet-close" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+    <div
+      className={`sheet-backdrop ${isRevealFullscreen ? 'sheet-backdrop-reveal-scene' : ''}`}
+      onClick={onClose}
+    >
+      <div className={`sheet ${isRevealFullscreen ? 'sheet-reveal-scene' : ''}`} onClick={(e) => e.stopPropagation()}>
+        {!isRevealFullscreen && (
+          <div className="sheet-header">
+            <h2>Лаборатория скрещивания</h2>
+            <button className="sheet-close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+        )}
 
         {result ? (
-          <div className="lab-reveal">
+          <div className={`lab-reveal ${isRevealFullscreen ? 'lab-reveal-scene' : ''}`}>
+            {isRevealFullscreen && (
+              <button className="sheet-close reveal-scene-close" onClick={onClose} aria-label="Закрыть">
+                ✕
+              </button>
+            )}
             <button
               type="button"
-              className={`lab-reveal-card ${revealed ? 'is-revealed' : ''}`}
+              className={`lab-reveal-card ${isRevealFullscreen ? 'lab-reveal-card-scene' : ''} ${revealed ? 'is-revealed' : ''}`}
               onClick={skipReveal}
               aria-label={revealed ? 'Результат скрещивания' : 'Пропустить анимацию'}
             >
