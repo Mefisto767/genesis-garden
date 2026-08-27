@@ -1,4 +1,4 @@
-import { SEED_CATALOG } from '../game/seedCatalog';
+import { SEED_CATALOG, seedThumb } from '../game/seedCatalog';
 import { gameStore } from '../game/store';
 import { gardenEvents } from '../game/events';
 
@@ -21,11 +21,12 @@ export function ShopPanel({ coins, onClose }: ShopPanelProps) {
           {SEED_CATALOG.map((seed) => (
             <div className="sheet-row" key={seed.id}>
               <div className="sheet-row-info">
-                <span className="sheet-row-emoji">{seed.emoji}</span>
+                <img className="sheet-thumb" src={seedThumb(seed)} alt="" />
                 <div>
                   <div className="sheet-row-title">{seed.name}</div>
                   <div className="sheet-row-sub">
-                    рост: {formatGrow(seed.growMs)} · продажа: {seed.sellValue}🪙
+                    рост: {formatGrow(seed.growMs)} · продажа: {seed.sellValue}
+                    <img className="coin-icon coin-icon-sm" src="assets/ui/icon_coin.png" alt="монет" />
                   </div>
                 </div>
               </div>
@@ -38,7 +39,8 @@ export function ShopPanel({ coins, onClose }: ShopPanelProps) {
                   else gardenEvents.emit('toast', { text: `Куплено: ${seed.name}` });
                 }}
               >
-                Купить · {seed.buyCost}🪙
+                {seed.buyCost}
+                <img className="coin-icon coin-icon-sm" src="assets/ui/icon_coin.png" alt="монет" />
               </button>
             </div>
           ))}

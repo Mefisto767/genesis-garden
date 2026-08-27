@@ -12,7 +12,7 @@ page.on('console', (msg) => {
 });
 
 async function screenshot(name) {
-  await page.screenshot({ path: `/home/claude/genesis-garden/shots/${name}.png` });
+  await page.screenshot({ path: `/home/claude/game/genesis-garden/shots/${name}.png` });
 }
 
 // --- Test A: fresh state, plant + buy + inventory + persistence ---

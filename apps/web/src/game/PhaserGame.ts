@@ -11,7 +11,7 @@ export function createPhaserGame(parent: HTMLElement): Phaser.Game {
       width: '100%',
       height: '100%',
     },
-    backgroundColor: '#eaf5e6',
+    backgroundColor: '#FDF3D9',
     scene: [BootScene, GardenScene],
     // Мобильный браузер: не даём странице скроллиться/зумиться жестами по канвасу.
     input: {

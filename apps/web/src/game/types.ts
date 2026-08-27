@@ -1,10 +1,15 @@
+import type { PlantColorway } from './plantArt';
+
 export interface SeedDef {
   id: string;
   name: string;
-  emoji: string;
   growMs: number;
   buyCost: number;
   sellValue: number;
+  /** Вид растения (форма силуэта) из арт-пака — 1..8. */
+  speciesId: number;
+  /** Фиксированный окрас тира; Этап 2 заменит на цвета из генома. */
+  colorway: PlantColorway;
 }
 
 export interface Plot {

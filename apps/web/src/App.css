@@ -1,9 +1,14 @@
+/* Genesis Garden — UI skin по style_guide.png из арт-пака.
+   Палитра: cream #FDF3D9 · ink #4A2E17 · amber #F5A623 · leaf #6FBE44 ·
+   coral #FF6F59 · wood #8B5E3C. Заголовки — Baloo 2, текст — Nunito. */
+
 .app-shell {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Nunito', system-ui, sans-serif;
   touch-action: none;
+  background: #fdf3d9;
 }
 
 #game-root {
@@ -21,22 +26,45 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 56px;
+  height: 60px;
   padding: 8px 12px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(253, 243, 217, 0.92);
   backdrop-filter: blur(6px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 3px solid #4a2e17;
   z-index: 10;
 }
 
 .hud-coins {
-  font-size: 18px;
-  font-weight: 600;
-  color: #3c2a1a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #4a2e17;
+  background: #fff;
+  border: 3px solid #4a2e17;
+  border-radius: 999px;
+  padding: 2px 14px 2px 6px;
+  box-shadow: 0 3px 0 rgba(74, 46, 23, 0.25);
+}
+
+.coin-icon {
+  width: 26px;
+  height: 26px;
+  display: inline-block;
+  vertical-align: -5px;
+}
+
+.coin-icon-sm {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  margin-left: 3px;
 }
 
 .hud-buttons {
@@ -45,38 +73,47 @@
 }
 
 .hud-btn {
-  border: none;
-  border-radius: 10px;
-  background: #f3e6c4;
-  color: #3c2a1a;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  min-height: 40px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  border: 3px solid #4a2e17;
+  border-radius: 14px;
+  background: #fff;
+  color: #4a2e17;
+  padding: 6px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  min-height: 42px;
+  box-shadow: 0 3px 0 rgba(74, 46, 23, 0.25);
+  cursor: pointer;
 }
 
 .hud-btn:active {
-  background: #e6d3a3;
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(74, 46, 23, 0.25);
+}
+
+.hud-btn-accent {
+  background: #f5a623;
 }
 
 .sheet-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(74, 46, 23, 0.45);
   display: flex;
   align-items: flex-end;
   z-index: 20;
 }
 
 .sheet {
-  background: #fffaf0;
+  background: #fdf3d9;
   width: 100%;
   max-height: 70vh;
   overflow-y: auto;
-  border-radius: 18px 18px 0 0;
+  border-radius: 22px 22px 0 0;
+  border-top: 3px solid #4a2e17;
   padding: 16px;
   box-sizing: border-box;
-  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -6px 24px rgba(74, 46, 23, 0.25);
 }
 
 .sheet-header {
@@ -88,8 +125,10 @@
 
 .sheet-header h2 {
   margin: 0;
-  font-size: 18px;
-  color: #3c2a1a;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #4a2e17;
 }
 
 .sheet-close {
@@ -98,6 +137,8 @@
   font-size: 18px;
   min-width: 40px;
   min-height: 40px;
+  color: #4a2e17;
+  cursor: pointer;
 }
 
 .sheet-list {
@@ -110,10 +151,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: white;
-  border-radius: 12px;
+  background: #fff;
+  border-radius: 16px;
   padding: 10px 12px;
-  border: 1px solid #eee0c4;
+  border: 3px solid #4a2e17;
+  box-shadow: 0 3px 0 rgba(74, 46, 23, 0.15);
 }
 
 .sheet-row-clickable {
@@ -124,49 +166,74 @@
   cursor: pointer;
 }
 
+.sheet-row-clickable:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(74, 46, 23, 0.15);
+}
+
 .sheet-row-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.sheet-row-emoji {
-  font-size: 26px;
+.sheet-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 
 .sheet-row-title {
-  font-weight: 600;
-  color: #3c2a1a;
-  font-size: 15px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  color: #4a2e17;
+  font-size: 16px;
 }
 
 .sheet-row-sub {
   font-size: 12px;
-  color: #8a7a5c;
+  font-weight: 600;
+  color: #8b5e3c;
 }
 
 .sheet-row-count {
-  font-weight: 600;
-  color: #3c2a1a;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #4a2e17;
 }
 
 .sheet-buy-btn {
-  border: none;
-  background: #7bab5e;
-  color: white;
-  font-weight: 600;
-  border-radius: 10px;
-  padding: 8px 12px;
-  min-height: 40px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  border: 3px solid #4a2e17;
+  background: #6fbe44;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 14px;
+  padding: 6px 14px;
+  min-height: 42px;
+  box-shadow: 0 3px 0 rgba(74, 46, 23, 0.25);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sheet-buy-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(74, 46, 23, 0.25);
 }
 
 .sheet-buy-btn:disabled {
-  background: #c9c9c9;
+  background: #b7afa0;
+  box-shadow: none;
+  cursor: default;
 }
 
 .sheet-empty {
-  color: #8a7a5c;
+  color: #8b5e3c;
   font-size: 14px;
+  font-weight: 600;
+  margin: 0;
 }
 
 .sheet-empty-block {
@@ -176,16 +243,30 @@
   align-items: flex-start;
 }
 
+.sheet-empty-centered {
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 16px;
+}
+
+.mascot-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
 .toast {
   position: absolute;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(60, 42, 26, 0.92);
-  color: white;
-  padding: 10px 16px;
+  background: #4a2e17;
+  color: #fdf3d9;
+  padding: 10px 18px;
   border-radius: 999px;
   font-size: 14px;
+  font-weight: 700;
   z-index: 30;
   white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(74, 46, 23, 0.35);
 }

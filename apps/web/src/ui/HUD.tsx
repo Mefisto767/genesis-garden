@@ -7,13 +7,16 @@ interface HUDProps {
 export function HUD({ coins, onOpenShop, onOpenInventory }: HUDProps) {
   return (
     <div className="hud-bar">
-      <div className="hud-coins">🪙 {coins}</div>
+      <div className="hud-coins">
+        <img className="coin-icon" src="assets/ui/icon_coin.png" alt="монеты" />
+        <span>{coins}</span>
+      </div>
       <div className="hud-buttons">
         <button className="hud-btn" onClick={onOpenInventory}>
-          🎒 Инвентарь
+          Инвентарь
         </button>
-        <button className="hud-btn" onClick={onOpenShop}>
-          🛒 Магазин
+        <button className="hud-btn hud-btn-accent" onClick={onOpenShop}>
+          Магазин
         </button>
       </div>
     </div>
