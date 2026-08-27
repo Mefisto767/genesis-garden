@@ -1,5 +1,8 @@
 import { chromium } from '/home/claude/.npm-global/lib/node_modules/playwright/index.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.argv[2] || 'http://localhost:4173/genesis-garden/';
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -9,7 +12,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 
 async function screenshot(name) {
-  await page.screenshot({ path: `/home/claude/game/genesis-garden/shots/${name}.png` });
+  await page.screenshot({ path: path.join(SCRIPT_DIR, 'shots', `${name}.png`) });
 }
 
 await page.goto(URL, { waitUntil: 'networkidle' });

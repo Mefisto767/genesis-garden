@@ -1,5 +1,6 @@
-import type { PlantColorway } from './plantArt';
+import type { PlantColorway } from './plantPalette';
 import type { Genome } from './genetics';
+import { GARDEN_CONFIG, type QuestGoalType } from './config';
 
 export interface SeedDef {
   id: string;
@@ -27,6 +28,16 @@ export interface Plot {
   plantedAt: number | null;
 }
 
+/** Временный буст (сейчас пусто — Этап 7 заполнит покупками ускорений). */
+export interface Entitlement {
+  id: string;
+  type: 'growth_boost';
+  /** Доля ускорения, напр. 0.1 = +10% к скорости роста. */
+  percent: number;
+  /** null = бессрочно (не используется в MVP, задел на сезонные покупки). */
+  expiresAt: number | null;
+}
+
 export interface GameState {
   coins: number;
   plots: Plot[];
@@ -37,7 +48,14 @@ export interface GameState {
   geneticDust: number;
   /** Счётчик скрещиваний без мутации гена — pity-система. */
   pityCounter: number;
+  /** Прогресс по квестам: questId -> текущий счётчик. */
+  questProgress: Record<string, number>;
+  /** id квестов, награда за которые уже забрана. */
+  questsClaimed: string[];
+  /** Активные ускорители (сейчас всегда []; Этап 7 подключит покупки). */
+  entitlements: Entitlement[];
 }
 
-export const MAX_PLOTS = 24;
-export const START_UNLOCKED_PLOTS = 6;
+export type { QuestGoalType };
+export const MAX_PLOTS = GARDEN_CONFIG.maxPlots;
+export const START_UNLOCKED_PLOTS = GARDEN_CONFIG.startUnlockedPlots;
