@@ -1,0 +1,8 @@
+{
+  "name": "genesis-garden-e2e-tools",
+  "private": true,
+  "description": "Repo-root devDependencies for the Playwright E2E smoke scripts (test-e2e*.mjs). The game itself lives in apps/web — this file exists only so `playwright` resolves as a normal npm import from repo root instead of a sandbox-specific global path, both locally and in CI (see .github/workflows/ci.yml).",
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}

@@ -1,11 +1,17 @@
-import { chromium } from '/home/claude/.npm-global/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.argv[2] || 'http://localhost:4173/genesis-garden/';
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// См. test-e2e.mjs — sandbox-путь используется, если есть, иначе браузер,
+// поставленный `npx playwright install` (так и происходит в CI).
+const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium';
+const launchOptions = existsSync(SANDBOX_CHROMIUM) ? { executablePath: SANDBOX_CHROMIUM } : {};
+
+const browser = await chromium.launch(launchOptions);
 const page = await browser.newPage({ viewport: { width: 420, height: 780 } });
 
 const errors = [];

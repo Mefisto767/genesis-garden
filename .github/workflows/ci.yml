@@ -1,0 +1,167 @@
+name: CI
+
+# Genesis Garden — Этап 11 мастер-регламента. Единственный workflow:
+# lint -> typecheck -> vitest -> SQL/RLS/RPC (реальный Postgres-сервис,
+# тот же способ, что supabase/tests/run_ci.sh) -> build -> Playwright e2e
+# на собранном бандле. Деплой на GitHub Pages происходит ТОЛЬКО если весь
+# job test прошёл зелёным и это push в main (не PR) — см. job deploy ниже.
+#
+# Секреты: ни один шаг здесь не требует секретов сборки. Облачные фичи
+# (VITE_SUPABASE_URL/ANON_KEY, VITE_PAYMENTS_*, VITE_SENTRY_DSN) выключены
+# по умолчанию (см. apps/web/.env.example) — сборка для беты сознательно
+# идёт БЕЗ них, это не забытый шаг. Если владелец решит когда-нибудь
+# собирать с реальными облачными ключами по умолчанию — тогда эти значения
+# нужно будет завести как repo secrets и явно прокинуть их в шаг `Build`
+# ниже через `env:`, отдельным осознанным решением, не в этом коммите.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            package-lock.json
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Lint
+        working-directory: apps/web
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: apps/web
+        run: npx tsc -b --noEmit
+
+      - name: Unit tests (Vitest)
+        working-directory: apps/web
+        run: npx vitest run
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: SQL / RLS / RPC tests (against real Postgres service)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/tests/run_ci.sh
+
+      - name: Build (production bundle)
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Install repo-root e2e tooling (Playwright)
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start preview server
+        working-directory: apps/web
+        run: |
+          npm run preview -- --port 4173 --strictPort &
+          npx -y wait-on http://localhost:4173/genesis-garden/ --timeout 30000
+
+      - name: Playwright E2E — core loop (plant/buy/harvest/unlock/reload)
+        run: node test-e2e.mjs http://localhost:4173/genesis-garden/
+
+      - name: Playwright E2E — genetics (breed/recycle)
+        run: node test-e2e-genetics.mjs http://localhost:4173/genesis-garden/
+
+      - name: Playwright E2E — new-user journey (onboarding/quests)
+        run: node test-e2e-newuser-journey.mjs http://localhost:4173/genesis-garden/
+
+      - name: Upload Playwright screenshots (always, for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload production build
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: apps/web/dist
+          retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Download production build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist
+          # История gh-pages не нужна — каждый деплой это снимок build-вывода.
+          force_orphan: true
+
+      - name: Post-deploy smoke test
+        run: |
+          # Pages может обновляться не мгновенно — несколько попыток с паузой.
+          for i in 1 2 3 4 5 6; do
+            if curl -sf -o /dev/null https://mefisto767.github.io/genesis-garden/; then
+              echo "Smoke test OK (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: site not ready yet, waiting 20s..."
+            sleep 20
+          done
+          echo "Smoke test FAILED: site did not respond after deploy"
+          exit 1
