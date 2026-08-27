@@ -148,8 +148,8 @@
   border: none;
   background: none;
   font-size: 18px;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   color: #4a2e17;
   cursor: pointer;
 }
@@ -499,6 +499,7 @@
 }
 
 .album-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -509,6 +510,27 @@
   border-image-source: url('/assets/ui/panel_cream.png');
   border-image-slice: 24 fill;
   border-image-width: 8px;
+}
+
+.album-card-favorite {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2; /* поверх канваса миниатюры растения — иначе canvas перехватывает клики */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: #c9a875;
+  cursor: pointer;
+}
+
+.album-card-favorite.is-favorite {
+  color: #f5a623;
 }
 
 .album-card-rarity {
@@ -525,7 +547,15 @@
   text-align: center;
 }
 
-.album-card-sell {
+.album-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.album-card-sell,
+.album-card-share {
   margin-top: 2px;
   border: none;
   background: none;
@@ -536,7 +566,15 @@
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
+  min-height: 44px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.album-card-share {
+  color: #3f7fb0;
 }
 
 .rarity-common {
@@ -557,4 +595,139 @@
 
 .rarity-legendary {
   color: #f5a623;
+}
+
+/* ==========================================================================
+   Этап 5 — полировка reveal-loop: видимый pity-счётчик, блокировка гена за
+   пыль, повтор скрещивания без лишней навигации, пропуск анимации, избранное.
+   ========================================================================== */
+
+.lab-pity {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b5e3c;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+.specimen-card {
+  position: relative;
+}
+
+.specimen-card-favorite {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 13px;
+  color: #f5a623;
+  pointer-events: none;
+}
+
+.lab-gene-lock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.lab-gene-lock-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a2e17;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lab-gene-lock-select {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  padding: 6px 8px;
+  min-height: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+}
+
+.lab-gene-lock-source {
+  display: flex;
+  gap: 8px;
+}
+
+.lab-gene-lock-source button {
+  flex: 1;
+  min-height: 40px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  border-radius: 4px;
+  background: #fff;
+  color: #4a2e17;
+  cursor: pointer;
+}
+
+.lab-gene-lock-source button.is-selected {
+  border-color: #f5a623;
+  background: rgba(245, 166, 35, 0.18);
+}
+
+.lab-gene-lock-warning {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c0392b;
+  margin: 0;
+}
+
+.lab-reveal-card {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lab-reveal-skip {
+  border: none;
+  background: none;
+  color: #8b5e3c;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 4px 8px;
+}
+
+.lab-reveal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.lab-reveal-btn-secondary {
+  border-image-source: url('/assets/ui/panel_cream.png');
+  color: #4a2e17;
+  text-shadow: none;
+}
+
+/* Уважаем системную настройку "меньше движения" — отключаем декоративные
+   анимации/переходы reveal-карточки и всплывающих подписей повсюду в игре.
+   Логика уже отдельно пропускает паузу перед реролом (см. LabPanel.tsx
+   prefersReducedMotion()); здесь — визуальный уровень на случай, если
+   какой-то переход всё же успеет начаться. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

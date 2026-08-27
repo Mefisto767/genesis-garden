@@ -1,7 +1,7 @@
 import type { Entitlement, GameState, Plot, Specimen } from './types';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
-import { breed, randomGenome, type BreedResult } from './genetics';
+import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
 import { GARDEN_CONFIG, BREEDING_CONFIG, STARTING_STATE_CONFIG } from './config';
 import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
@@ -95,7 +95,11 @@ export interface BreedOutcome {
   specimen: Specimen;
   result: BreedResult;
   dustGained: number;
+  /** Сколько пыли ушло на блокировку гена в этом скрещивании (0, если lock не передавался). */
+  dustSpentOnLock: number;
 }
+
+export type { GeneLock } from './genetics';
 
 export interface PlotStatus {
   ready: boolean;
@@ -265,15 +269,23 @@ export class GameStore {
    * Скрещивание двух экземпляров из коллекции. Родители не расходуются
    * (питомник, не единственная копия) — так проще для MVP; экономику
    * (кулдауны/расход) можно добавить на Этапе 4 без переделки движка генов.
+   *
+   * `lock` (Этап 5) — потратить `BREEDING_CONFIG.dustCostPerLockedGene` пыли,
+   * чтобы зафиксировать один наследуемый ген от выбранного родителя без
+   * шанса на мутацию именно этого гена (см. genetics.ts `GeneLock`). Если
+   * пыли не хватает — скрещивание не проводится вообще (null), деньги/пыль
+   * не списываются частично.
    */
-  breedSpecimens(idA: string, idB: string): BreedOutcome | null {
+  breedSpecimens(idA: string, idB: string, lock?: GeneLock): BreedOutcome | null {
     if (idA === idB) return null;
     const a = this.state.specimens.find((s) => s.id === idA);
     const b = this.state.specimens.find((s) => s.id === idB);
     if (!a || !b) return null;
     if (this.state.coins < BREED_COST) return null;
+    const lockCost = lock ? BREEDING_CONFIG.dustCostPerLockedGene : 0;
+    if (this.state.geneticDust < lockCost) return null;
 
-    const result = breed(a.genome, b.genome, this.state.pityCounter, this.rng);
+    const result = breed(a.genome, b.genome, this.state.pityCounter, this.rng, lock);
     const dustGained =
       DUST_REWARD_MIN + Math.floor(this.rng() * (DUST_REWARD_MAX - DUST_REWARD_MIN + 1));
     const specimen: Specimen = { id: nextId(), genome: result.genome, createdAt: Date.now() };
@@ -281,13 +293,13 @@ export class GameStore {
     this.state = {
       ...this.state,
       coins: this.state.coins - BREED_COST,
-      geneticDust: this.state.geneticDust + dustGained,
+      geneticDust: this.state.geneticDust + dustGained - lockCost,
       pityCounter: result.nextPityCounter,
       specimens: [...this.state.specimens, specimen],
       questProgress: advanceQuestProgress(this.state.questProgress, 'breed'),
     };
     this.emit();
-    return { specimen, result, dustGained };
+    return { specimen, result, dustGained, dustSpentOnLock: lockCost };
   }
 
   /**
@@ -295,12 +307,14 @@ export class GameStore {
    * прежнюю продажу за монеты (`sellSpecimenValue`), чтобы совпасть с уже
    * реализованной на сервере `recycle_plant()` (см. docs/ECONOMY.md,
    * раздел «Сознательное расхождение: recycle vs sell» — расхождение
-   * устранено этим изменением). Возвращает количество полученной пыли или
-   * null, если специмена не существует (уже переработан/невалидный id).
+   * устранено этим изменением). Возвращает количество полученной пыли,
+   * null если специмена не существует, или 'favorite' если специмен в
+   * избранном (защита от случайной переработки — нужно сперва снять звезду).
    */
-  recycleSpecimen(id: string): number | null {
+  recycleSpecimen(id: string): number | null | 'favorite' {
     const specimen = this.state.specimens.find((s) => s.id === id);
     if (!specimen) return null;
+    if (specimen.favorite) return 'favorite';
     const dustGained = BREEDING_CONFIG.recycleDustReward;
     this.state = {
       ...this.state,
@@ -309,6 +323,18 @@ export class GameStore {
     };
     this.emit();
     return dustGained;
+  }
+
+  /** Переключить избранное у специмена (Этап 5) — чисто клиентский флаг, см. types.ts. */
+  toggleFavorite(id: string): boolean {
+    const specimen = this.state.specimens.find((s) => s.id === id);
+    if (!specimen) return false;
+    this.state = {
+      ...this.state,
+      specimens: this.state.specimens.map((s) => (s.id === id ? { ...s, favorite: !s.favorite } : s)),
+    };
+    this.emit();
+    return true;
   }
 
   /** Идемпотентно: повторный claimQuest на уже забранный квест — no-op. */

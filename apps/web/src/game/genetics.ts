@@ -90,6 +90,15 @@ export interface BreedResult {
   nextPityCounter: number;
 }
 
+/** Гены, которые можно зафиксировать за пыль перед скрещиванием (Этап 5). mutationId — не ген наследования, а исход, его нельзя зафиксировать. */
+export type LockableGene = 'shape' | 'primary' | 'secondary' | 'leaf' | 'pattern' | 'size' | 'aura';
+
+/** Какой ген зафиксировать и от какого родителя взять значение (пыль списывается вызывающей стороной — GameStore). */
+export interface GeneLock {
+  gene: LockableGene;
+  source: 'a' | 'b';
+}
+
 /**
  * Скрещивание: каждый ген независимо наследуется 50/50 от одного из
  * родителей, с шансом GENE_MUTATE_CHANCE «сорваться» на случайное значение
@@ -97,13 +106,26 @@ export interface BreedResult {
  * Плюс pity-система: если давно не было ни одной мутации гена — следующее
  * скрещивание гарантированно даёт мутацию хотя бы одного гена и подбирает
  * итоговой особи специальный mutationId.
+ *
+ * `lock` (Этап 5, за генетическую пыль) — один named-ген можно зафиксировать:
+ * он гарантированно наследуется от выбранного родителя без шанса на мутацию
+ * этого конкретного гена. Остальные гены и pity-система работают как обычно.
  */
-export function breed(a: Genome, b: Genome, pityCounter: number, rng: RngFn = defaultRng): BreedResult {
+export function breed(
+  a: Genome,
+  b: Genome,
+  pityCounter: number,
+  rng: RngFn = defaultRng,
+  lock?: GeneLock
+): BreedResult {
   let mutated = false;
   const forceGeneMutation = pityCounter >= PITY_THRESHOLD;
   let forcedOnce = false;
 
-  function gene<T>(pa: T, pb: T, pool: T[]): T {
+  function gene<T>(pa: T, pb: T, pool: T[], key?: LockableGene): T {
+    if (key && lock && lock.gene === key) {
+      return lock.source === 'a' ? pa : pb;
+    }
     const shouldMutate =
       rng() < GENE_MUTATE_CHANCE || (forceGeneMutation && !forcedOnce && rng() < GENETICS_CONFIG.pityMutationChance);
     if (shouldMutate) {
@@ -114,13 +136,13 @@ export function breed(a: Genome, b: Genome, pityCounter: number, rng: RngFn = de
     return inherit(pa, pb, rng);
   }
 
-  const shape = gene(a.shape, b.shape, SHAPES);
-  const primary = gene(a.primary, b.primary, PRIMARY_POOL);
-  let secondary = gene(a.secondary, b.secondary, SECONDARY_POOL);
-  const leaf = gene(a.leaf, b.leaf, LEAF_POOL);
-  const pattern = gene(a.pattern, b.pattern, ['solid', 'duotone'] as Pattern[]);
-  const size = gene(a.size, b.size, SIZE_TIERS);
-  const aura = gene(a.aura, b.aura, AURA_TIERS);
+  const shape = gene(a.shape, b.shape, SHAPES, 'shape');
+  const primary = gene(a.primary, b.primary, PRIMARY_POOL, 'primary');
+  let secondary = gene(a.secondary, b.secondary, SECONDARY_POOL, 'secondary');
+  const leaf = gene(a.leaf, b.leaf, LEAF_POOL, 'leaf');
+  const pattern = gene(a.pattern, b.pattern, ['solid', 'duotone'] as Pattern[], 'pattern');
+  const size = gene(a.size, b.size, SIZE_TIERS, 'size');
+  const aura = gene(a.aura, b.aura, AURA_TIERS, 'aura');
   if (pattern === 'solid') secondary = primary;
 
   const pityTriggered = forceGeneMutation && mutated;

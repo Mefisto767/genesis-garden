@@ -135,6 +135,41 @@ describe('pity-система', () => {
   });
 });
 
+describe('блокировка гена (lock) — Этап 5', () => {
+  it('зафиксированный ген всегда берётся от выбранного родителя, даже когда rng "хочет" мутировать', () => {
+    const a = genomeA();
+    const b = genomeB();
+    // rng всегда 0 -> без lock всё бы мутировало; с lock зафиксированный
+    // ген обязан остаться значением родителя, не пула.
+    const result = breed(a, b, 0, () => 0, { gene: 'shape', source: 'a' });
+    expect(result.genome.shape).toBe(a.shape);
+  });
+
+  it('lock от родителя b берёт именно его значение', () => {
+    const a = genomeA();
+    const b = genomeB();
+    const result = breed(a, b, 0, () => 0, { gene: 'primary', source: 'b' });
+    expect(result.genome.primary).toBe(b.primary);
+  });
+
+  it('lock не мешает остальным генам мутировать по обычным правилам', () => {
+    const a = genomeA();
+    const b = genomeB();
+    // rng всегда 0 -> все немодифицируемые гены мутируют в случайное значение пула.
+    const result = breed(a, b, 0, () => 0, { gene: 'shape', source: 'a' });
+    expect(result.mutated).toBe(true); // мутация где-то ещё произошла
+    expect(result.genome.shape).toBe(a.shape); // но не в зафиксированном гене
+  });
+
+  it('lock на pattern согласован с производным secondary (solid => secondary=primary)', () => {
+    const a = genomeA(); // duotone
+    const b = { ...genomeB(), pattern: 'solid' as const };
+    const result = breed(a, b, 0, () => 0.99, { gene: 'pattern', source: 'b' });
+    expect(result.genome.pattern).toBe('solid');
+    expect(result.genome.secondary).toBe(result.genome.primary);
+  });
+});
+
 describe('таблица вероятностей мутации — статистическая проверка', () => {
   it('доля мутировавших скрещиваний близка к ожидаемой при большой выборке', () => {
     const a = genomeA();

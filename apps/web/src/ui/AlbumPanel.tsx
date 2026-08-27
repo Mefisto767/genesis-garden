@@ -13,11 +13,46 @@ interface AlbumPanelProps {
 }
 
 export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps) {
-  const sorted = [...specimens].sort((a, b) => b.createdAt - a.createdAt);
+  // Избранное — сверху, дальше по дате (новые первыми).
+  const sorted = [...specimens].sort((a, b) => {
+    if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
+    return b.createdAt - a.createdAt;
+  });
 
   function recycle(id: string) {
-    const dustGained = gameStore.recycleSpecimen(id);
-    if (dustGained !== null) gardenEvents.emit('toast', { text: `Переработано: +${dustGained} пыли` });
+    const outcome = gameStore.recycleSpecimen(id);
+    if (outcome === 'favorite') {
+      gardenEvents.emit('toast', { text: 'В избранном — сними звезду, чтобы переработать' });
+      return;
+    }
+    if (outcome !== null) gardenEvents.emit('toast', { text: `Переработано: +${outcome} пыли` });
+  }
+
+  function toggleFavorite(id: string) {
+    gameStore.toggleFavorite(id);
+  }
+
+  async function share(rarity: string, mutation: string | null) {
+    const text = mutation
+      ? `Смотри, какое растение я вырастил в Genesis Garden: ${rarity}, мутация «${mutation}»! 🌱`
+      : `Смотри, какое растение я вырастил в Genesis Garden: ${rarity}! 🌱`;
+    // Честная оговорка (Этап 5): без Supabase (Этап 6) шарить можно только
+    // текстовым описанием — публичной картинки/ссылки на профиль пока нет,
+    // это задел под Этап 6 (социальный обмен).
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+    } catch {
+      // пользователь отменил системный шаринг — тихо откатываемся к копированию
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      gardenEvents.emit('toast', { text: 'Текст скопирован в буфер обмена' });
+    } catch {
+      gardenEvents.emit('toast', { text: 'Не удалось поделиться — попробуй скопировать вручную' });
+    }
   }
 
   return (
@@ -45,13 +80,27 @@ export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps)
               const mutation = mutationName(s.genome.mutationId);
               return (
                 <div className="album-card" key={s.id}>
+                  <button
+                    type="button"
+                    className={`album-card-favorite ${s.favorite ? 'is-favorite' : ''}`}
+                    onClick={() => toggleFavorite(s.id)}
+                    aria-label={s.favorite ? 'Убрать из избранного' : 'Добавить в избранное'}
+                    aria-pressed={!!s.favorite}
+                  >
+                    {s.favorite ? '★' : '☆'}
+                  </button>
                   <SpecimenThumbnail genome={s.genome} size={88} />
                   <div className={`album-card-rarity rarity-${rarity}`}>{RARITY_LABEL[rarity]}</div>
                   {mutation && <div className="album-card-mutation">✦ {mutation}</div>}
-                  <button className="album-card-sell" onClick={() => recycle(s.id)}>
-                    Переработать · {BREEDING_CONFIG.recycleDustReward}
-                    <img className="coin-icon coin-icon-sm" src="assets/ui/icon_dust.png" alt="пыли" />
-                  </button>
+                  <div className="album-card-actions">
+                    <button className="album-card-sell" onClick={() => recycle(s.id)}>
+                      Переработать · {BREEDING_CONFIG.recycleDustReward}
+                      <img className="coin-icon coin-icon-sm" src="assets/ui/icon_dust.png" alt="пыли" />
+                    </button>
+                    <button className="album-card-share" onClick={() => share(RARITY_LABEL[rarity], mutation)}>
+                      Поделиться
+                    </button>
+                  </div>
                 </div>
               );
             })}

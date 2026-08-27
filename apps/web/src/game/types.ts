@@ -19,6 +19,13 @@ export interface Specimen {
   id: string;
   genome: Genome;
   createdAt: number;
+  /**
+   * Избранное (Этап 5) — чисто клиентский флаг для быстрой сортировки/защиты
+   * от случайной переработки, пока не синхронизируется с сервером.
+   * Необязательное поле: у сохранений до Этапа 5 его нет — undefined
+   * читается как false, миграция SAVE_VERSION не нужна.
+   */
+  favorite?: boolean;
 }
 
 export interface Plot {

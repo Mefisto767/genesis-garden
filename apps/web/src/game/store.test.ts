@@ -150,6 +150,58 @@ describe('переработка специмена в пыль (recycleSpecimen
     expect(store.getState().geneticDust).toBe(dustBefore);
     expect(store.getState().specimens.length).toBe(countBefore);
   });
+
+  it('избранный специмен нельзя переработать, пока не снята звезда', () => {
+    const store = freshStore();
+    const specimen = store.getState().specimens[0];
+    store.toggleFavorite(specimen.id);
+    expect(store.getState().specimens.find((s) => s.id === specimen.id)?.favorite).toBe(true);
+
+    const blocked = store.recycleSpecimen(specimen.id);
+    expect(blocked).toBe('favorite');
+    expect(store.getState().specimens.some((s) => s.id === specimen.id)).toBe(true);
+
+    store.toggleFavorite(specimen.id); // снимаем звезду
+    const ok = store.recycleSpecimen(specimen.id);
+    expect(ok).toBe(BREEDING_CONFIG.recycleDustReward);
+    expect(store.getState().specimens.some((s) => s.id === specimen.id)).toBe(false);
+  });
+});
+
+describe('блокировка гена за пыль при скрещивании (Этап 5)', () => {
+  it('без достаточной пыли скрещивание с lock отклоняется целиком — деньги и пыль не трогаются', () => {
+    const store = freshStore();
+    const [a, b] = store.getState().specimens;
+    expect(store.getState().geneticDust).toBeLessThan(BREEDING_CONFIG.dustCostPerLockedGene);
+    const coinsBefore = store.getState().coins;
+    const dustBefore = store.getState().geneticDust;
+
+    const outcome = store.breedSpecimens(a.id, b.id, { gene: 'shape', source: 'a' });
+
+    expect(outcome).toBeNull();
+    expect(store.getState().coins).toBe(coinsBefore);
+    expect(store.getState().geneticDust).toBe(dustBefore);
+  });
+
+  it('с достаточной пылью — списывает cost, а зафиксированный ген берётся от выбранного родителя', () => {
+    const base = freshStore();
+    const [a, b] = base.getState().specimens;
+    // Стартуем сразу с запасом пыли (initialState) — без обходных путей через
+    // случайные награды за скрещивание, тест детерминирован по построению.
+    const seeded = { ...base.getState(), geneticDust: BREEDING_CONFIG.dustCostPerLockedGene + 10 };
+    const store = new GameStore({ rng: mulberry32(1), disablePersistence: true, initialState: seeded });
+    const dustBeforeLock = store.getState().geneticDust;
+
+    const outcome = store.breedSpecimens(a.id, b.id, { gene: 'shape', source: 'a' });
+
+    expect(outcome).not.toBeNull();
+    expect(outcome!.dustSpentOnLock).toBe(BREEDING_CONFIG.dustCostPerLockedGene);
+    expect(outcome!.specimen.genome.shape).toBe(a.genome.shape);
+    // Итоговая пыль = было - cost + случайная награда за это скрещивание.
+    expect(store.getState().geneticDust).toBe(
+      dustBeforeLock - BREEDING_CONFIG.dustCostPerLockedGene + outcome!.dustGained
+    );
+  });
 });
 
 describe('применение и ограничение ускорителей роста', () => {

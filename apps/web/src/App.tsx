@@ -57,7 +57,13 @@ function App() {
       {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
       {panel === 'inventory' && <InventoryPanel inventory={state.inventory} onClose={() => setPanel(null)} />}
       {panel === 'lab' && (
-        <LabPanel specimens={state.specimens} coins={state.coins} onClose={() => setPanel(null)} />
+        <LabPanel
+          specimens={state.specimens}
+          coins={state.coins}
+          geneticDust={state.geneticDust}
+          pityCounter={state.pityCounter}
+          onClose={() => setPanel(null)}
+        />
       )}
       {panel === 'album' && (
         <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
