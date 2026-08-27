@@ -8,14 +8,17 @@ import { InventoryPanel } from './ui/InventoryPanel';
 import { PlantPicker } from './ui/PlantPicker';
 import { LabPanel } from './ui/LabPanel';
 import { AlbumPanel } from './ui/AlbumPanel';
+import { SocialPanel } from './ui/SocialPanel';
 import { Toast } from './ui/Toast';
+import { useAuth } from './auth/useAuth';
 import './App.css';
 
-type Panel = 'shop' | 'inventory' | 'lab' | 'album' | null;
+type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | null;
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const state = useGameState();
+  const auth = useAuth();
   const [panel, setPanel] = useState<Panel>(null);
   const [plantPlotId, setPlantPlotId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -52,6 +55,7 @@ function App() {
         onOpenInventory={() => setPanel('inventory')}
         onOpenLab={() => setPanel('lab')}
         onOpenAlbum={() => setPanel('album')}
+        onOpenSocial={auth.status === 'signed_in' ? () => setPanel('social') : undefined}
       />
 
       {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
@@ -68,6 +72,7 @@ function App() {
       {panel === 'album' && (
         <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
       )}
+      {panel === 'social' && <SocialPanel onClose={() => setPanel(null)} />}
       {plantPlotId !== null && (
         <PlantPicker
           plotId={plantPlotId}

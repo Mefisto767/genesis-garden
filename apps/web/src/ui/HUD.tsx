@@ -4,9 +4,11 @@ interface HUDProps {
   onOpenInventory: () => void;
   onOpenLab: () => void;
   onOpenAlbum: () => void;
+  /** Этап 6 — кнопка появляется только когда есть настоящий облачный аккаунт (иначе дарить нечему/некому). */
+  onOpenSocial?: () => void;
 }
 
-export function HUD({ coins, onOpenShop, onOpenInventory, onOpenLab, onOpenAlbum }: HUDProps) {
+export function HUD({ coins, onOpenShop, onOpenInventory, onOpenLab, onOpenAlbum, onOpenSocial }: HUDProps) {
   return (
     <div className="hud-bar">
       <div className="hud-coins">
@@ -23,6 +25,11 @@ export function HUD({ coins, onOpenShop, onOpenInventory, onOpenLab, onOpenAlbum
         <button className="hud-btn" onClick={onOpenLab}>
           Лаборатория
         </button>
+        {onOpenSocial && (
+          <button className="hud-btn" onClick={onOpenSocial}>
+            Друзья
+          </button>
+        )}
         <button className="hud-btn hud-btn-accent" onClick={onOpenShop}>
           Магазин
         </button>

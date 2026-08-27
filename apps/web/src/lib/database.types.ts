@@ -264,6 +264,9 @@ export interface Database {
       };
       claim_gift: { Args: { p_gift_id: string; p_request_id: string }; Returns: Json };
       decline_gift: { Args: { p_gift_id: string; p_request_id: string }; Returns: Json };
+      block_user: { Args: { p_target_public_code: string; p_request_id: string }; Returns: Json };
+      unblock_user: { Args: { p_target_public_code: string; p_request_id: string }; Returns: Json };
+      resolve_public_code: { Args: { p_profile_id: string }; Returns: string | null };
       log_analytics_event: { Args: { p_event_name: string; p_payload?: Json }; Returns: void };
     };
   };

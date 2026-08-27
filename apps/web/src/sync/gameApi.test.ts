@@ -60,6 +60,51 @@ describe('GameApi', () => {
     expect(seenIds[0]).not.toBe(seenIds[1]);
   });
 
+  it('sendGift отправляет верные имена RPC-аргументов (Этап 6)', async () => {
+    const seenArgs: Record<string, unknown>[] = [];
+    const caller = fakeCaller((_name, args) => {
+      seenArgs.push(args);
+      return { ok: true, data: { ok: true, gift_id: 'g1' }, isNetworkError: false };
+    });
+    const api = new GameApi(caller, new OfflineQueue(memoryStorage()));
+
+    await api.sendGift('ABC123', 'dust', { amount: 3 });
+
+    expect(seenArgs[0].p_recipient_public_code).toBe('ABC123');
+    expect(seenArgs[0].p_item_type).toBe('dust');
+    expect(seenArgs[0].p_item_payload).toEqual({ amount: 3 });
+    expect(typeof seenArgs[0].p_request_id).toBe('string');
+  });
+
+  it('claimGift/declineGift/blockUser/unblockUser вызывают правильные RPC с правильными аргументами (Этап 6)', async () => {
+    const calls: Array<{ name: RpcName; args: Record<string, unknown> }> = [];
+    const caller = fakeCaller((name, args) => {
+      calls.push({ name, args });
+      return { ok: true, data: { ok: true }, isNetworkError: false };
+    });
+    const api = new GameApi(caller, new OfflineQueue(memoryStorage()));
+
+    await api.claimGift('gift-1');
+    await api.declineGift('gift-2');
+    await api.blockUser('XYZ789');
+    await api.unblockUser('XYZ789');
+
+    expect(calls[0]).toMatchObject({ name: 'claim_gift', args: { p_gift_id: 'gift-1' } });
+    expect(calls[1]).toMatchObject({ name: 'decline_gift', args: { p_gift_id: 'gift-2' } });
+    expect(calls[2]).toMatchObject({ name: 'block_user', args: { p_target_public_code: 'XYZ789' } });
+    expect(calls[3]).toMatchObject({ name: 'unblock_user', args: { p_target_public_code: 'XYZ789' } });
+  });
+
+  it('сетевая ошибка на sendGift кладёт его в очередь для повторной отправки (Этап 6)', async () => {
+    const caller = fakeCaller(() => ({ ok: false, isNetworkError: true, errorMessage: 'network' }));
+    const queue = new OfflineQueue(memoryStorage());
+    const api = new GameApi(caller, queue);
+
+    await api.sendGift('ABC123', 'dust', { amount: 1 });
+    expect(queue.list()[0].kind).toBe('send_gift');
+    expect(queue.list()[0].args.p_recipient_public_code).toBe('ABC123');
+  });
+
   it('drainQueue повторяет очередь и очищает её при успехе', async () => {
     const queue = new OfflineQueue(memoryStorage());
     let calls = 0;

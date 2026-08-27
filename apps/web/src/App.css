@@ -81,6 +81,17 @@
 .hud-buttons {
   display: flex;
   gap: 8px;
+  /* Этап 6 добавляет пятую кнопку ("Друзья") — на узких экранах пяти ярлыков
+     на кириллице в 64px HUD может не хватить ширины. Даём горизонтальный
+     скролл ЭТОЙ полоске, а не всей странице (общее правило "нет horizontal
+     scroll на телефоне" — про body, не про внутренний тулбар). */
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+
+.hud-buttons::-webkit-scrollbar {
+  display: none;
 }
 
 .hud-btn {
@@ -96,6 +107,7 @@
   border-image-source: url('/assets/ui/panel_cream.png');
   border-image-slice: 24 fill;
   border-image-width: 10px;
+  flex-shrink: 0;
 }
 
 .hud-btn:active {
@@ -730,4 +742,131 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ==========================================================================
+   Этап 6 — социальный обмен (SocialPanel.tsx). Видно только когда включён
+   и настроен облачный аккаунт (см. HUD.tsx onOpenSocial).
+   ========================================================================== */
+
+.social-own-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a2e17;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.social-copy-btn {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.social-section {
+  margin-bottom: 14px;
+}
+
+.social-section-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4a2e17;
+  margin: 0 0 6px;
+}
+
+.social-send-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.social-input {
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  padding: 8px;
+  min-height: 40px;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  flex: 1;
+  min-width: 100px;
+}
+
+.social-input-amount {
+  flex: none;
+  width: 64px;
+}
+
+.social-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.social-recent-chip {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #4a2e17;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 6px 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.social-gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-gift-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #4a2e17;
+}
+
+.social-gift-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.social-decline-btn {
+  border: 2px solid rgba(74, 46, 23, 0.35);
+  background: #fff;
+  color: #8b5e3c;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.social-hint {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 8px;
 }

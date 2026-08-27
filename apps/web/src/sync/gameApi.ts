@@ -106,6 +106,32 @@ export class GameApi {
     return this.performOrQueue('claim_quest', { p_quest_id: questId });
   }
 
+  // --- Этап 6 — социальный обмен (см. supabase/migrations/20260827140000_social_stage6.sql) ---
+
+  sendGift(recipientPublicCode: string, itemType: 'plant' | 'dust', itemPayload: Record<string, unknown>) {
+    return this.performOrQueue('send_gift', {
+      p_recipient_public_code: recipientPublicCode,
+      p_item_type: itemType,
+      p_item_payload: itemPayload,
+    });
+  }
+
+  claimGift(giftId: string) {
+    return this.performOrQueue('claim_gift', { p_gift_id: giftId });
+  }
+
+  declineGift(giftId: string) {
+    return this.performOrQueue('decline_gift', { p_gift_id: giftId });
+  }
+
+  blockUser(targetPublicCode: string) {
+    return this.performOrQueue('block_user', { p_target_public_code: targetPublicCode });
+  }
+
+  unblockUser(targetPublicCode: string) {
+    return this.performOrQueue('unblock_user', { p_target_public_code: targetPublicCode });
+  }
+
   /** Дренирует офлайн-очередь — вызывать по событию 'online' и при старте приложения. */
   async drainQueue(): Promise<{ processed: number; remaining: number }> {
     return this.queue.drain(async (action): Promise<ExecuteResult> => {
@@ -118,3 +144,14 @@ export class GameApi {
     });
   }
 }
+
+/**
+ * Общий инстанс поверх реального supabase-js — используется первым делом
+ * Этапом 6 (социальный обмен), у которого в принципе нет локального
+ * эквивалента (нужен настоящий аккаунт другого игрока). Другие игровые
+ * действия (plant/harvest/breed/...) остаются на локальном gameStore —
+ * это следующий отдельный шаг интеграции, см. docs/IMPLEMENTATION_STATUS.md.
+ * Безопасно создавать даже когда облако выключено: createSupabaseRpcCaller()
+ * проверяет getSupabaseClient() лениво при каждом вызове, а не здесь.
+ */
+export const gameApi = new GameApi(createSupabaseRpcCaller());

@@ -39,6 +39,12 @@ begin
   raise notice 'PASS: handle_new_user создаёт garden+24 плота+2 специмена+3 ростка';
 end $$;
 
+-- Задним числом "состариваем" тестовые профили — иначе min-account-age
+-- защита в send_gift (Этап 6, см. 20260827140000_social_stage6.sql) не даст
+-- протестировать подарки ниже на только что созданных аккаунтах.
+update public.profiles set created_at = now() - interval '1 day'
+  where id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
+
 -- --- Роль A: видит только свой сад -----------------------------------------
 set role authenticated;
 set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
@@ -215,7 +221,16 @@ begin
   select id into v_garden_a from public.gardens where owner_id = auth.uid();
   select genetic_dust into v_dust_a_before from public.gardens where id = v_garden_a;
   if v_dust_a_before < 3 then
-    update public.gardens set genetic_dust = 10 where id = v_garden_a; -- гарантируем запас для теста
+    -- Гарантируем запас пыли для теста. Найденный здесь же баг (обнаружен
+    -- Playwright-независимо, при запуске этого файла): прямой UPDATE
+    -- gardens под ролью authenticated всегда был запрещён RLS/грантами —
+    -- этот путь просто редко срабатывал из-за случайности breed()-награды
+    -- (random() на сервере, без seed). Чиним: временно снимаем роль, как
+    -- уже делается чуть ниже для чтения чужого сада B.
+    reset role;
+    update public.gardens set genetic_dust = 10 where id = v_garden_a;
+    set role authenticated;
+    set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
   end if;
 
   reset role;
