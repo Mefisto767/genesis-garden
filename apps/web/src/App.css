@@ -999,3 +999,198 @@
   margin-top: 6px;
   font-style: italic;
 }
+
+/* ==========================================================================
+   Этап 9 — safe-area (вырезы/чёлки, viewport-fit=cover в index.html),
+   quests/цели, онбординг, офлайн-баннер.
+   ========================================================================== */
+
+.hud-bar {
+  padding-top: calc(8px + env(safe-area-inset-top));
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
+  height: calc(64px + env(safe-area-inset-top));
+}
+
+.toast {
+  bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.hud-btn-quests {
+  position: relative;
+}
+
+.hud-btn-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e0563a;
+  border: 2px solid #fdf3d9;
+}
+
+.quest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+}
+
+.quest-row-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #4a2e17;
+}
+
+.quest-row-desc {
+  font-size: 12px;
+  color: #8b5e3c;
+}
+
+.quest-progress-track {
+  height: 8px;
+  background: rgba(74, 46, 23, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  background: #f5a623;
+  transition: width 0.3s ease;
+}
+
+.quest-row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.quest-row-count {
+  color: #8b5e3c;
+  font-weight: 700;
+}
+
+.quest-claimed-label {
+  color: #4a2e17;
+  font-weight: 700;
+}
+
+.quest-reward-hint {
+  color: #8b5e3c;
+  font-style: italic;
+}
+
+.quest-claim-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 36px;
+}
+
+.onboarding-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(74, 46, 23, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+  box-sizing: border-box;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.onboarding-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  background: #fdf3d9;
+  border: 4px solid #4a2e17;
+  border-radius: 8px;
+  padding: 28px 20px 20px;
+  box-sizing: border-box;
+  text-align: center;
+  box-shadow: 0 6px 0 rgba(74, 46, 23, 0.4);
+}
+
+.onboarding-skip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #8b5e3c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px;
+  min-height: 32px;
+}
+
+.onboarding-emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.onboarding-title {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 18px;
+  color: #4a2e17;
+  margin: 0 0 10px;
+}
+
+.onboarding-text {
+  font-size: 13px;
+  color: #4a2e17;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(74, 46, 23, 0.25);
+}
+
+.onboarding-dot.is-active {
+  background: #f5a623;
+}
+
+.onboarding-next {
+  width: 100%;
+}
+
+.offline-banner {
+  position: absolute;
+  top: calc(64px + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: #4a2e17;
+  color: #fdf3d9;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 12px;
+}

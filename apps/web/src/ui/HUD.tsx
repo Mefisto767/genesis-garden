@@ -10,6 +10,10 @@ interface HUDProps {
   onOpenPurchases?: () => void;
   /** Этап 8 — только после подтверждения profiles.is_admin === true (см. App.tsx), клиент не решает это сам. */
   onOpenAdmin?: () => void;
+  /** Этап 9 — «следующая цель»: всегда доступна, точка входа в квесты. */
+  onOpenQuests: () => void;
+  /** Есть хотя бы одна выполненная, но не забранная цель — показываем маячок на кнопке. */
+  hasClaimableQuest: boolean;
 }
 
 export function HUD({
@@ -21,6 +25,8 @@ export function HUD({
   onOpenSocial,
   onOpenPurchases,
   onOpenAdmin,
+  onOpenQuests,
+  hasClaimableQuest,
 }: HUDProps) {
   return (
     <div className="hud-bar">
@@ -29,6 +35,10 @@ export function HUD({
         <span>{coins}</span>
       </div>
       <div className="hud-buttons">
+        <button className="hud-btn hud-btn-quests" onClick={onOpenQuests}>
+          Цели
+          {hasClaimableQuest && <span className="hud-btn-badge" aria-label="Есть награда для получения" />}
+        </button>
         <button className="hud-btn" onClick={onOpenInventory}>
           Инвентарь
         </button>

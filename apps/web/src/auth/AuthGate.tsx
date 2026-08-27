@@ -24,6 +24,26 @@ import { STARTING_STATE_CONFIG } from '../game/config';
 // этот компонент сразу отдаёт children, не показывая ничего лишнего.
 // ============================================================================
 
+// Этап 9 — понятные игроку сообщения вместо сырого текста ошибки GoTrue
+// (Supabase Auth отдаёт его по-английски и довольно технически). Список не
+// претендует на полноту всех кодов Supabase — покрывает частые случаи в
+// бете, для остального честный фолбэк — общая фраза, а не английский текст.
+const AUTH_ERROR_LABELS: Array<[RegExp, string]> = [
+  [/invalid login credentials/i, 'Не получилось войти — проверь почту'],
+  [/email rate limit/i, 'Слишком много попыток — подожди немного и попробуй снова'],
+  [/user already registered/i, 'Этот email уже зарегистрирован — используй вход по ссылке'],
+  [/email not confirmed/i, 'Почта ещё не подтверждена — проверь письмо со ссылкой'],
+  [/signups not allowed/i, 'Регистрация сейчас недоступна'],
+  [/failed to fetch|network|fetch/i, 'Нет соединения с сервером — проверь интернет и попробуй снова'],
+  [/supabase_not_configured/i, 'Облако сейчас недоступно — играем локально на этом устройстве'],
+];
+
+function friendlyAuthError(raw: string | null): string {
+  if (!raw) return 'Не получилось выполнить вход';
+  const match = AUTH_ERROR_LABELS.find(([pattern]) => pattern.test(raw));
+  return match ? match[1] : 'Не получилось выполнить вход — попробуй ещё раз чуть позже';
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
 
@@ -44,7 +64,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="sheet-backdrop">
         <div className="sheet auth-gate-panel">
           <h2>Не получилось подключиться</h2>
-          <p>{auth.error}</p>
+          <p>{friendlyAuthError(auth.error)}</p>
           <p className="auth-gate-hint">Игра продолжает работать локально на этом устройстве.</p>
           {children}
         </div>
@@ -113,7 +133,7 @@ function SignInScreen() {
           </form>
         )}
 
-        {error && <p className="auth-gate-error">{error}</p>}
+        {error && <p className="auth-gate-error">{friendlyAuthError(error)}</p>}
       </div>
     </div>
   );

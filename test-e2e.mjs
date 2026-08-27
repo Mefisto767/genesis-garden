@@ -23,6 +23,16 @@ await page.goto(URL, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 5000 });
 await page.waitForTimeout(1500); // дать Phaser-сцене отрисовать сетку по финальному размеру канваса
 
+// Этап 9 — первый визит на "устройстве" (свежий контекст без localStorage)
+// показывает онбординг поверх игры, как и должно быть у реального нового
+// игрока. Закрываем его один раз — дальше localStorage помнит, что он
+// показан, и ни один из последующих page.reload() его больше не покажет.
+const onboardingVisible = await page.locator('.onboarding-backdrop').isVisible().catch(() => false);
+if (onboardingVisible) {
+  await page.locator('.onboarding-skip').click();
+  await page.waitForTimeout(200);
+}
+
 const coinsInitial = await page.locator('.hud-coins').innerText();
 console.log('Initial coins:', coinsInitial);
 await screenshot('01-initial');

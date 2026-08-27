@@ -1,0 +1,32 @@
+{
+  "name": "Genesis Garden",
+  "short_name": "Genesis Garden",
+  "description": "Пиксельная ферма-питомник: сажай, собирай урожай и скрещивай уникальные растения.",
+  "start_url": "/genesis-garden/",
+  "scope": "/genesis-garden/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FDF3D9",
+  "theme_color": "#FDF3D9",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/genesis-garden/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/genesis-garden/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/genesis-garden/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

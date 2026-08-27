@@ -20,6 +20,14 @@ await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
 
+// Этап 9 — чистый localStorage = первый визит = показывается онбординг
+// поверх игры (реальное поведение для нового игрока). Закрываем один раз.
+const onboardingVisible = await page.locator('.onboarding-backdrop').isVisible().catch(() => false);
+if (onboardingVisible) {
+  await page.locator('.onboarding-skip').click();
+  await page.waitForTimeout(200);
+}
+
 // Album should show 2 starter specimens with genomes
 await page.getByRole('button', { name: 'Альбом' }).click();
 await page.waitForTimeout(400);
