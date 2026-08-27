@@ -38,6 +38,8 @@ run_sql 01_local_grants_mid.sql
 run_sql 20260827120100_rls.sql
 run_sql 20260827120200_functions.sql
 run_sql 20260827120300_catalog_data.sql
+run_sql 20260827130000_migrate_local_progress.sql
 run_sql 02_scenario_tests.sql
+run_sql 03_migration_tests.sql
 
 echo "== ГОТОВО: все SQL-миграции применились и сценарные тесты прошли =="

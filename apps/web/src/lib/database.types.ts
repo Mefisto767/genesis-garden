@@ -20,6 +20,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['profiles']['Row']> & { id: string };
         Update: Partial<Database['public']['Tables']['profiles']['Row']>;
+        Relationships: [];
       };
       gardens: {
         Row: {
@@ -33,6 +34,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['gardens']['Row']>;
         Update: Partial<Database['public']['Tables']['gardens']['Row']>;
+        Relationships: [];
       };
       seed_catalog: {
         Row: {
@@ -45,6 +47,7 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['seed_catalog']['Row'];
         Update: Partial<Database['public']['Tables']['seed_catalog']['Row']>;
+        Relationships: [];
       };
       plots: {
         Row: {
@@ -57,6 +60,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['plots']['Row']>;
         Update: Partial<Database['public']['Tables']['plots']['Row']>;
+        Relationships: [];
       };
       plants: {
         Row: {
@@ -69,6 +73,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['plants']['Row']>;
         Update: Partial<Database['public']['Tables']['plants']['Row']>;
+        Relationships: [];
       };
       plant_ancestry: {
         Row: {
@@ -78,6 +83,7 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['plant_ancestry']['Row'];
         Update: Partial<Database['public']['Tables']['plant_ancestry']['Row']>;
+        Relationships: [];
       };
       inventory: {
         Row: {
@@ -87,6 +93,7 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['inventory']['Row'];
         Update: Partial<Database['public']['Tables']['inventory']['Row']>;
+        Relationships: [];
       };
       breeding_jobs: {
         Row: {
@@ -101,6 +108,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['breeding_jobs']['Row']>;
         Update: Partial<Database['public']['Tables']['breeding_jobs']['Row']>;
+        Relationships: [];
       };
       economy_ledger: {
         Row: {
@@ -114,6 +122,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['economy_ledger']['Row']>;
         Update: Partial<Database['public']['Tables']['economy_ledger']['Row']>;
+        Relationships: [];
       };
       quests: {
         Row: {
@@ -127,6 +136,7 @@ export interface Database {
         };
         Insert: Database['public']['Tables']['quests']['Row'];
         Update: Partial<Database['public']['Tables']['quests']['Row']>;
+        Relationships: [];
       };
       quest_progress: {
         Row: {
@@ -137,6 +147,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['quest_progress']['Row']>;
         Update: Partial<Database['public']['Tables']['quest_progress']['Row']>;
+        Relationships: [];
       };
       seasons: {
         Row: {
@@ -148,6 +159,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['seasons']['Row']>;
         Update: Partial<Database['public']['Tables']['seasons']['Row']>;
+        Relationships: [];
       };
       social_connections: {
         Row: {
@@ -159,6 +171,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['social_connections']['Row']>;
         Update: Partial<Database['public']['Tables']['social_connections']['Row']>;
+        Relationships: [];
       };
       gift_transactions: {
         Row: {
@@ -174,6 +187,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['gift_transactions']['Row']>;
         Update: Partial<Database['public']['Tables']['gift_transactions']['Row']>;
+        Relationships: [];
       };
       purchases: {
         Row: {
@@ -191,6 +205,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['purchases']['Row']>;
         Update: Partial<Database['public']['Tables']['purchases']['Row']>;
+        Relationships: [];
       };
       entitlements: {
         Row: {
@@ -205,6 +220,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['entitlements']['Row']>;
         Update: Partial<Database['public']['Tables']['entitlements']['Row']>;
+        Relationships: [];
       };
       analytics_events: {
         Row: {
@@ -216,6 +232,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['analytics_events']['Row']>;
         Update: Partial<Database['public']['Tables']['analytics_events']['Row']>;
+        Relationships: [];
       };
       audit_events: {
         Row: {
@@ -229,6 +246,7 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['audit_events']['Row']>;
         Update: Partial<Database['public']['Tables']['audit_events']['Row']>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;

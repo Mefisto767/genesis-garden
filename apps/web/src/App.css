@@ -250,6 +250,71 @@
   margin: 0;
 }
 
+/* Этап 4 — экран входа/сравнения прогресса (AuthGate). Переиспользует
+   .sheet/.sheet-backdrop/.sheet-buy-btn, добавляет только то, чего не было. */
+.auth-gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto;
+  max-height: none;
+  width: min(420px, calc(100% - 32px));
+  border-image-width: 16px;
+  border-bottom: 16px solid transparent;
+  border-bottom-image-source: url('/assets/ui/panel_cream.png');
+}
+
+.auth-gate-panel h2 {
+  margin: 0;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  color: #4a2e17;
+  font-size: 20px;
+}
+
+.auth-gate-panel p {
+  margin: 0;
+  color: #8b5e3c;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-gate-hint {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.auth-gate-error {
+  color: #e05543;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-gate-email-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  border: 2px solid #b7afa0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.auth-gate-guest-btn {
+  width: 100%;
+}
+
+.auth-gate-choice-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
 .sheet-empty-block {
   display: flex;
   flex-direction: column;
