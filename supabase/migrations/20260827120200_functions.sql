@@ -542,10 +542,10 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- recycle_plant — растение -> генетическая пыль (целевая механика Этапа 5;
--- отличается от текущего клиентского sellSpecimen(), который пока продаёт
--- за монеты — сознательное расхождение, задокументировано в ECONOMY.md,
--- клиент переключится на этот RPC при полировке reveal-loop).
+-- recycle_plant — растение -> генетическая пыль (Этап 5). Клиентский
+-- GameStore.recycleSpecimen() зеркалирует эту же формулу (см. config.ts
+-- BREEDING_CONFIG.recycleDustReward и docs/ECONOMY.md) — расхождение
+-- recycle vs sell устранено.
 -- ---------------------------------------------------------------------------
 create or replace function public.recycle_plant(p_plant_id uuid, p_request_id uuid)
 returns jsonb

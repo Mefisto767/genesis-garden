@@ -4,6 +4,7 @@ import { gardenEvents } from '../game/events';
 import { rarityOf, mutationName } from '../game/genetics';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 import { RARITY_LABEL } from '../game/specimenRender';
+import { BREEDING_CONFIG } from '../game/config';
 
 interface AlbumPanelProps {
   specimens: GameState['specimens'];
@@ -14,9 +15,9 @@ interface AlbumPanelProps {
 export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps) {
   const sorted = [...specimens].sort((a, b) => b.createdAt - a.createdAt);
 
-  function sell(id: string) {
-    const ok = gameStore.sellSpecimen(id);
-    if (ok) gardenEvents.emit('toast', { text: 'Продано за 15' });
+  function recycle(id: string) {
+    const dustGained = gameStore.recycleSpecimen(id);
+    if (dustGained !== null) gardenEvents.emit('toast', { text: `Переработано: +${dustGained} пыли` });
   }
 
   return (
@@ -47,9 +48,9 @@ export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps)
                   <SpecimenThumbnail genome={s.genome} size={88} />
                   <div className={`album-card-rarity rarity-${rarity}`}>{RARITY_LABEL[rarity]}</div>
                   {mutation && <div className="album-card-mutation">✦ {mutation}</div>}
-                  <button className="album-card-sell" onClick={() => sell(s.id)}>
-                    Продать · 15
-                    <img className="coin-icon coin-icon-sm" src="assets/ui/icon_coin.png" alt="монет" />
+                  <button className="album-card-sell" onClick={() => recycle(s.id)}>
+                    Переработать · {BREEDING_CONFIG.recycleDustReward}
+                    <img className="coin-icon coin-icon-sm" src="assets/ui/icon_dust.png" alt="пыли" />
                   </button>
                 </div>
               );

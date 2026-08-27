@@ -290,20 +290,25 @@ export class GameStore {
     return { specimen, result, dustGained };
   }
 
-  sellSpecimen(id: string): boolean {
+  /**
+   * Переработка лишнего специмена в генетическую пыль (Этап 5) — заменяет
+   * прежнюю продажу за монеты (`sellSpecimenValue`), чтобы совпасть с уже
+   * реализованной на сервере `recycle_plant()` (см. docs/ECONOMY.md,
+   * раздел «Сознательное расхождение: recycle vs sell» — расхождение
+   * устранено этим изменением). Возвращает количество полученной пыли или
+   * null, если специмена не существует (уже переработан/невалидный id).
+   */
+  recycleSpecimen(id: string): number | null {
     const specimen = this.state.specimens.find((s) => s.id === id);
-    if (!specimen) return false;
-    // Простая база продажи под геном; полноценная оценка редкости — по мере
-    // роста экономики (Этап 4), сейчас достаточно, чтобы коллекция не была
-    // единственным способом использовать дубликаты.
-    const value = BREEDING_CONFIG.sellSpecimenValue;
+    if (!specimen) return null;
+    const dustGained = BREEDING_CONFIG.recycleDustReward;
     this.state = {
       ...this.state,
-      coins: this.state.coins + value,
+      geneticDust: this.state.geneticDust + dustGained,
       specimens: this.state.specimens.filter((s) => s.id !== id),
     };
     this.emit();
-    return true;
+    return dustGained;
   }
 
   /** Идемпотентно: повторный claimQuest на уже забранный квест — no-op. */

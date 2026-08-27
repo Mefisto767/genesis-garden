@@ -37,14 +37,13 @@ export const BREEDING_CONFIG = {
   breedCost: 12,
   dustRewardMin: 2,
   dustRewardMax: 5,
-  sellSpecimenValue: 15,
   /** Сколько пыли фиксирует один наследуемый признак при следующей попытке (Этап 5). */
   dustCostPerLockedGene: 8,
   /**
-   * Целевая механика Этапа 5 (recycle_plant на сервере уже так считает,
-   * см. docs/ECONOMY.md): переработка растения даёт пыль, а не монеты.
-   * Клиент пока использует sellSpecimenValue (продажа за монеты) до
-   * переключения AlbumPanel на серверный recycle-флоу.
+   * Переработка лишнего специмена в пыль (Этап 5, `GameStore.recycleSpecimen`) —
+   * зеркалирует серверную `recycle_plant()` (см. docs/ECONOMY.md). Прежняя
+   * продажа за монеты (`sellSpecimenValue`) убрана — расхождение с сервером
+   * устранено.
    */
   recycleDustReward: 5,
 } as const;

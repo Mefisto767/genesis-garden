@@ -16,16 +16,16 @@
 | Стоимость разблокировки грядки | `GARDEN_CONFIG.unlockCostBase=20`, `.unlockCostStep=12`, `.startUnlockedPlots=6` | `expand_plot()`: `20 + greatest(plot_index-6,0)*12` |
 | Стоимость скрещивания | `BREEDING_CONFIG.breedCost=12` | `breed()`: `v_breed_cost=12` |
 | Награда пылью за скрещивание | `dustRewardMin=2`, `dustRewardMax=5` | `breed()`: `v_dust_min/max` |
-| Награда пылью за переработку | — (клиент пока продаёт за 15 монет, `sellSpecimenValue`; см. ниже) | `recycle_plant()`: `v_dust_reward=5` |
+| Награда пылью за переработку | `BREEDING_CONFIG.recycleDustReward=5` | `recycle_plant()`: `v_dust_reward=5` |
 | Пороги/шансы генетики | `GENETICS_CONFIG.*` | `breed()`/`random_genome()`, константы с теми же именами в комментариях |
 | Очки редкости | `RARITY_SCORING.*` | `rarity_of()` |
 | Потолок ускорения роста | `BOOSTS_CONFIG.maxTotalGrowthBoostPercent=0.25` | `active_growth_boost_percent()`: `least(sum, 0.25)` |
 | Семена (цена/таймер/продажа) | `SEED_BALANCE[]` | таблица `seed_catalog` (заполнена migration 20260827120300) |
 | Квесты | `QUEST_CATALOG[]` | таблица `quests` (та же миграция) |
 
-## Сознательное расхождение: recycle vs sell
+## Recycle vs sell (расхождение устранено на Этапе 5)
 
-Текущий клиент (`AlbumPanel.tsx` → `gameStore.sellSpecimen()`) продаёт лишний специмен за **монеты** (15 шт, `BREEDING_CONFIG.sellSpecimenValue`). Мастер-промт для Этапа 5 требует другого: «ненужное растение превращается в генетическую пыль». Серверная функция `recycle_plant()` уже реализована по целевой механике (даёт **пыль**, не монеты) — это специально сделано на Этапе 3 вперёд, чтобы не переделывать backend в Этапе 5. Client-side переключение `AlbumPanel` с «продать за монеты» на «переработать в пыль» — задача Этапа 5, зафиксирована в `docs/IMPLEMENTATION_STATUS.md`. Пока клиент работает в офлайн-демо режиме (без Supabase), обе механики физически не конфликтуют — путаницы для игрока это не создаёт, т.к. Этап 4 ещё не подключил клиент к серверным RPC.
+До Этапа 5 клиент (`AlbumPanel.tsx` → `gameStore.sellSpecimen()`) продавал лишний специмен за монеты, пока сервер (`recycle_plant()`, готов с Этапа 3) уже давал пыль. На Этапе 5 клиент переключён на ту же механику: `AlbumPanel.tsx` → `gameStore.recycleSpecimen()` начисляет `BREEDING_CONFIG.recycleDustReward` (5) пыли и убирает специмен из коллекции — числа и семантика совпадают с серверным `recycle_plant()`. Оффлайн-демо (без Supabase, Этап 4 выключен по умолчанию) и будущая онлайн-версия теперь ведут себя одинаково: «Переработать» всегда даёт пыль, а не монеты. `sellSpecimenValue` как параметр баланса удалён из `config.ts` — он не использовался нигде, кроме старого коинового пути.
 
 ## Лимиты монетизации (Этап 7, справочно)
 

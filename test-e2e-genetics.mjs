@@ -58,9 +58,34 @@ await screenshot('gen_04_album_after');
 const albumCardsAfter = await page.locator('.album-card').count();
 if (albumCardsAfter !== 3) throw new Error(`expected 3 specimens after breeding, got ${albumCardsAfter}`);
 
+// Recycle (Этап 5): переработка специмена должна давать пыль, а не монеты,
+// и убирать карточку из альбома. Проверяем на только что выведенном (третьем).
+const dustBefore = Number((await page.locator('.album-dust').textContent()).replace(/\D+/g, ''));
+const coinsBeforeRecycle = Number((await page.locator('.hud-coins span').textContent()).trim());
+const recycleButtons = page.locator('.album-card-sell');
+if (!(await recycleButtons.first().textContent())?.includes('Переработать')) {
+  throw new Error('expected "Переработать" (recycle) label on album card button');
+}
+await recycleButtons.first().click();
+await page.waitForTimeout(300);
+await screenshot('gen_05_album_after_recycle');
+
+const albumCardsAfterRecycle = await page.locator('.album-card').count();
+if (albumCardsAfterRecycle !== 2) throw new Error(`expected 2 specimens after recycling one, got ${albumCardsAfterRecycle}`);
+
+const dustAfter = Number((await page.locator('.album-dust').textContent()).replace(/\D+/g, ''));
+if (dustAfter - dustBefore !== 5) throw new Error(`expected +5 dust from recycling, got ${dustAfter - dustBefore}`);
+
+const coinsAfterRecycle = Number((await page.locator('.hud-coins span').textContent()).trim());
+if (coinsAfterRecycle !== coinsBeforeRecycle) throw new Error(`recycling must not change coins, got ${coinsBeforeRecycle} -> ${coinsAfterRecycle}`);
+
 const realErrors = errors.filter((e) => !e.includes('ERR_TUNNEL_CONNECTION_FAILED'));
 if (realErrors.length) throw new Error(`page errors: ${realErrors.join(', ')}`);
 
-console.log('genetics e2e: OK — album:', albumCards, '-> ', albumCardsAfter, 'rarity:', rarityText.trim(), 'coins:', coinsBefore, '->', coinsAfter);
+console.log(
+  'genetics e2e: OK — album:', albumCards, '-> ', albumCardsAfter, '-> recycle ->', albumCardsAfterRecycle,
+  'rarity:', rarityText.trim(), 'coins:', coinsBefore, '->', coinsAfter,
+  'dust:', dustBefore, '->', dustAfter,
+);
 
 await browser.close();

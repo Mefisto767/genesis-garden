@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameStore } from './store';
-import { GARDEN_CONFIG, STARTING_STATE_CONFIG, BOOSTS_CONFIG } from './config';
+import { GARDEN_CONFIG, STARTING_STATE_CONFIG, BOOSTS_CONFIG, BREEDING_CONFIG } from './config';
 import { mulberry32 } from './rng';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 
@@ -98,6 +98,57 @@ describe('повторная отправка запроса (идемпотен
     const [a] = store.getState().specimens;
     const outcome = store.breedSpecimens(a.id, a.id);
     expect(outcome).toBeNull();
+  });
+});
+
+describe('переработка специмена в пыль (recycleSpecimen)', () => {
+  it('даёт recycleDustReward пыли и удаляет специмен из коллекции', () => {
+    const store = freshStore();
+    const specimen = store.getState().specimens[0];
+    const dustBefore = store.getState().geneticDust;
+    const countBefore = store.getState().specimens.length;
+
+    const dustGained = store.recycleSpecimen(specimen.id);
+
+    expect(dustGained).toBe(BREEDING_CONFIG.recycleDustReward);
+    expect(store.getState().geneticDust).toBe(dustBefore + BREEDING_CONFIG.recycleDustReward);
+    expect(store.getState().specimens.length).toBe(countBefore - 1);
+    expect(store.getState().specimens.some((s) => s.id === specimen.id)).toBe(false);
+  });
+
+  it('не начисляет монеты (переработка — только пыль)', () => {
+    const store = freshStore();
+    const specimen = store.getState().specimens[0];
+    const coinsBefore = store.getState().coins;
+
+    store.recycleSpecimen(specimen.id);
+
+    expect(store.getState().coins).toBe(coinsBefore);
+  });
+
+  it('повторная переработка того же id — no-op, возвращает null', () => {
+    const store = freshStore();
+    const specimen = store.getState().specimens[0];
+
+    const first = store.recycleSpecimen(specimen.id);
+    const dustAfterFirst = store.getState().geneticDust;
+    const second = store.recycleSpecimen(specimen.id);
+
+    expect(first).toBe(BREEDING_CONFIG.recycleDustReward);
+    expect(second).toBeNull();
+    expect(store.getState().geneticDust).toBe(dustAfterFirst);
+  });
+
+  it('несуществующий id возвращает null и не меняет состояние', () => {
+    const store = freshStore();
+    const dustBefore = store.getState().geneticDust;
+    const countBefore = store.getState().specimens.length;
+
+    const result = store.recycleSpecimen('does-not-exist');
+
+    expect(result).toBeNull();
+    expect(store.getState().geneticDust).toBe(dustBefore);
+    expect(store.getState().specimens.length).toBe(countBefore);
   });
 });
 
