@@ -140,6 +140,19 @@ export class GameApi {
     return this.performOrQueue('mock_grant_purchase', { p_product_id: productId });
   }
 
+  // --- Этап 8 — аналитика --------------------------------------------------
+
+  /**
+   * log_analytics_event(p_event_name, p_payload) не принимает p_request_id
+   * (не мутирует игровые данные, идемпотентность ей не нужна) — поэтому не
+   * идёт через performOrQueue/офлайн-очередь как остальные действия: тихий
+   * fire-and-forget, потерянное событие при сетевой ошибке не критично для
+   * MVP-аналитики (в отличие от денег/прогресса).
+   */
+  trackEvent(eventName: string, payload: Record<string, unknown> = {}): Promise<RpcCallResult> {
+    return this.rpc.call('log_analytics_event', { p_event_name: eventName, p_payload: payload });
+  }
+
   /** Дренирует офлайн-очередь — вызывать по событию 'online' и при старте приложения. */
   async drainQueue(): Promise<{ processed: number; remaining: number }> {
     return this.queue.drain(async (action): Promise<ExecuteResult> => {

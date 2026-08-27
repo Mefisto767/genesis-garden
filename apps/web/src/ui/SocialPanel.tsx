@@ -9,6 +9,7 @@ import {
   type PendingGift,
   type BlockedContact,
 } from '../sync/social';
+import { track } from '../analytics/track';
 
 interface SocialPanelProps {
   onClose: () => void;
@@ -87,6 +88,7 @@ export function SocialPanel({ onClose }: SocialPanelProps) {
     setSending(false);
     if (result.ok) {
       gardenEvents.emit('toast', { text: 'Подарок отправлен' });
+      track('gift_sent', { itemType: 'dust', amount: dustAmount });
       setRecipientCode('');
       refresh();
     } else {
@@ -98,6 +100,7 @@ export function SocialPanel({ onClose }: SocialPanelProps) {
     const result = await gameApi.claimGift(giftId);
     if (result.ok) {
       gardenEvents.emit('toast', { text: 'Подарок получен' });
+      track('gift_claimed', { giftId });
       refresh();
     } else {
       gardenEvents.emit('toast', { text: friendlyError(result.errorMessage) });

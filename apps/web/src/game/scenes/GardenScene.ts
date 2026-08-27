@@ -4,6 +4,7 @@ import { getSeedDef } from '../seedCatalog';
 import { MAX_PLOTS, type Plot } from '../types';
 import { gardenEvents } from '../events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
+import { track } from '../../analytics/track';
 
 const COLS = 4;
 const ROWS = Math.ceil(MAX_PLOTS / COLS);
@@ -227,7 +228,8 @@ export class GardenScene extends Phaser.Scene {
 
     tile.on('pointerdown', () => {
       if (!ready) return;
-      gameStore.harvest(plot.id);
+      const ok = gameStore.harvest(plot.id);
+      if (ok) track('plant_harvested', { plotId: plot.id, seedId: plot.seedId });
     });
   }
 }

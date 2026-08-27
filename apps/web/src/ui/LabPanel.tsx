@@ -5,6 +5,23 @@ import { rarityOf, mutationName, type LockableGene } from '../game/genetics';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 import { RARITY_LABEL } from '../game/specimenRender';
 import { BREEDING_CONFIG, GENETICS_CONFIG } from '../game/config';
+import { track } from '../analytics/track';
+
+const FIRST_BREED_KEY = 'genesis-garden-first-breed-v1';
+function isFirstBreedAttempt(): boolean {
+  try {
+    return localStorage.getItem(FIRST_BREED_KEY) === null;
+  } catch {
+    return false;
+  }
+}
+function markBreedAttempted(): void {
+  try {
+    localStorage.setItem(FIRST_BREED_KEY, '1');
+  } catch {
+    // приватный режим — не роняем игру, first_breed_* просто не отметится повторно
+  }
+}
 
 interface LabPanelProps {
   specimens: GameState['specimens'];
@@ -60,8 +77,13 @@ export function LabPanel({ specimens, coins, geneticDust, pityCounter, onClose }
   function doBreed() {
     if (selected.length !== 2) return;
     const lock: GeneLock | undefined = wantsLock ? { gene: lockGene, source: lockSource } : undefined;
+    const firstAttempt = isFirstBreedAttempt();
+    if (firstAttempt) track('first_breed_started');
     const outcome = gameStore.breedSpecimens(selected[0], selected[1], lock);
     if (!outcome) return;
+    markBreedAttempted();
+    track('breed_completed', { mutated: outcome.result.mutated, dustGained: outcome.dustGained });
+    if (firstAttempt) track('first_breed_completed');
     setResult(outcome);
     setRevealed(false);
     setLockGene('');

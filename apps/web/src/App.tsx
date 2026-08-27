@@ -10,12 +10,16 @@ import { LabPanel } from './ui/LabPanel';
 import { AlbumPanel } from './ui/AlbumPanel';
 import { SocialPanel } from './ui/SocialPanel';
 import { PurchasesPanel } from './ui/PurchasesPanel';
+import { AdminPanel } from './ui/AdminPanel';
 import { Toast } from './ui/Toast';
 import { useAuth } from './auth/useAuth';
 import { isPaymentsEnabled } from './payments/PaymentProvider';
+import { track } from './analytics/track';
+import { recordSessionStart } from './analytics/retention';
+import { checkIsAdmin } from './admin/adminData';
 import './App.css';
 
-type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | 'purchases' | null;
+type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | 'purchases' | 'admin' | null;
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement>(null);
@@ -24,6 +28,7 @@ function App() {
   const [panel, setPanel] = useState<Panel>(null);
   const [plantPlotId, setPlantPlotId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!gameContainerRef.current) return;
@@ -32,6 +37,29 @@ function App() {
       game.destroy(true);
     };
   }, []);
+
+  useEffect(() => {
+    // session_started + day_1/day_7 return (см. analytics/retention.ts) —
+    // сами по себе не-op, если облако выключено (track() проверяет это внутри).
+    recordSessionStart();
+  }, []);
+
+  useEffect(() => {
+    // Этап 8 — кнопка Admin появляется, только если сервер подтвердил
+    // profiles.is_admin === true; клиент никогда не решает это сам (см.
+    // admin/adminData.ts — запрос фильтрован по auth.uid(), обойти нельзя).
+    if (auth.status !== 'signed_in') {
+      setIsAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    checkIsAdmin().then((result) => {
+      if (!cancelled) setIsAdmin(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.status]);
 
   useEffect(() => {
     const offPlant = gardenEvents.on('requestPlant', ({ plotId }) => setPlantPlotId(plotId));
@@ -53,7 +81,10 @@ function App() {
       <div id="game-root" ref={gameContainerRef} />
       <HUD
         coins={state.coins}
-        onOpenShop={() => setPanel('shop')}
+        onOpenShop={() => {
+          track('store_opened');
+          setPanel('shop');
+        }}
         onOpenInventory={() => setPanel('inventory')}
         onOpenLab={() => setPanel('lab')}
         onOpenAlbum={() => setPanel('album')}
@@ -61,6 +92,7 @@ function App() {
         onOpenPurchases={
           isPaymentsEnabled && auth.status === 'signed_in' ? () => setPanel('purchases') : undefined
         }
+        onOpenAdmin={isAdmin ? () => setPanel('admin') : undefined}
       />
 
       {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
@@ -79,12 +111,16 @@ function App() {
       )}
       {panel === 'social' && <SocialPanel onClose={() => setPanel(null)} />}
       {panel === 'purchases' && <PurchasesPanel onClose={() => setPanel(null)} />}
+      {panel === 'admin' && isAdmin && <AdminPanel onClose={() => setPanel(null)} />}
       {plantPlotId !== null && (
         <PlantPicker
           plotId={plantPlotId}
           inventory={state.inventory}
           onClose={() => setPlantPlotId(null)}
-          onOpenShop={() => setPanel('shop')}
+          onOpenShop={() => {
+            track('store_opened');
+            setPanel('shop');
+          }}
         />
       )}
       {toast && <Toast text={toast} />}

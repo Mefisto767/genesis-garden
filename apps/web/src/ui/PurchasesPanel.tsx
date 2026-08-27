@@ -3,6 +3,7 @@ import { PRODUCT_CATALOG, COMING_SOON_CATEGORIES, formatPrice, type ProductId } 
 import { getActivePaymentProvider } from '../payments/PaymentProvider';
 import { fetchActiveEntitlements, fetchPurchaseHistory, type ActiveEntitlement, type PurchaseHistoryEntry } from '../sync/purchases';
 import { gardenEvents } from '../game/events';
+import { track } from '../analytics/track';
 
 interface PurchasesPanelProps {
   onClose: () => void;
@@ -44,18 +45,25 @@ export function PurchasesPanel({ onClose }: PurchasesPanelProps) {
 
   useEffect(() => {
     refresh();
+    track('store_opened');
+    for (const product of PRODUCT_CATALOG) {
+      track('product_viewed', { productId: product.id });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function buy(productId: ProductId) {
     setBuying(productId);
+    track('checkout_started', { productId });
     const result = await provider.checkout(productId);
     setBuying(null);
     if (result.ok) {
       gardenEvents.emit('toast', { text: 'Покупка прошла успешно' });
+      track('checkout_completed', { productId });
       refresh();
     } else {
       gardenEvents.emit('toast', { text: friendlyError(result.errorMessage) });
+      track('purchase_failed', { productId, errorMessage: result.errorMessage ?? null });
     }
   }
 

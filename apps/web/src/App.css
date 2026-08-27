@@ -945,3 +945,57 @@
 .purchases-coming-soon-tag {
   font-style: italic;
 }
+
+/* ==========================================================================
+   Этап 8 — admin-дашборд (AdminPanel.tsx). Только для profiles.is_admin.
+   ========================================================================== */
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.admin-stat {
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.admin-stat-value {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #4a2e17;
+}
+
+.admin-stat-label {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 2px;
+}
+
+.admin-funnel-line {
+  color: #4a2e17;
+}
+
+.admin-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(139, 94, 60, 0.08);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #4a2e17;
+}
+
+.admin-truncated-note {
+  font-size: 11px;
+  color: #8b5e3c;
+  margin-top: 6px;
+  font-style: italic;
+}

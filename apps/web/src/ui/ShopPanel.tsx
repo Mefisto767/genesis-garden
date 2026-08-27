@@ -1,6 +1,7 @@
 import { SEED_CATALOG, seedThumb } from '../game/seedCatalog';
 import { gameStore } from '../game/store';
 import { gardenEvents } from '../game/events';
+import { track } from '../analytics/track';
 
 interface ShopPanelProps {
   coins: number;
@@ -36,7 +37,10 @@ export function ShopPanel({ coins, onClose }: ShopPanelProps) {
                 onClick={() => {
                   const ok = gameStore.buySeed(seed.id, 1);
                   if (!ok) gardenEvents.emit('toast', { text: 'Не хватает монет' });
-                  else gardenEvents.emit('toast', { text: `Куплено: ${seed.name}` });
+                  else {
+                    gardenEvents.emit('toast', { text: `Куплено: ${seed.name}` });
+                    track('seed_bought', { seedId: seed.id, cost: seed.buyCost });
+                  }
                 }}
               >
                 {seed.buyCost}

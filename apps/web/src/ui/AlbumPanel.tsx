@@ -5,6 +5,7 @@ import { rarityOf, mutationName } from '../game/genetics';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 import { RARITY_LABEL } from '../game/specimenRender';
 import { BREEDING_CONFIG } from '../game/config';
+import { track } from '../analytics/track';
 
 interface AlbumPanelProps {
   specimens: GameState['specimens'];
@@ -25,7 +26,10 @@ export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps)
       gardenEvents.emit('toast', { text: 'В избранном — сними звезду, чтобы переработать' });
       return;
     }
-    if (outcome !== null) gardenEvents.emit('toast', { text: `Переработано: +${outcome} пыли` });
+    if (outcome !== null) {
+      gardenEvents.emit('toast', { text: `Переработано: +${outcome} пыли` });
+      track('plant_recycled', { dustGained: outcome });
+    }
   }
 
   function toggleFavorite(id: string) {
@@ -33,6 +37,7 @@ export function AlbumPanel({ specimens, geneticDust, onClose }: AlbumPanelProps)
   }
 
   async function share(rarity: string, mutation: string | null) {
+    track('share_clicked', { rarity, mutation });
     const text = mutation
       ? `Смотри, какое растение я вырастил в Genesis Garden: ${rarity}, мутация «${mutation}»! 🌱`
       : `Смотри, какое растение я вырастил в Genesis Garden: ${rarity}! 🌱`;
