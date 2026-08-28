@@ -194,7 +194,11 @@ describe('breedNurseryV2 — discriminated-отказы, атомарность 
   });
 
   it('заполнение до ровно 8/8 успешно, 9-я — единственная отклонённая', () => {
-    const store = storeWith(baseState(), mulberry32(42));
+    // Slice 6: только первое скрещивание бесплатно (firstBreedFreeClaimed),
+    // остальные 7 стоят 8 пыльцы каждое — этот тест проверяет вместимость
+    // Nursery Tray (Slice 5), не экономику, поэтому даёт заведомо достаточный
+    // баланс пыльцы, чтобы не упереться в insufficient_pollen раньше 8/8.
+    const store = storeWith(baseState({ pollen: 100 }), mulberry32(42));
     for (let i = 0; i < NURSERY_TRAY_CAPACITY; i++) {
       const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
       expect(result.ok).toBe(true);
@@ -428,14 +432,15 @@ describe('harvestHybridV2 — создание Specimen ровно один ра
     expect(plot.hybridV2).toEqual({ phase: 'mature', specimenId, lastHarvestAt: 5 * 60 * 1000 + 20 * 60 * 1000 });
   });
 
-  it('экономика не меняется ни при посадке, ни при сборе (coins/pollen/geneticDust/обучающие флаги)', () => {
+  it('сбор начисляет пыльцу (Slice 6), но не трогает coins/geneticDust/обучающие флаги/labLevel', () => {
     const store = storeWith(plantedState(fixtureGenomeV2(1)));
     const before = store.getState();
     store.harvestHybridV2(0, 5 * 60 * 1000);
     const after = store.getState();
     expect(after.coins).toBe(before.coins);
-    expect(after.pollen).toBe(before.pollen);
+    expect(after.pollen).toBe(before.pollen + 2); // species 1 base 2, Common rarity +0 (гомозиготный фикстур-геном)
     expect(after.geneticDust).toBe(before.geneticDust);
+    expect(after.labLevel).toBe(before.labLevel);
     expect(after.firstBreedFreeClaimed).toBe(before.firstBreedFreeClaimed);
     expect(after.firstHybridRewardClaimed).toBe(before.firstHybridRewardClaimed);
     expect(after.firstRecycleTopUpClaimed).toBe(before.firstRecycleTopUpClaimed);

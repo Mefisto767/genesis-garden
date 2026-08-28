@@ -115,10 +115,15 @@ const nurseryCounterVisible = await page.getByText(/Питомник: 0\/8/).fir
 assert(nurseryCounterVisible, 'workbench hotspot opens LabPanelV2 showing "Питомник: 0/8"');
 await shot('01-labpanel-v2');
 
-// --- Test B: breed two V2-eligible specimens — no genome/phenotype revealed ---
+// --- Test B: breed two V2-eligible specimens — free first breed, no
+// genome/phenotype revealed (Slice 6 pollen economy, delta doc §0.8) ---
 const cards = page.locator('.specimen-card');
 const cardCount = await cards.count();
 assert(cardCount === 2, `both starter specimens selectable for V2 breeding (found ${cardCount})`);
+const pollenZeroVisible = await page.getByText('Пыльца: 0').first().isVisible().catch(() => false);
+assert(pollenZeroVisible, 'pollen balance shown as 0 before the first breed');
+const freeLabelVisible = await page.getByText('Первое скрещивание: бесплатно').first().isVisible().catch(() => false);
+assert(freeLabelVisible, 'UI shows "Первое скрещивание: бесплатно" before firstBreedFreeClaimed');
 await cards.nth(0).click();
 await cards.nth(1).click();
 await page.waitForTimeout(200);
@@ -131,6 +136,65 @@ assert(nurseryAfterBreed, 'nursery tray counter updated to 1/8 after breeding');
 const genomeLeaked = await page.getByText(/Основной цвет|Доп\. цвет|Аура:|Узор:/).first().isVisible().catch(() => false);
 assert(!genomeLeaked, 'no phenotype/genome fields rendered anywhere after breeding (not revealed before maturity)');
 await shot('02-hybrid-seed-bred');
+
+// 1/2: first breed was free at pollen=0, and 2: firstBreedFreeClaimed flipped
+// to true, atomically with the successful breed above.
+const afterFreeBreed = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+assert(afterFreeBreed.pollen === 0, `first breed at pollen=0 stayed free (pollen still 0, got ${afterFreeBreed.pollen})`);
+assert(afterFreeBreed.firstBreedFreeClaimed === true, 'firstBreedFreeClaimed flipped to true after the free breed');
+
+// --- Test B2: next attempt (parents still in the collection, breeding
+// doesn't consume them) is now paid — at pollen=0 it must show the exact
+// "insufficient pollen" text and keep the paid-breed button disabled. ---
+await cards.nth(0).click();
+await cards.nth(1).click();
+await page.waitForTimeout(200);
+const insufficientTextVisible = await page.getByText('Не хватает пыльцы: нужно 8, есть 0').first().isVisible().catch(() => false);
+assert(insufficientTextVisible, 'second attempt at pollen=0 shows exact "Не хватает пыльцы: нужно 8, есть 0"');
+const breedBtnDisabled = await page.locator('.sheet-buy-btn').isDisabled().catch(() => false);
+assert(breedBtnDisabled, 'paid-breed button is disabled while pollen is insufficient');
+await shot('02b-insufficient-pollen');
+
+// --- Test B3: top up pollen (localStorage, same time-travel technique the
+// rest of this script already uses) and confirm the paid breed deducts
+// exactly SAME_SPECIES_BREED_COST=8, no more/no less. ---
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('genesis-garden-save-v1'));
+  state.pollen = 20;
+  localStorage.setItem('genesis-garden-save-v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await dismissOnboarding();
+// Re-enter the lab and reopen the workbench hotspot after the reload.
+{
+  const nearLabScreen2 = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+  await page.mouse.click(nearLabScreen2.x, nearLabScreen2.y);
+  let enteredAgain = false;
+  for (let i = 0; i < 30 && !enteredAgain; i++) {
+    const labScreen = await worldToScreen(labWorld.x, labWorld.y - 40);
+    await page.mouse.click(labScreen.x, labScreen.y);
+    await page.waitForTimeout(500);
+    enteredAgain = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
+  }
+  assert(enteredAgain, 'walked back into LaboratoryScene after pollen top-up reload');
+  const canvasBox3 = await page.locator('canvas').boundingBox();
+  await page.mouse.click(canvasBox3.x + startX, canvasBox3.y + hotspotY);
+  await page.waitForTimeout(400);
+}
+const pollen20Visible = await page.getByText('Пыльца: 20').first().isVisible().catch(() => false);
+assert(pollen20Visible, 'pollen balance shows 20 after top-up + reload');
+await page.locator('.specimen-card').nth(0).click();
+await page.locator('.specimen-card').nth(1).click();
+await page.waitForTimeout(200);
+const costLabelVisible = await page.getByText('Стоимость: 8 пыльцы').first().isVisible().catch(() => false);
+assert(costLabelVisible, 'selected pair shows "Стоимость: 8 пыльцы" once pollen is sufficient');
+await page.locator('.sheet-buy-btn').click();
+await page.waitForTimeout(300);
+const afterPaidBreed = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+assert(afterPaidBreed.pollen === 12, `paid breed deducted exactly 8 pollen (20 -> 12, got ${afterPaidBreed.pollen})`);
+await shot('02c-paid-breed-deducted-8');
+
 await page.locator('.sheet-close').click();
 await page.waitForTimeout(200);
 
@@ -167,6 +231,7 @@ await shot('04-hybrid-planted-growing');
 
 // --- Test D: fast-forward growth (localStorage time-travel, same technique as
 // other e2e scripts use for save injection) and harvest first maturity ---
+const pollenBeforeHarvest = (await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))).pollen;
 await page.evaluate(() => {
   const raw = localStorage.getItem('genesis-garden-save-v1');
   const state = JSON.parse(raw);
@@ -182,6 +247,16 @@ await dismissOnboarding();
 const plot0ScreenAfterReload = await worldToScreen(plot0World.x, plot0World.y);
 await page.mouse.click(plot0ScreenAfterReload.x, plot0ScreenAfterReload.y);
 await page.waitForTimeout(500);
+
+// 3: maturity harvest grants formulaic pollen (speciesBasePollen(1)=2 +
+// rarityBonus in {0,1,2}) — real RNG breeding through the UI, so only the
+// valid range is asserted, not one exact number.
+const pollenAfterHarvest = (await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))).pollen;
+const pollenDelta = pollenAfterHarvest - pollenBeforeHarvest;
+assert(
+  pollenDelta >= 2 && pollenDelta <= 4,
+  `maturity harvest granted formulaic pollen for species 1 (base 2 + rarityBonus 0..2, delta=${pollenDelta})`
+);
 
 await page.getByRole('button', { name: 'Альбом' }).click();
 await page.waitForTimeout(400);

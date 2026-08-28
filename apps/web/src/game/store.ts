@@ -3,8 +3,9 @@ import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
 import { ensureGenomeV2Sidecars, type HybridSeedV2 } from './geneticsV2';
-import type { BreedRejectionReasonV2 } from './inheritanceV2';
+import { validateSameSpeciesParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
 import { breedV2 } from './mutationV2';
+import { breedCostV2, pollenRewardV2 } from './pollenV2';
 import { GARDEN_CONFIG, BREEDING_CONFIG, STARTING_STATE_CONFIG } from './config';
 import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
@@ -232,16 +233,18 @@ export interface PlotStatus {
 // docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8.
 // ----------------------------------------------------------------------------
 
-/** Причины отказа `breedNurseryV2` (contract §4.8.7) — четыре новые store-
- * level причины плюс прозрачно прокинутые причины Slice 3-4 species-
- * валидации (`unsupported_species`/`interspecies_locked`), не переопределяя
- * и не заменяя их. */
+/** Причины отказа `breedNurseryV2` (contract §4.8.7, расширено §4.9.3 —
+ * Slice 6 добавляет `insufficient_pollen`) — store-level причины плюс
+ * прозрачно прокинутые причины Slice 3-4 species-валидации
+ * (`unsupported_species`/`interspecies_locked`), не переопределяя и не
+ * заменяя их. */
 export type BreedNurseryV2RejectionReason =
   | 'same_parent'
   | 'parent_not_found'
   | 'parent_missing_genome_v2'
   | 'nursery_tray_full'
-  | BreedRejectionReasonV2;
+  | BreedRejectionReasonV2
+  | 'insufficient_pollen';
 
 export interface BreedNurseryV2Success {
   ok: true;
@@ -250,10 +253,15 @@ export interface BreedNurseryV2Success {
   nextPityCounter: number;
 }
 
-export interface BreedNurseryV2Failure {
-  ok: false;
-  reason: BreedNurseryV2RejectionReason;
-}
+/**
+ * `insufficient_pollen` несёт точные значения (contract §4.9.3 п.6) — не
+ * просто причину строкой, чтобы UI мог показать дословный текст «Не хватает
+ * пыльцы: нужно N, есть M» без повторного пересчёта стоимости на своей
+ * стороне.
+ */
+export type BreedNurseryV2Failure =
+  | { ok: false; reason: Exclude<BreedNurseryV2RejectionReason, 'insufficient_pollen'> }
+  | { ok: false; reason: 'insufficient_pollen'; requiredPollen: number; availablePollen: number };
 
 export type BreedNurseryV2Result = BreedNurseryV2Success | BreedNurseryV2Failure;
 
@@ -547,29 +555,60 @@ export class GameStore {
   }
 
   // --------------------------------------------------------------------
-  // Genetics V2 — Slice 5 (Nursery Tray, рост, постоянные растения).
-  // docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8. Экономика (coins/
-  // pollen/geneticDust/три обучающих флага) сознательно НЕ читается и не
-  // пишется ни одним из методов ниже — Slice 6/7 (delta doc §0.7 п.9).
+  // Genetics V2 — Slice 5 (Nursery Tray, рост, постоянные растения) +
+  // Slice 6 (пыльца как ресурс + стоимость скрещивания). Persisted lifecycle
+  // — docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8; пыльцевая
+  // экономика — §4.9. `breedNurseryV2`/`harvestHybridV2` теперь читают и
+  // пишут `pollen`/`firstBreedFreeClaimed` (Slice 6, delta doc §0.8);
+  // `coins`/`geneticDust`/`firstHybridRewardClaimed`/`firstRecycleTopUpClaimed`/
+  // `labLevel` по-прежнему не читаются и не пишутся ни одним из методов
+  // ниже — Slice 7/8 (delta doc §0.8 п.4).
   // --------------------------------------------------------------------
 
   /**
    * V2-скрещивание двух специменов из коллекции в `HybridSeedV2`,
-   * помещаемый в Nursery Tray (не готовый `Specimen` — contract §4.8.7).
-   * Все проверки ниже выполняются строго по порядку, ДО вызова `breedV2` —
-   * при любом отказе `breedV2` не вызывается вообще: 0 RNG-вызовов,
-   * `pityCounter`/родители/`nurseryTray`/остальной `GameState` не меняются.
-   * Species-валидация (`unsupported_species`/`interspecies_locked`)
-   * выполняется внутри самого `breedV2` (Slice 3-4, без изменений).
+   * помещаемый в Nursery Tray (не готовый `Specimen` — contract §4.8.7,
+   * расширено §4.9.3 для пыльцевой экономики Slice 6). Все проверки ниже
+   * выполняются строго по порядку, ДО вызова `breedV2` — при любом отказе на
+   * шагах 1-7 `breedV2` не вызывается вообще: 0 RNG-вызовов,
+   * `pollen`/`pityCounter`/`firstBreedFreeClaimed`/родители/`nurseryTray`/
+   * остальной `GameState` не меняются ни на бит. Species-валидация
+   * (`unsupported_species`/`interspecies_locked`) выполняется здесь ЯВНО,
+   * шагом 5 — ДО денежной проверки (contract §4.9.3), чтобы запрещённая пара
+   * никогда не маскировалась ошибкой недостатка пыльцы; `breedV2` (Slice
+   * 3-4, без изменений) сам повторно проверяет то же самое перед реальным
+   * наследованием/mutation RNG — не убирается, просто становится избыточным
+   * defence-in-depth для этого пути.
    */
   breedNurseryV2(seedParentId: string, pollenParentId: string): BreedNurseryV2Result {
+    // 1. Разные parent IDs.
     if (seedParentId === pollenParentId) return { ok: false, reason: 'same_parent' };
+    // 2. Оба specimens существуют.
     const seedParent = this.state.specimens.find((s) => s.id === seedParentId);
     const pollenParent = this.state.specimens.find((s) => s.id === pollenParentId);
     if (!seedParent || !pollenParent) return { ok: false, reason: 'parent_not_found' };
+    // 3. У обоих есть genomeV2.
     if (!seedParent.genomeV2 || !pollenParent.genomeV2) return { ok: false, reason: 'parent_missing_genome_v2' };
+    // 4. Nursery Tray не заполнен.
     if (this.state.nurseryTray.length >= NURSERY_TRAY_CAPACITY) return { ok: false, reason: 'nursery_tray_full' };
+    // 5. Чистая species-валидация без RNG — раньше денег, чтобы
+    //    unsupported_species/interspecies_locked никогда не маскировались
+    //    insufficient_pollen.
+    const speciesValidation = validateSameSpeciesParentsV2(
+      seedParent.genomeV2.speciesId,
+      pollenParent.genomeV2.speciesId
+    );
+    if (!speciesValidation.ok) return { ok: false, reason: speciesValidation.reason };
+    // 6. Определение бесплатности/стоимости.
+    const cost = this.state.firstBreedFreeClaimed
+      ? breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId)
+      : 0;
+    // 7. Проверка баланса пыльцы.
+    if (this.state.pollen < cost) {
+      return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
+    }
 
+    // 8. Вызов breedV2 — единственное место реального наследования/mutation RNG.
     const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, this.rng);
     if (!result.ok) return { ok: false, reason: result.reason };
 
@@ -581,10 +620,13 @@ export class GameStore {
       plantedAt: null,
       plotId: null,
     };
+    // 9. Одно атомарное обновление: HybridSeed, pity, pollen, firstBreedFreeClaimed.
     this.state = {
       ...this.state,
       nurseryTray: [...this.state.nurseryTray, hybridSeed],
       pityCounter: result.nextPityCounter,
+      pollen: this.state.pollen - cost,
+      firstBreedFreeClaimed: true,
     };
     this.emit();
     return { ok: true, hybridSeed, mutated: result.mutated, nextPityCounter: result.nextPityCounter };
@@ -633,14 +675,18 @@ export class GameStore {
   }
 
   /**
-   * Сбор V2-гибрида на грядке (contract §4.8.4). Первый успешный сбор
-   * созревшего `HybridSeedV2` создаёт РОВНО ОДИН `Specimen` и атомарно
-   * переключает грядку в `mature` — присутствие `mature`-состояния с уже
-   * установленным `specimenId` физически исключает повторное создание
-   * `Specimen` на последующих вызовах (включая после reload). Повторный сбор
-   * (уже `mature`) — идемпотентен: no-op до готовности повторного цикла,
-   * иначе обновляет только `lastHarvestAt`, без экономической награды
-   * (Slice 6/7). Растение никогда не удаляется с грядки этим методом.
+   * Сбор V2-гибрида на грядке (contract §4.8.4, расширено §4.9.2 для
+   * пыльцевой экономики Slice 6). Первый успешный сбор созревшего
+   * `HybridSeedV2` создаёт РОВНО ОДИН `Specimen` и атомарно переключает
+   * грядку в `mature` — присутствие `mature`-состояния с уже установленным
+   * `specimenId` физически исключает повторное создание `Specimen` на
+   * последующих вызовах (включая после reload). Повторный сбор (уже
+   * `mature`) — идемпотентен: no-op до готовности повторного цикла, иначе
+   * обновляет только `lastHarvestAt`. Оба успешных пути начисляют
+   * `pollenRewardV2(genomeV2)` тем же атомарным обновлением состояния, что и
+   * остальные изменения этого сбора — `firstHybridRewardClaimed`/`labLevel`/
+   * `coins`/`geneticDust` не меняются (Slice 7/8). Растение никогда не
+   * удаляется с грядки этим методом.
    */
   harvestHybridV2(plotId: number, now: number = Date.now()): boolean {
     const plot = this.state.plots.find((p) => p.id === plotId);
@@ -663,6 +709,7 @@ export class GameStore {
         ...this.state,
         specimens: [...this.state.specimens, specimen],
         plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: mature } : p)),
+        pollen: this.state.pollen + pollenRewardV2(hybrid.genomeV2),
       };
       this.emit();
       return true;
@@ -680,6 +727,7 @@ export class GameStore {
     this.state = {
       ...this.state,
       plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: updated } : p)),
+      pollen: this.state.pollen + pollenRewardV2(specimen.genomeV2),
     };
     this.emit();
     return true;

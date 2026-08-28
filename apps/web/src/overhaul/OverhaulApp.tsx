@@ -201,7 +201,13 @@ export function OverhaulApp() {
       {panel === 'inventory' && <InventoryPanel inventory={state.inventory} onClose={() => setPanel(null)} />}
       {panel === 'lab' &&
         (GENETICS_V2_ENABLED ? (
-          <LabPanelV2 specimens={state.specimens} nurseryTray={state.nurseryTray} onClose={() => setPanel(null)} />
+          <LabPanelV2
+            specimens={state.specimens}
+            nurseryTray={state.nurseryTray}
+            pollen={state.pollen}
+            firstBreedFreeClaimed={state.firstBreedFreeClaimed}
+            onClose={() => setPanel(null)}
+          />
         ) : (
           <LabPanel
             specimens={state.specimens}
