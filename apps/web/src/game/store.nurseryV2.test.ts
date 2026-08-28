@@ -164,7 +164,14 @@ describe('breedNurseryV2 — discriminated-отказы, атомарность 
   });
 
   it('unsupported_species/interspecies_locked проходят прозрачно от breedV2 (Slice 3-4, без изменений)', () => {
+    // Genetics V2 — Slice 8: speciesId 2 (Колокольник) теперь дополнительно
+    // гейтится Lab L2 (contract §4.11.2). labLevel:2 здесь снимает именно
+    // этот новый гейт, чтобы изолированно проверить более старую
+    // species-валидацию (`interspecies_locked`), которая всё ещё должна
+    // отклонять разные-но-поддерживаемые виды даже после открытия L2 —
+    // это Slice 9, не Slice 8.
     const state = baseState({
+      labLevel: 2,
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
     const store = storeWith(state);
@@ -350,7 +357,7 @@ describe('рост первого урожая и повторного цикл�
 });
 
 describe('harvestHybridV2 — создание Specimen ровно один раз, идемпотентность, коллекция, родословная, legacy-проекция', () => {
-  function plantedState(genomeV2: GenomeV2, plantedAt = 0) {
+  function plantedState(genomeV2: GenomeV2, plantedAt = 0, overrides: Partial<GameState> = {}) {
     const hybrid = {
       id: 'hybrid-1',
       genomeV2,
@@ -360,7 +367,7 @@ describe('harvestHybridV2 — создание Specimen ровно один ра
       plotId: 0,
     };
     const plots = fixturePlots().map((p) => (p.id === 0 ? { ...p, hybridV2: { phase: 'growing' as const, hybrid } } : p));
-    return baseState({ plots });
+    return baseState({ plots, ...overrides });
   }
 
   it('первый успешный сбор создаёт ровно один Specimen, грядка не обнуляется (растение остаётся)', () => {
@@ -433,7 +440,11 @@ describe('harvestHybridV2 — создание Specimen ровно один ра
   });
 
   it('сбор начисляет пыльцу (Slice 6), но не трогает coins/geneticDust/обучающие флаги/labLevel', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1)));
+    // Genetics V2 — Slice 8: firstHybridRewardClaimed:true в фикстуре —
+    // изолирует обычную математику награды пыльцы (Slice 6) от
+    // одноразового Slice-8-гранта "+8 пыльцы/лаб L2/флаг", который иначе
+    // сработал бы на этом же сборе и сломал бы проверяемые здесь инварианты.
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { firstHybridRewardClaimed: true }));
     const before = store.getState();
     store.harvestHybridV2(0, 5 * 60 * 1000);
     const after = store.getState();

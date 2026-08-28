@@ -4,6 +4,7 @@ import { gameStore, type BreedNurseryV2RejectionReason } from '../game/store';
 import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel, nurseryTrayFullHint } from '../game/nurseryV2';
 import { breedCostV2 } from '../game/pollenV2';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
+import { isSpeciesUnlockedV2, COLOKOLNIK_LOCKED_TEXT_V2 } from '../game/labV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -37,6 +38,10 @@ interface LabPanelV2Props {
   nurseryTray: GameState['nurseryTray'];
   pollen: number;
   firstBreedFreeClaimed: boolean;
+  /** Genetics V2 — Slice 8 (contract §4.11.2): нужен, чтобы показать
+   * Колокольник-специмены заблокированными до открытия Lab L2 (не только
+   * store-level defence-in-depth, но и понятная визуальная причина). */
+  labLevel: number;
   onClose: () => void;
 }
 
@@ -44,13 +49,14 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
   same_parent: 'Нужны две разные особи.',
   parent_not_found: 'Один из родителей не найден.',
   parent_missing_genome_v2: 'У одного из родителей нет диплоидного генома.',
+  species_locked: COLOKOLNIK_LOCKED_TEXT_V2,
   nursery_tray_full: 'Питомник заполнен — сначала посади или переработай семя.',
   unsupported_species: 'Этот вид пока не поддерживает V2-скрещивание.',
   interspecies_locked: 'Скрещивание между разными видами пока закрыто.',
   insufficient_pollen: '', // текст строится из requiredPollen/availablePollen на месте, см. doBreed/costLabel ниже.
 };
 
-export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaimed, onClose }: LabPanelV2Props) {
+export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaimed, labLevel, onClose }: LabPanelV2Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
@@ -65,9 +71,22 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const [pendingRecycleSeedId, setPendingRecycleSeedId] = useState<string | null>(null);
 
   const candidates = specimens.filter((s) => !!s.genomeV2);
+
+  function isCandidateLocked(id: string): boolean {
+    const s = candidates.find((c) => c.id === id);
+    return !!s && !!s.genomeV2 && !isSpeciesUnlockedV2(s.genomeV2.speciesId, labLevel);
+  }
   const trayFull = nurseryTray.length >= NURSERY_TRAY_CAPACITY;
 
   function toggle(id: string) {
+    // Genetics V2 — Slice 8 (contract §4.11.2): заблокированный до Lab L2
+    // Колокольник-специмен нельзя выбрать как V2-родителя — клик по
+    // заблокированной карточке полностью игнорируется (тот же принцип, что
+    // `renderHybridPlotCellReadOnly` в EstateScene: заблокированный вариант
+    // виден, но не имеет эффекта). Store-level `species_locked`
+    // (`breedNurseryV2`) остаётся обязательным защитным слоем независимо от
+    // этой UI-проверки (defense-in-depth).
+    if (isCandidateLocked(id)) return;
     setNotice(null);
     setRecycleNotice(null);
     setSelected((prev) => {
@@ -173,13 +192,17 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
           <div className="specimen-grid">
             {candidates.map((s) => {
               const isSelected = selected.includes(s.id);
+              const isLocked = isCandidateLocked(s.id);
               return (
                 <button
                   key={s.id}
-                  className={`specimen-card ${isSelected ? 'is-selected' : ''}`}
+                  className={`specimen-card ${isSelected ? 'is-selected' : ''} ${isLocked ? 'is-locked' : ''}`}
                   onClick={() => toggle(s.id)}
+                  title={isLocked ? COLOKOLNIK_LOCKED_TEXT_V2 : undefined}
+                  aria-disabled={isLocked}
                 >
                   <SpecimenThumbnail genome={s.genome} size={72} />
+                  {isLocked && <span className="specimen-card-locked">🔒</span>}
                   {s.favorite && <span className="specimen-card-favorite">★</span>}
                 </button>
               );

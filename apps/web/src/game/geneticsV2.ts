@@ -125,6 +125,23 @@ export type GenomeV2LocusKey =
   | 'aura';
 
 /**
+ * Стабильный порядок девяти локусов (Slice 8, микроскоп/расширенная
+ * карточка) — единственное место, где этот порядок объявлен; UI и
+ * `microscopeV2.ts` переиспользуют его, не заводят собственную копию.
+ */
+export const GENOME_V2_LOCUS_KEYS: readonly GenomeV2LocusKey[] = [
+  'stemForm',
+  'leafForm',
+  'flowerForm',
+  'primaryColor',
+  'secondaryColor',
+  'leafColor',
+  'pattern',
+  'size',
+  'aura',
+];
+
+/**
  * Раскрытые скрытые локусы конкретного экземпляра — единый контракт
  * видимости, delta doc §6.1. Плоский МАССИВ, не `Set`: `Set` не переживает
  * `JSON.stringify`/`JSON.parse` (сериализуется в `{}`), а весь save целиком

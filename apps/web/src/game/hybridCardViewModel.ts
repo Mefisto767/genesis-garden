@@ -23,6 +23,7 @@ import type {
   AuraAllele,
   FlowerFormAllele,
   GenomeV2,
+  GenomeV2LocusKey,
   LeafColorAllele,
   LeafFormAllele,
   MutationIdV2,
@@ -148,6 +149,56 @@ const SPECIES_NAME_BY_ID: Record<1 | 2, string> = {
 
 function speciesNameV2(speciesId: number): string {
   return SPECIES_NAME_BY_ID[speciesId as 1 | 2] ?? `Вид #${speciesId}`;
+}
+
+/**
+ * Русское название категории локуса (Slice 8, микроскоп/расширенная
+ * карточка, delta doc §6.1: «список выбора содержит только понятное русское
+ * название категории, но не значение скрытого аллеля»). Те же подписи, что
+ * уже используются как `label` в `loci` простой карточки выше — единственный
+ * источник истины для названия каждой из девяти категорий, не дублируется.
+ */
+export const LOCUS_CATEGORY_LABEL_V2: Record<GenomeV2LocusKey, string> = {
+  stemForm: 'Стебель',
+  leafForm: 'Форма листвы',
+  flowerForm: 'Форма цветка',
+  primaryColor: 'Основной цвет',
+  secondaryColor: 'Доп. цвет',
+  leafColor: 'Листва',
+  pattern: 'Узор',
+  size: 'Размер',
+  aura: 'Аура',
+};
+
+/**
+ * Один общий словарь «локус -> (аллель -> русское название)», собранный из
+ * уже существующих исчерпывающих таблиц выше (Slice 5 fix-pass, дефект 3) —
+ * не дублирует ни одно значение, только группирует уже готовые Record'ы под
+ * общий индекс по `GenomeV2LocusKey`, чтобы микроскоп (Slice 8) мог перевести
+ * произвольный раскрытый аллель без девяти отдельных `switch`-веток.
+ */
+const LOCUS_ALLELE_LABELS: { readonly [K in GenomeV2LocusKey]: Record<string, string> } = {
+  stemForm: STEM_FORM_LABEL,
+  leafForm: LEAF_FORM_LABEL,
+  flowerForm: FLOWER_FORM_LABEL,
+  primaryColor: PRIMARY_COLOR_LABEL,
+  secondaryColor: SECONDARY_COLOR_LABEL,
+  leafColor: LEAF_COLOR_LABEL,
+  pattern: PATTERN_LABEL,
+  size: SIZE_LABEL,
+  aura: AURA_LABEL,
+};
+
+/**
+ * Переводит raw ID аллеля произвольного локуса в русское название (Slice 8,
+ * микроскоп — «показать точное русское название скрытого аллеля... Не
+ * показывать raw ID»). Fallback на сам `alleleId` — защитный путь для
+ * повреждённых/непредвиденных данных (тот же принцип, что `speciesNameV2`
+ * выше), не ожидаемый для реальных данных: все каталожные аллели Gate 1
+ * присутствуют в исчерпывающих таблицах выше.
+ */
+export function alleleLabelV2(locus: GenomeV2LocusKey, alleleId: string): string {
+  return LOCUS_ALLELE_LABELS[locus][alleleId] ?? alleleId;
 }
 
 /**

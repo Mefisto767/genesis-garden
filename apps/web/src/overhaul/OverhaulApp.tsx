@@ -5,6 +5,7 @@ import { gardenEvents } from '../game/events';
 import { overhaulEvents } from './events';
 import { HUD } from '../ui/HUD';
 import { ShopPanel } from '../ui/ShopPanel';
+import { ShopPanelV2 } from '../ui/ShopPanelV2';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { PlantPicker } from '../ui/PlantPicker';
 import { LabPanel } from '../ui/LabPanel';
@@ -198,7 +199,12 @@ export function OverhaulApp() {
 
       {isOffline && isCloudSyncEnabled && auth.status === 'signed_in' && <OfflineBanner />}
 
-      {panel === 'shop' && <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />}
+      {panel === 'shop' &&
+        (GENETICS_V2_ENABLED ? (
+          <ShopPanelV2 coins={state.coins} labLevel={state.labLevel} onClose={() => setPanel(null)} />
+        ) : (
+          <ShopPanel coins={state.coins} onClose={() => setPanel(null)} />
+        ))}
       {panel === 'inventory' && <InventoryPanel inventory={state.inventory} onClose={() => setPanel(null)} />}
       {panel === 'lab' &&
         (GENETICS_V2_ENABLED ? (
@@ -207,6 +213,7 @@ export function OverhaulApp() {
             nurseryTray={state.nurseryTray}
             pollen={state.pollen}
             firstBreedFreeClaimed={state.firstBreedFreeClaimed}
+            labLevel={state.labLevel}
             onClose={() => setPanel(null)}
           />
         ) : (
@@ -225,6 +232,7 @@ export function OverhaulApp() {
             specimens={state.specimens}
             plots={state.plots}
             geneticDust={state.geneticDust}
+            labLevel={state.labLevel}
             onClose={() => setPanel(null)}
           />
         ) : (
@@ -241,6 +249,7 @@ export function OverhaulApp() {
             plotId={plantPlotId}
             inventory={state.inventory}
             nurseryTray={state.nurseryTray}
+            labLevel={state.labLevel}
             onClose={() => setPlantPlotId(null)}
             onOpenShop={() => {
               track('store_opened');

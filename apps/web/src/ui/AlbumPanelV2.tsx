@@ -3,7 +3,9 @@ import type { GameState } from '../game/types';
 import { gameStore } from '../game/store';
 import { buildHybridCardViewModel } from '../game/hybridCardViewModel';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
+import { LAB_LEVEL_2 } from '../game/labV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
+import { MicroscopePanel } from './MicroscopePanel';
 
 /**
  * Genetics V2 — Slice 7 minimal UI (contract §4.10.5, delta doc §0.9 п.6):
@@ -27,10 +29,13 @@ interface AlbumPanelV2Props {
   specimens: GameState['specimens'];
   plots: GameState['plots'];
   geneticDust: number;
+  /** Genetics V2 — Slice 8 (contract §4.11.3): гейт кнопки "Микроскоп" —
+   * доступна только при `labLevel>=2`. */
+  labLevel: number;
   onClose: () => void;
 }
 
-export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPanelV2Props) {
+export function AlbumPanelV2({ specimens, plots, geneticDust, labLevel, onClose }: AlbumPanelV2Props) {
   // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
   // результат переработки (`dustGained`), НЕ собранная строка — рендерится
   // как два отдельных DOM-элемента ниже, без объединяющей пунктуации.
@@ -39,6 +44,10 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
   // двухшаговый экран подтверждения переработки. Отмена — полный no-op на
   // уровне UI, `recycleSpecimenV2` не вызывается вообще.
   const [pendingRecycleId, setPendingRecycleId] = useState<string | null>(null);
+  // Genetics V2 — Slice 8: id specimen, для которого сейчас открыт
+  // `MicroscopePanel` — отдельный кусок состояния, не пересекается с
+  // переработкой (можно закрыть микроскоп и вернуться к списку).
+  const [microscopeSpecimenId, setMicroscopeSpecimenId] = useState<string | null>(null);
 
   const candidates = specimens.filter((s) => !!s.genomeV2);
   const sorted = [...candidates].sort((a, b) => {
@@ -65,6 +74,7 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
   }
 
   return (
+    <>
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
@@ -123,9 +133,19 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
                         </button>
                       </>
                     ) : (
-                      <button className="album-card-sell" onClick={() => setPendingRecycleId(s.id)}>
-                        Переработать
-                      </button>
+                      <>
+                        <button className="album-card-sell" onClick={() => setPendingRecycleId(s.id)}>
+                          Переработать
+                        </button>
+                        {/* Genetics V2 — Slice 8 (contract §4.11.3): доступ к
+                            микроскопу/расширенной карточке — только при
+                            открытом Lab L2. */}
+                        {labLevel >= LAB_LEVEL_2 && (
+                          <button className="album-card-share" onClick={() => setMicroscopeSpecimenId(s.id)}>
+                            Микроскоп
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -135,5 +155,13 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
         )}
       </div>
     </div>
+    {/* Genetics V2 — Slice 8: рендерится СВЕРХУ, вне backdrop'а альбома —
+        собственный независимый backdrop микроскопа, клик по его фону
+        закрывает только его, не альбом под ним (никакого bubbling между
+        двумя разными `sheet-backdrop`, они не вложены друг в друга). */}
+    {microscopeSpecimenId && (
+      <MicroscopePanel specimenId={microscopeSpecimenId} onClose={() => setMicroscopeSpecimenId(null)} />
+    )}
+    </>
   );
 }

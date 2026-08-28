@@ -2,7 +2,7 @@ import type { Entitlement, GameState, Plot, PlotHybridV2, Specimen } from './typ
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
-import { ensureGenomeV2Sidecars, type HybridSeedV2 } from './geneticsV2';
+import { ensureGenomeV2Sidecars, type GenomeV2LocusKey, type HybridSeedV2 } from './geneticsV2';
 import { validateSameSpeciesParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
 import { breedV2 } from './mutationV2';
 import { breedCostV2, pollenRewardV2 } from './pollenV2';
@@ -12,6 +12,9 @@ import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
 import { NURSERY_TRAY_CAPACITY, hybridGrowthStatusV2, regrowStatusV2, type GrowthStatusV2 } from './nurseryV2';
 import { projectGenomeV2ToLegacy } from './legacyProjectionV2';
+import { FIRST_HYBRID_POLLEN_GRANT, LAB_LEVEL_2, isSpeciesUnlockedV2 } from './labV2';
+import { availableLociForRevealV2, MICROSCOPE_REVEAL_COST } from './microscopeV2';
+import { resolveExtendedCard } from './phenotypeV2';
 import type { RngFn } from './rng';
 import { defaultRng } from './rng';
 
@@ -243,6 +246,11 @@ export type BreedNurseryV2RejectionReason =
   | 'same_parent'
   | 'parent_not_found'
   | 'parent_missing_genome_v2'
+  // Slice 8 (contract §4.11.2): либо родитель — Колокольник, а Lab L2 ещё не
+  // открыт. Проверяется ДО nursery_tray_full и species-валидации Slice 3-4
+  // (см. breedNurseryV2 ниже) — запрещённый по лабу вид никогда не
+  // маскируется переполненным треем или interspecies_locked.
+  | 'species_locked'
   | 'nursery_tray_full'
   | BreedRejectionReasonV2
   | 'insufficient_pollen';
@@ -306,6 +314,46 @@ export type RecycleSpecimenV2RejectionReason =
 export type RecycleSpecimenV2Result =
   | RecycleV2Success
   | { ok: false; reason: RecycleSpecimenV2RejectionReason };
+
+// ----------------------------------------------------------------------------
+// Genetics V2 — Slice 8 (Lab L2 + минимальный микроскоп). Contract §4.11.
+// Отдельные V2-обёртки над legacy `buySeed()`/`plantSeed()` (contract
+// §4.11.2 — "не менять общие legacy ShopPanel/PlantPicker/buySeed/plantSeed
+// так, чтобы изменилось Classic/Overhaul+Legacy поведение"): каждая
+// добавляет РОВНО ОДНУ дополнительную проверку — `isSpeciesUnlockedV2` — ДО
+// вызова немодифицированного legacy-метода, никак иначе не меняя его
+// семантику/побочные эффекты/атомарность.
+// ----------------------------------------------------------------------------
+
+export type BuySeedV2RejectionReason = 'seed_not_found' | 'species_locked' | 'insufficient_coins';
+export type BuySeedV2Result = { ok: true } | { ok: false; reason: BuySeedV2RejectionReason };
+
+export type PlantSeedV2RejectionReason = 'species_locked' | 'rejected';
+export type PlantSeedV2Result = { ok: true } | { ok: false; reason: PlantSeedV2RejectionReason };
+
+/** Причины отказа `revealHiddenLocusV2` (contract §4.11.3) — ровно порядок
+ * проверок задания: Lab L2 открыт → specimen существует → есть `genomeV2` →
+ * признак реально доступен → минимум 3 пыли. */
+export type RevealHiddenLocusV2RejectionReason =
+  | 'lab_locked'
+  | 'specimen_not_found'
+  | 'missing_genome_v2'
+  | 'locus_not_available'
+  | 'insufficient_dust';
+
+export interface RevealHiddenLocusV2Success {
+  ok: true;
+  locus: GenomeV2LocusKey;
+  /** Точное значение раскрытого скрытого аллеля (raw ID) — UI переводит в
+   * русское название через `alleleLabelV2` (hybridCardViewModel.ts). */
+  revealedAllele: string;
+  dustSpent: number;
+}
+
+export type RevealHiddenLocusV2Result =
+  | RevealHiddenLocusV2Success
+  | { ok: false; reason: Exclude<RevealHiddenLocusV2RejectionReason, 'insufficient_dust'> }
+  | { ok: false; reason: 'insufficient_dust'; requiredDust: number; availableDust: number };
 
 interface StorageLike {
   getItem(key: string): string | null;
@@ -423,6 +471,24 @@ export class GameStore {
     return true;
   }
 
+  /**
+   * Genetics V2 — Slice 8 (contract §4.11.2): V2-обёртка над `buySeed()` для
+   * Overhaul+V2 UI (`ShopPanelV2`) — добавляет ровно одну проверку
+   * (`isSpeciesUnlockedV2`) ДО вызова немодифицированного `buySeed()` выше.
+   * `buySeed()` сам не меняется и продолжает использоваться Classic/
+   * Overhaul+Legacy (`ShopPanel`) без единого отличия в поведении. Отказ по
+   * `species_locked` — полный no-op, `buySeed()` не вызывается вообще, ни
+   * монеты, ни инвентарь не трогаются.
+   */
+  buySeedV2(seedId: string, qty = 1): BuySeedV2Result {
+    const def = getSeedDef(seedId);
+    if (!def) return { ok: false, reason: 'seed_not_found' };
+    if (!isSpeciesUnlockedV2(def.speciesId, this.state.labLevel)) {
+      return { ok: false, reason: 'species_locked' };
+    }
+    return this.buySeed(seedId, qty) ? { ok: true } : { ok: false, reason: 'insufficient_coins' };
+  }
+
   unlockPlot(plotId: number): boolean {
     const plot = this.state.plots.find((p) => p.id === plotId);
     if (!plot || plot.unlocked) return false;
@@ -456,6 +522,25 @@ export class GameStore {
     };
     this.emit();
     return true;
+  }
+
+  /**
+   * Genetics V2 — Slice 8 (contract §4.11.2): V2-обёртка над `plantSeed()`
+   * для Overhaul+V2 UI (`PlantPickerV2`) — добавляет ровно одну проверку
+   * (`isSpeciesUnlockedV2`) ДО вызова немодифицированного `plantSeed()`
+   * выше. `plantSeed()` сам не меняется и продолжает использоваться Classic/
+   * Overhaul+Legacy (`PlantPicker`) без единого отличия в поведении.
+   * Покрывает и обычный магазинный посев уже лежащего в инвентаре семени
+   * Колокольника (редкий путь — возможен только если семя туда попало до
+   * открытия Lab L2, например через legacy-миграцию) — отказ по
+   * `species_locked` — полный no-op, `plantSeed()` не вызывается вообще.
+   */
+  plantSeedV2(plotId: number, seedId: string): PlantSeedV2Result {
+    const def = getSeedDef(seedId);
+    if (def && !isSpeciesUnlockedV2(def.speciesId, this.state.labLevel)) {
+      return { ok: false, reason: 'species_locked' };
+    }
+    return this.plantSeed(plotId, seedId) ? { ok: true } : { ok: false, reason: 'rejected' };
   }
 
   /**
@@ -622,9 +707,20 @@ export class GameStore {
     if (!seedParent || !pollenParent) return { ok: false, reason: 'parent_not_found' };
     // 3. У обоих есть genomeV2.
     if (!seedParent.genomeV2 || !pollenParent.genomeV2) return { ok: false, reason: 'parent_missing_genome_v2' };
-    // 4. Nursery Tray не заполнен.
+    // 4. Slice 8 (contract §4.11.2) — ни один родитель не Колокольник до
+    //    открытия Lab L2. Проверяется раньше nursery_tray_full и
+    //    unsupported_species/interspecies_locked (шаг 6), чтобы запрещённый
+    //    по лабу вид никогда не маскировался переполненным треем или
+    //    межвидовым отказом.
+    if (
+      !isSpeciesUnlockedV2(seedParent.genomeV2.speciesId, this.state.labLevel) ||
+      !isSpeciesUnlockedV2(pollenParent.genomeV2.speciesId, this.state.labLevel)
+    ) {
+      return { ok: false, reason: 'species_locked' };
+    }
+    // 5. Nursery Tray не заполнен.
     if (this.state.nurseryTray.length >= NURSERY_TRAY_CAPACITY) return { ok: false, reason: 'nursery_tray_full' };
-    // 5. Чистая species-валидация без RNG — раньше денег, чтобы
+    // 6. Чистая species-валидация без RNG — раньше денег, чтобы
     //    unsupported_species/interspecies_locked никогда не маскировались
     //    insufficient_pollen.
     const speciesValidation = validateSameSpeciesParentsV2(
@@ -632,16 +728,16 @@ export class GameStore {
       pollenParent.genomeV2.speciesId
     );
     if (!speciesValidation.ok) return { ok: false, reason: speciesValidation.reason };
-    // 6. Определение бесплатности/стоимости.
+    // 7. Определение бесплатности/стоимости.
     const cost = this.state.firstBreedFreeClaimed
       ? breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId)
       : 0;
-    // 7. Проверка баланса пыльцы.
+    // 8. Проверка баланса пыльцы.
     if (this.state.pollen < cost) {
       return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
     }
 
-    // 8. Вызов breedV2 — единственное место реального наследования/mutation RNG.
+    // 9. Вызов breedV2 — единственное место реального наследования/mutation RNG.
     const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, this.rng);
     if (!result.ok) return { ok: false, reason: result.reason };
 
@@ -653,7 +749,7 @@ export class GameStore {
       plantedAt: null,
       plotId: null,
     };
-    // 9. Одно атомарное обновление: HybridSeed, pity, pollen, firstBreedFreeClaimed.
+    // 10. Одно атомарное обновление: HybridSeed, pity, pollen, firstBreedFreeClaimed.
     this.state = {
       ...this.state,
       nurseryTray: [...this.state.nurseryTray, hybridSeed],
@@ -709,21 +805,50 @@ export class GameStore {
 
   /**
    * Сбор V2-гибрида на грядке (contract §4.8.4, расширено §4.9.2 для
-   * пыльцевой экономики Slice 6). Первый успешный сбор созревшего
-   * `HybridSeedV2` создаёт РОВНО ОДИН `Specimen` и атомарно переключает
-   * грядку в `mature` — присутствие `mature`-состояния с уже установленным
-   * `specimenId` физически исключает повторное создание `Specimen` на
-   * последующих вызовах (включая после reload). Повторный сбор (уже
-   * `mature`) — идемпотентен: no-op до готовности повторного цикла, иначе
-   * обновляет только `lastHarvestAt`. Оба успешных пути начисляют
-   * `pollenRewardV2(genomeV2)` тем же атомарным обновлением состояния, что и
-   * остальные изменения этого сбора — `firstHybridRewardClaimed`/`labLevel`/
-   * `coins`/`geneticDust` не меняются (Slice 7/8). Растение никогда не
-   * удаляется с грядки этим методом.
+   * пыльцевой экономики Slice 6 и §4.11.1 для обучающего гранта Slice 8).
+   * Первый успешный сбор созревшего `HybridSeedV2` создаёт РОВНО ОДИН
+   * `Specimen` и атомарно переключает грядку в `mature` — присутствие
+   * `mature`-состояния с уже установленным `specimenId` физически исключает
+   * повторное создание `Specimen` на последующих вызовах (включая после
+   * reload). Повторный сбор (уже `mature`) — идемпотентен: no-op до
+   * готовности повторного цикла, иначе обновляет только `lastHarvestAt`. Оба
+   * успешных пути начисляют `pollenRewardV2(genomeV2)` тем же атомарным
+   * обновлением состояния, что и остальные изменения этого сбора. Растение
+   * никогда не удаляется с грядки этим методом.
+   *
+   * Обучающий грант «Первое открытие» (contract §4.11.1) — ровно 8 пыльцы
+   * ПОВЕРХ обычной `pollenRewardV2`, `firstHybridRewardClaimed=true`,
+   * `labLevel=Math.max(currentLabLevel, 2)` — гейтится ЕДИНСТВЕННЫМ условием
+   * `!this.state.firstHybridRewardClaimed`, проверенным в ОБЕИХ ветках ниже
+   * (не только в `growing→mature`). Это осознанное расширение сверх
+   * буквального «при первом успешном переходе growing→mature» (тот же
+   * прецедент, что defensive guard в `recycleSpecimen()` выше): существующие
+   * Slice 5-7 save, где зрелый V2-гибрид уже существует, но
+   * `firstHybridRewardClaimed` ещё `false` (сам флаг появился только в этом
+   * slice — до него ни один переход growing→mature не мог его установить),
+   * иначе никогда не получили бы грант — потому что их единственный
+   * `growing→mature` переход уже состоялся ДО того, как этот код начал
+   * существовать, а требование задания прямо запрещает вынуждать игрока
+   * «вырастить ещё один первый гибрид». Проверка `!firstHybridRewardClaimed`
+   * в обеих ветках даёт грант ровно один раз — на первом же успешном сборе
+   * (растущего ИЛИ уже зрелого гибрида, что наступит раньше) — и после
+   * установки флага `true` ни одна из веток больше никогда не выдаёт его
+   * повторно, в том числе после reload (флаг персистентен). Ранний сбор,
+   * повреждённые данные, повторный вызов на уже собранной фазе — все они
+   * возвращают `false` до этой точки (см. `status.ready` проверки выше по
+   * каждой ветке) и потому тоже не выдают грант. Legacy `harvest()` этот
+   * метод не переиспользует и не читает `firstHybridRewardClaimed`/`labLevel`
+   * вообще — legacy-сбор ничего не открывает.
    */
   harvestHybridV2(plotId: number, now: number = Date.now()): boolean {
     const plot = this.state.plots.find((p) => p.id === plotId);
     if (!plot || !plot.hybridV2) return false;
+
+    const grantFirstHybridReward = !this.state.firstHybridRewardClaimed;
+    const firstHybridBonus: Partial<GameState> = grantFirstHybridReward
+      ? { firstHybridRewardClaimed: true, labLevel: Math.max(this.state.labLevel, LAB_LEVEL_2) }
+      : {};
+    const pollenBonus = grantFirstHybridReward ? FIRST_HYBRID_POLLEN_GRANT : 0;
 
     if (plot.hybridV2.phase === 'growing') {
       const hybrid = plot.hybridV2.hybrid;
@@ -742,7 +867,8 @@ export class GameStore {
         ...this.state,
         specimens: [...this.state.specimens, specimen],
         plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: mature } : p)),
-        pollen: this.state.pollen + pollenRewardV2(hybrid.genomeV2),
+        pollen: this.state.pollen + pollenRewardV2(hybrid.genomeV2) + pollenBonus,
+        ...firstHybridBonus,
       };
       this.emit();
       return true;
@@ -760,7 +886,8 @@ export class GameStore {
     this.state = {
       ...this.state,
       plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: updated } : p)),
-      pollen: this.state.pollen + pollenRewardV2(specimen.genomeV2),
+      pollen: this.state.pollen + pollenRewardV2(specimen.genomeV2) + pollenBonus,
+      ...firstHybridBonus,
     };
     this.emit();
     return true;
@@ -851,6 +978,95 @@ export class GameStore {
     };
     this.emit();
     return { ok: true, baseDust, topUpDust, dustGained };
+  }
+
+  // --------------------------------------------------------------------
+  // Genetics V2 — Slice 8 (минимальный микроскоп). Contract §4.11.3. Ровно
+  // одна операция: раскрыть один скрытый аллель конкретного specimen
+  // навсегда, за 3 генетической пыли.
+  // --------------------------------------------------------------------
+
+  /**
+   * Раскрыть скрытый аллель одного локуса конкретного `Specimen` (contract
+   * §4.11.3) — доступно только при `labLevel>=2`. Проверки СТРОГО в этом
+   * порядке (задание владельца, дословно):
+   *
+   * 1. Lab L2 открыт (`this.state.labLevel >= LAB_LEVEL_2`).
+   * 2. Specimen существует.
+   * 3. У specimen есть `genomeV2`.
+   * 4. Признак реально доступен для раскрытия — `resolveExtendedCard` (Slice
+   *    2) даёт `unresearched` для этого локуса: не гомозиготный (у него нет
+   *    скрытого состояния вообще) и ещё не раскрыт (микроскопом или
+   *    естественно). Кодоминантные локусы в Gate 1 не существуют (contract
+   *    §4.3) — гетерозиготный локус без раскрытия физически всегда ровно
+   *    `unresearched`, отдельной ветки для «признака без единственного
+   *    скрытого аллеля» не требуется.
+   * 5. Есть минимум 3 `geneticDust`.
+   * 6. Одно атомарное списание и раскрытие: `geneticDust -= 3`, в
+   *    `Specimen.revealedLoci` добавляется РОВНО ОДНА новая запись
+   *    `{ locus, source: 'microscope' }` — без дубликатов (шаг 4 уже
+   *    гарантирует, что для этого локуса записи ещё не было) и без
+   *    перезаписи существующих записей `source: 'natural'` других локусов
+   *    того же specimen (immutable append, не замена массива). Остальные
+   *    поля `specimen`/`GameState` (включая `pollen`/`coins`/`labLevel`/
+   *    `firstBreedFreeClaimed`/`firstHybridRewardClaimed`/
+   *    `firstRecycleTopUpClaimed`) не меняются.
+   *
+   * Любой отказ на шагах 1-5 — полный no-op: `geneticDust` и
+   * `specimens`/`revealedLoci` не меняются ни на бит, `this.emit()` не
+   * вызывается. Раскрытие персистентно только для ЭТОГО specimen —
+   * `revealedLoci` живёт на самом `Specimen`, не на виде/геноме/родителе/
+   * потомке, поэтому раскрытие одного растения физически не может повлиять
+   * на другой specimen (даже с идентичным `genomeV2`).
+   */
+  revealHiddenLocusV2(specimenId: string, locus: GenomeV2LocusKey): RevealHiddenLocusV2Result {
+    // 1. Lab L2 открыт.
+    if (this.state.labLevel < LAB_LEVEL_2) return { ok: false, reason: 'lab_locked' };
+    // 2. Specimen существует.
+    const specimen = this.state.specimens.find((s) => s.id === specimenId);
+    if (!specimen) return { ok: false, reason: 'specimen_not_found' };
+    // 3. У specimen есть genomeV2.
+    if (!specimen.genomeV2) return { ok: false, reason: 'missing_genome_v2' };
+    // 4. Признак реально доступен для раскрытия.
+    const revealedLoci = specimen.revealedLoci ?? [];
+    const available = availableLociForRevealV2(specimen.genomeV2, revealedLoci);
+    if (!available.includes(locus)) return { ok: false, reason: 'locus_not_available' };
+    // 5. Минимум 3 geneticDust.
+    if (this.state.geneticDust < MICROSCOPE_REVEAL_COST) {
+      return {
+        ok: false,
+        reason: 'insufficient_dust',
+        requiredDust: MICROSCOPE_REVEAL_COST,
+        availableDust: this.state.geneticDust,
+      };
+    }
+
+    // 6. Одно атомарное списание и раскрытие. Шаг 4 уже гарантировал, что
+    // этот локус гетерозиготен и не раскрыт — resolveExtendedCard() здесь
+    // используется только для того, чтобы узнать, какой из двух аллелей
+    // пары (`a`/`b`) сейчас ВЫРАЖЕН, а другой — скрытый (extended-view
+    // `unresearched` намеренно не отдаёт наружу скрытое значение, задание
+    // п.«до оплаты — только название категории»).
+    const card = resolveExtendedCard(specimen.genomeV2, revealedLoci);
+    const view = card[locus];
+    // Недостижимо после шага 4 (available гарантирует unresearched), но
+    // TypeScript не умеет вывести это из отдельного вызова — явная защита
+    // вместо небезопасного приведения типа.
+    if (view.state !== 'unresearched') return { ok: false, reason: 'locus_not_available' };
+    const pair = specimen.genomeV2[locus] as { a: string; b: string };
+    const revealedAllele = pair.a === view.expressed ? pair.b : pair.a;
+
+    this.state = {
+      ...this.state,
+      geneticDust: this.state.geneticDust - MICROSCOPE_REVEAL_COST,
+      specimens: this.state.specimens.map((s) =>
+        s.id === specimenId
+          ? { ...s, revealedLoci: [...revealedLoci, { locus, source: 'microscope' as const }] }
+          : s
+      ),
+    };
+    this.emit();
+    return { ok: true, locus, revealedAllele, dustSpent: MICROSCOPE_REVEAL_COST };
   }
 
   /** Только для тестов/отладки — добавить временный ускоритель роста. */

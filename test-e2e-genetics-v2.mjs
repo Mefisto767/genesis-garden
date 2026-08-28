@@ -252,13 +252,21 @@ await page.waitForTimeout(500);
 
 // 3: maturity harvest grants formulaic pollen (speciesBasePollen(1)=2 +
 // rarityBonus in {0,1,2}) — real RNG breeding through the UI, so only the
-// valid range is asserted, not one exact number.
-const pollenAfterHarvest = (await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))).pollen;
+// valid range is asserted, not one exact number. Genetics V2 — Slice 8
+// (contract §4.11.1): this is also the very first growing->mature V2 harvest
+// of this save (firstHybridRewardClaimed was never set before), so it
+// legitimately ALSO grants the one-time "+8 pollen" first-hybrid bonus on
+// top of the normal formulaic reward — range widened by exactly +8 to match,
+// not weakened.
+const stateAfterHarvest = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+const pollenAfterHarvest = stateAfterHarvest.pollen;
 const pollenDelta = pollenAfterHarvest - pollenBeforeHarvest;
 assert(
-  pollenDelta >= 2 && pollenDelta <= 4,
-  `maturity harvest granted formulaic pollen for species 1 (base 2 + rarityBonus 0..2, delta=${pollenDelta})`
+  pollenDelta >= 2 + 8 && pollenDelta <= 4 + 8,
+  `maturity harvest granted formulaic pollen (base 2 + rarityBonus 0..2) plus the Slice 8 first-hybrid +8 bonus (delta=${pollenDelta})`
 );
+assert(stateAfterHarvest.firstHybridRewardClaimed === true, 'firstHybridRewardClaimed flipped to true on the first-ever V2 harvest (Slice 8)');
+assert(stateAfterHarvest.labLevel === 2, 'labLevel opened to 2 atomically with the first-hybrid grant (Slice 8)');
 
 await page.getByRole('button', { name: 'Альбом' }).click();
 await page.waitForTimeout(400);

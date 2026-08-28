@@ -198,8 +198,12 @@ describe('breedNurseryV2 — отказы не расходуют бесплат
   });
 
   it('interspecies_locked не переключает firstBreedFreeClaimed', () => {
+    // Genetics V2 — Slice 8: speciesId 2 (Колокольник) дополнительно гейтится
+    // Lab L2 (contract §4.11.2) — labLevel:2 снимает этот новый гейт, чтобы
+    // изолированно проверить старую (Slice 3-4) species-валидацию.
     const state = baseState({
       firstBreedFreeClaimed: false,
+      labLevel: 2,
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
     const store = storeWith(state);
@@ -212,6 +216,7 @@ describe('breedNurseryV2 — отказы не расходуют бесплат
     const state = baseState({
       firstBreedFreeClaimed: true, // платный режим — insufficient_pollen был бы правдоподобен, если бы species-проверка не шла раньше
       pollen: 0,
+      labLevel: 2, // снимает Slice 8 species_locked гейт Колокольника — см. комментарий выше
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
     const store = storeWith(state);
@@ -266,14 +271,21 @@ describe('harvestHybridV2 — награда пыльцы (Slice 6)', () => {
     return baseState({ plots, ...overrides });
   }
 
+  // Genetics V2 — Slice 8 (contract §4.11.1): все фикстуры ниже явно
+  // устанавливают `firstHybridRewardClaimed: true`, чтобы изолированно
+  // проверять только математику награды пыльцы (Slice 6) — без наложения
+  // одноразового Slice-8-бонуса "+8 пыльцы за первого гибрида". Сам
+  // Slice-8-грант проверяется отдельным набором тестов
+  // (`store.labV2.test.ts`), не здесь.
+
   it('первый сбор начисляет правильную пыльцу (species 1, Common) — pollen += 2', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 10 }));
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 10, firstHybridRewardClaimed: true }));
     store.harvestHybridV2(0, 5 * 60 * 1000);
     expect(store.getState().pollen).toBe(12);
   });
 
   it('repeat harvest начисляет правильную пыльцу (второй готовый цикл)', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0 }));
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0, firstHybridRewardClaimed: true }));
     store.harvestHybridV2(0, 5 * 60 * 1000); // первый сбор -> +2
     expect(store.getState().pollen).toBe(2);
     store.harvestHybridV2(0, 5 * 60 * 1000 + 20 * 60 * 1000); // повторный цикл -> ещё +2
@@ -281,14 +293,14 @@ describe('harvestHybridV2 — награда пыльцы (Slice 6)', () => {
   });
 
   it('сбор до готовности (ранний вызов) не начисляет пыльцу', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 5 }));
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 5, firstHybridRewardClaimed: true }));
     const ok = store.harvestHybridV2(0, 5 * 60 * 1000 - 1);
     expect(ok).toBe(false);
     expect(store.getState().pollen).toBe(5);
   });
 
   it('повторный сбор до готовности повторного цикла не начисляет пыльцу второй раз', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0 }));
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0, firstHybridRewardClaimed: true }));
     store.harvestHybridV2(0, 5 * 60 * 1000);
     expect(store.getState().pollen).toBe(2);
     const ok = store.harvestHybridV2(0, 5 * 60 * 1000 + 1000); // задолго до 20 минут
@@ -297,21 +309,25 @@ describe('harvestHybridV2 — награда пыльцы (Slice 6)', () => {
   });
 
   it('разные rarity дают 2/3/4 пыльцы (Common/Rare(Minor)/Legendary(Signature))', () => {
-    const commonStore = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0 }));
+    const commonStore = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0, firstHybridRewardClaimed: true }));
     commonStore.harvestHybridV2(0, 5 * 60 * 1000);
     expect(commonStore.getState().pollen).toBe(2);
 
-    const rareStore = storeWith(plantedState(fixtureGenomeV2(1, { mutationId: 'golden_vein' }), 0, { pollen: 0 }));
+    const rareStore = storeWith(
+      plantedState(fixtureGenomeV2(1, { mutationId: 'golden_vein' }), 0, { pollen: 0, firstHybridRewardClaimed: true })
+    );
     rareStore.harvestHybridV2(0, 5 * 60 * 1000);
     expect(rareStore.getState().pollen).toBe(3);
 
-    const legendaryStore = storeWith(plantedState(fixtureGenomeV2(1, { mutationId: 'phoenix' }), 0, { pollen: 0 }));
+    const legendaryStore = storeWith(
+      plantedState(fixtureGenomeV2(1, { mutationId: 'phoenix' }), 0, { pollen: 0, firstHybridRewardClaimed: true })
+    );
     legendaryStore.harvestHybridV2(0, 5 * 60 * 1000);
     expect(legendaryStore.getState().pollen).toBe(4);
   });
 
   it('первый сбор остаётся идемпотентным по Specimen — повторный вызов на готовности не начисляет пыльцу дважды за один и тот же mature-переход', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0 }));
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0, firstHybridRewardClaimed: true }));
     const ok1 = store.harvestHybridV2(0, 5 * 60 * 1000);
     expect(ok1).toBe(true);
     expect(store.getState().pollen).toBe(2);
@@ -323,8 +339,12 @@ describe('harvestHybridV2 — награда пыльцы (Slice 6)', () => {
     expect(store.getState().pollen).toBe(2);
   });
 
-  it('firstHybridRewardClaimed/firstRecycleTopUpClaimed/labLevel/geneticDust не меняются сбором', () => {
-    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0 }));
+  it('firstHybridRewardClaimed/firstRecycleTopUpClaimed/labLevel/geneticDust не меняются повторным сбором (грант уже выдан ранее)', () => {
+    // Genetics V2 — Slice 8: сбор ПОСЛЕ того, как одноразовый грант уже
+    // выдан (firstHybridRewardClaimed:true в фикстуре), не должен снова
+    // трогать эти поля — обычный Slice 6/7 сбор пыльцы не должен иметь
+    // побочных эффектов на обучающие флаги/лаб/пыль.
+    const store = storeWith(plantedState(fixtureGenomeV2(1), 0, { pollen: 0, firstHybridRewardClaimed: true }));
     const before = store.getState();
     store.harvestHybridV2(0, 5 * 60 * 1000);
     const after = store.getState();
