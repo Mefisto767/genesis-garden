@@ -3,6 +3,7 @@ import { gameStore } from '../store';
 import { getSeedDef } from '../seedCatalog';
 import type { Plot, PlotHybridV2 } from '../types';
 import { gardenEvents } from '../events';
+import { GENETICS_V2_ENABLED } from '../featureFlags';
 import { overhaulEvents } from '../../overhaul/events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
 import { track } from '../../analytics/track';
@@ -299,8 +300,23 @@ export class EstateScene extends Phaser.Scene {
     // ДО `!plot.seedId`, т.к. занятая V2-грядка тоже имеет `seedId === null`
     // (инвариант mutual-exclusion, contract §4.8.1) — иначе она ошибочно
     // отрисовалась бы как пустая "+" грядка.
+    //
+    // Fix-pass (audit, bug 1): активный V2-рендер/harvest доступны ТОЛЬКО при
+    // `GENETICS_V2_ENABLED === true`. Если данные есть (`plot.hybridV2`), но
+    // флаг выключен (Overhaul + Legacy Genetics — например, save был сохранён,
+    // пока V2 был включён, а потом флаг переключили), грядка рисуется как
+    // нейтральная read-only "занятая" — БЕЗ раскрытия генома и БЕЗ клика в
+    // любое V2-действие (`renderHybridPlotCellReadOnly` не регистрирует
+    // pointerdown вообще). Ветка `!plot.seedId` ниже в обоих случаях
+    // недостижима для этой грядки (return выше) — значит `plantSeed()`
+    // (обычная посадка) никогда не может быть вызван кликом по такой грядке
+    // ни в одном из двух состояний флага, что бы ни показывалось визуально.
     if (plot.hybridV2) {
-      this.renderHybridPlotCell(plot, plot.hybridV2, x, y, size);
+      if (GENETICS_V2_ENABLED) {
+        this.renderHybridPlotCell(plot, plot.hybridV2, x, y, size);
+      } else {
+        this.renderHybridPlotCellReadOnly(x, y, size);
+      }
       return;
     }
 
@@ -393,6 +409,36 @@ export class EstateScene extends Phaser.Scene {
    * повторный цикл показан отдельным прогресс-баром поверх постоянного
    * растения, не как рост самого растения.
    */
+  /**
+   * Fix-pass (audit, bug 1): нейтральная read-only "занятая" грядка для
+   * `plot.hybridV2`, когда `GENETICS_V2_ENABLED === false` (Overhaul + Legacy
+   * Genetics). Намеренно НЕ читает ничего из `hybridV2`/`genomeV2`/
+   * `specimen` — ни speciesId, ни фаза, ни окрас не используются, чтобы
+   * физически не было способа случайно "подсветить" геном через эту ветку.
+   * `addTile()` делает тайл интерактивным (useHandCursor для консистентного
+   * вида грядок), но pointerdown-обработчик НЕ регистрируется вообще — клик
+   * не имеет никакого эффекта: не открывает HybridCard (requestHybridCard не
+   * эмитится), не проваливается в посадку (эта грядка никогда не доходит до
+   * ветки `!plot.seedId` — см. return в вызывающем renderPlotCell). Никакого
+   * прогресс-бара/таймера/кнопки "Собрать" — грядка выглядит просто занятой,
+   * без намёка на то, что можно с ней что-то сделать.
+   */
+  private renderHybridPlotCellReadOnly(x: number, y: number, size: number) {
+    this.addTile(x, y, size, false);
+    const marker = this.add.circle(x, y - size * 0.02, size * 0.3, PALETTE.neutral, 0.9);
+    marker.setDepth(y);
+    const label = this.add
+      .text(x, y + size * 0.34, 'Занято', {
+        fontFamily: FONT_BODY,
+        fontSize: `${size * 0.15}px`,
+        color: INK,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.85);
+    label.setDepth(y + 1);
+    this.plotsContainer.add([marker, label]);
+  }
+
   private renderHybridPlotCell(plot: Plot, hybridV2: PlotHybridV2, x: number, y: number, size: number) {
     const status = gameStore.hybridPlotStatusV2(plot);
     if (!status) return; // повреждённые данные (contract §4.8.4) — не рендерим, не роняем сцену

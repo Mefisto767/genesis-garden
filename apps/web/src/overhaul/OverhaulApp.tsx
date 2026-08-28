@@ -130,11 +130,19 @@ export function OverhaulApp() {
   useEffect(() => {
     const offPlant = gardenEvents.on('requestPlant', ({ plotId }) => setPlantPlotId(plotId));
     const offToast = gardenEvents.on('toast', ({ text }) => setToast(text));
-    const offHybridCard = gardenEvents.on('requestHybridCard', ({ plotId }) => setHybridCardPlotId(plotId));
+    // Fix-pass (audit, bug 1): подписка на requestHybridCard — только при
+    // активном GENETICS_V2_ENABLED. EstateScene и так никогда не эмитит этот
+    // ивент, когда флаг выключен (см. EstateScene.ts renderHybridPlotCellReadOnly),
+    // но подписка здесь дополнительно и независимо гарантирует, что в
+    // Overhaul + Legacy Genetics не существует вообще ни одного пути открыть
+    // HybridCardPanel — belt-and-suspenders, оба слоя проверяют флаг.
+    const offHybridCard = GENETICS_V2_ENABLED
+      ? gardenEvents.on('requestHybridCard', ({ plotId }) => setHybridCardPlotId(plotId))
+      : undefined;
     return () => {
       offPlant();
       offToast();
-      offHybridCard();
+      offHybridCard?.();
     };
   }, []);
 
@@ -235,7 +243,11 @@ export function OverhaulApp() {
             }}
           />
         ))}
-      {hybridCardPlotId !== null && (
+      {/* Fix-pass (audit, bug 1): рендер тоже под флагом (defense-in-depth —
+          hybridCardPlotId физически не может быть выставлен без флага, см.
+          подписку выше, но проверка здесь ничего не стоит и защищает от
+          будущих регрессий, если кто-то добавит ещё один способ его выставить). */}
+      {GENETICS_V2_ENABLED && hybridCardPlotId !== null && (
         <HybridCardPanel plotId={hybridCardPlotId} onClose={() => setHybridCardPlotId(null)} />
       )}
       {toast && <Toast text={toast} />}

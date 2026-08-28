@@ -41,6 +41,19 @@ export function speciesGrowthV2(speciesId: number): SpeciesGrowthV2 | undefined 
   return SPECIES_GROWTH_V2[speciesId];
 }
 
+/**
+ * Genetics V2 fix-pass (audit, bug 2): текст счётчика Nursery Tray в
+ * `LabPanelV2.tsx`. При `count >= capacity` UI обязан показывать ДОСЛОВНО
+ * `Питомник заполнен: X/Y` — не перестановку вида `Питомник: X/Y — питомник
+ * заполнен`, которая была раньше. Вынесена в чистую функцию (а не оставлена
+ * инлайном в JSX), т.к. в репозитории нет React Testing Library/`.tsx`
+ * vitest-конфигурации (`vitest.config.ts` включает только `src/**\/*.test.ts`)
+ * — иначе точный текст было бы нечем проверить автоматически.
+ */
+export function nurseryTrayLabel(count: number, capacity: number = NURSERY_TRAY_CAPACITY): string {
+  return count >= capacity ? `Питомник заполнен: ${count}/${capacity}` : `Питомник: ${count}/${capacity}`;
+}
+
 export interface GrowthStatusV2 {
   ready: boolean;
   /** 0..1. */

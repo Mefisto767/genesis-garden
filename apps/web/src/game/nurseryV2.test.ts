@@ -3,6 +3,7 @@ import {
   NURSERY_TRAY_CAPACITY,
   SPECIES_GROWTH_V2,
   hybridGrowthStatusV2,
+  nurseryTrayLabel,
   regrowStatusV2,
   speciesGrowthV2,
 } from './nurseryV2';
@@ -138,5 +139,35 @@ describe('regrowStatusV2 — повторный цикл', () => {
     expect(status?.ready).toBe(true);
     const notYet = regrowStatusV2(1, 1_000_000, 1_000_000 + 20 * 60 * 1000 - 1);
     expect(notYet?.ready).toBe(false);
+  });
+});
+
+// ============================================================================
+// Genetics V2 fix-pass (audit, bug 2) — точный текст полного Nursery Tray.
+// ============================================================================
+
+describe('nurseryTrayLabel', () => {
+  it('ровно 8/8 (capacity) — дословно "Питомник заполнен: 8/8", без перестановки', () => {
+    expect(nurseryTrayLabel(8, 8)).toBe('Питомник заполнен: 8/8');
+  });
+
+  it('по умолчанию capacity = NURSERY_TRAY_CAPACITY', () => {
+    expect(nurseryTrayLabel(NURSERY_TRAY_CAPACITY)).toBe(`Питомник заполнен: ${NURSERY_TRAY_CAPACITY}/${NURSERY_TRAY_CAPACITY}`);
+  });
+
+  it('пустой трей — обычный формат "Питомник: 0/8", не "заполнен"', () => {
+    expect(nurseryTrayLabel(0, 8)).toBe('Питомник: 0/8');
+  });
+
+  it('частично заполненный трей (1/8) — обычный формат', () => {
+    expect(nurseryTrayLabel(1, 8)).toBe('Питомник: 1/8');
+  });
+
+  it('7/8 — ещё не полный, обычный формат', () => {
+    expect(nurseryTrayLabel(7, 8)).toBe('Питомник: 7/8');
+  });
+
+  it('count > capacity (защитный случай) — тоже считается "заполнен"', () => {
+    expect(nurseryTrayLabel(9, 8)).toBe('Питомник заполнен: 9/8');
   });
 });

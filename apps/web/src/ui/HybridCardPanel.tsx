@@ -1,6 +1,6 @@
 import { gameStore } from '../game/store';
 import { useGameState } from '../game/useGameState';
-import { resolveSimpleCard } from '../game/phenotypeV2';
+import { buildHybridCardViewModel } from '../game/hybridCardViewModel';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -10,17 +10,20 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
  * родословной». Открывается ТОЛЬКО для `Plot.hybridV2.phase === 'mature'`
  * (см. game/scenes/EstateScene.ts) — растущий гибрид карточку не показывает,
  * геном ещё не раскрыт (contract §4.8.3).
+ *
+ * Fix-pass (audit, bug 3): вся подготовка данных (перевод технических ID в
+ * русские названия, вычисление редкости) вынесена в чистую типизированную
+ * `buildHybridCardViewModel` (game/hybridCardViewModel.ts) — этот компонент
+ * только рендерит уже готовую view-model, сам не знает про сырые ID геномов.
+ * Показывает название вида (не `#1`/`#2`), все девять выраженных локусов,
+ * редкость (`rarityOfV2`) и mutation, если она есть. Скрытые пары аллелей/
+ * parentIds/микроскоп/Reveal по-прежнему вне области — view-model физически
+ * не предоставляет ничего из этого.
  */
 
 interface HybridCardPanelProps {
   plotId: number;
   onClose: () => void;
-}
-
-function prettyAllele(id: string): string {
-  const tail = id.includes('_') ? id.slice(id.indexOf('_') + 1) : id;
-  const words = tail.replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function HybridCardPanel({ plotId, onClose }: HybridCardPanelProps) {
@@ -38,7 +41,7 @@ export function HybridCardPanel({ plotId, onClose }: HybridCardPanelProps) {
   const specimen = state.specimens.find((s) => s.id === hybridV2.specimenId);
   if (!specimen || !specimen.genomeV2) return null;
 
-  const card = resolveSimpleCard(specimen.genomeV2);
+  const card = buildHybridCardViewModel(specimen.genomeV2);
   const status = gameStore.hybridPlotStatusV2(plot!);
 
   function collect() {
@@ -62,36 +65,22 @@ export function HybridCardPanel({ plotId, onClose }: HybridCardPanelProps) {
         <div className="sheet-list">
           <div className="sheet-row">
             <div className="sheet-row-title">Вид</div>
-            <div className="sheet-row-count">#{card.speciesId}</div>
+            <div className="sheet-row-count">{card.speciesName}</div>
           </div>
           <div className="sheet-row">
-            <div className="sheet-row-title">Основной цвет</div>
-            <div className="sheet-row-count">{prettyAllele(card.primaryColor)}</div>
+            <div className="sheet-row-title">Редкость</div>
+            <div className="sheet-row-count">{card.rarityLabel}</div>
           </div>
-          <div className="sheet-row">
-            <div className="sheet-row-title">Доп. цвет</div>
-            <div className="sheet-row-count">{prettyAllele(card.secondaryColor)}</div>
-          </div>
-          <div className="sheet-row">
-            <div className="sheet-row-title">Листва</div>
-            <div className="sheet-row-count">{prettyAllele(card.leafColor)}</div>
-          </div>
-          <div className="sheet-row">
-            <div className="sheet-row-title">Размер</div>
-            <div className="sheet-row-count">{prettyAllele(card.size)}</div>
-          </div>
-          <div className="sheet-row">
-            <div className="sheet-row-title">Аура</div>
-            <div className="sheet-row-count">{prettyAllele(card.aura)}</div>
-          </div>
-          <div className="sheet-row">
-            <div className="sheet-row-title">Узор</div>
-            <div className="sheet-row-count">{prettyAllele(card.pattern)}</div>
-          </div>
-          {card.mutationId && (
+          {card.loci.map((row) => (
+            <div className="sheet-row" key={row.key}>
+              <div className="sheet-row-title">{row.label}</div>
+              <div className="sheet-row-count">{row.value}</div>
+            </div>
+          ))}
+          {card.mutationLabel && (
             <div className="sheet-row">
               <div className="sheet-row-title">Мутация</div>
-              <div className="sheet-row-count">✦ {prettyAllele(card.mutationId)}</div>
+              <div className="sheet-row-count">✦ {card.mutationLabel}</div>
             </div>
           )}
         </div>

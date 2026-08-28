@@ -202,6 +202,29 @@ for (let i = 0; i < 10 && !cardOpen; i++) {
 assert(cardOpen, 'clicking the mature V2 plot opens the simple card panel');
 const forbiddenElements = await page.getByText(/Микроскоп|Reveal|Раскрыть|Родословн|Pedigree/).first().isVisible().catch(() => false);
 assert(!forbiddenElements, 'simple card has no microscope/reveal/pedigree elements (Slice 5 scope only)');
+
+// --- Test E2 (fix-pass, bug 3): species name, rarity, and all nine locus
+// rows are shown on the mature card — none of this was revealed before
+// maturity (Test B/C above already assert no phenotype leaked pre-harvest).
+const speciesNameVisible = await page.getByText('Солнечник').first().isVisible().catch(() => false);
+assert(speciesNameVisible, 'mature card shows the species NAME ("Солнечник"), not "#1"');
+const rarityRowVisible = await page.getByText('Редкость').first().isVisible().catch(() => false);
+assert(rarityRowVisible, 'mature card shows a computed rarity row (rarityOfV2)');
+const NINE_LOCUS_LABELS = [
+  'Стебель',
+  'Форма листвы',
+  'Форма цветка',
+  'Основной цвет',
+  'Доп. цвет',
+  'Листва',
+  'Узор',
+  'Размер',
+  'Аура',
+];
+for (const label of NINE_LOCUS_LABELS) {
+  const visible = await page.getByText(label, { exact: true }).first().isVisible().catch(() => false);
+  assert(visible, `mature card shows the "${label}" locus row (all 9 expressed loci, no gaps)`);
+}
 const collectDisabled = await page.locator('.sheet-buy-btn', { hasText: 'Собрать' }).isDisabled().catch(() => true);
 assert(collectDisabled, 'repeat-cycle collect button correctly disabled (20 min regrow not elapsed yet)');
 await shot('06-hybrid-card-panel');

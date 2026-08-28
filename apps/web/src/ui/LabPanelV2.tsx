@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { GameState } from '../game/types';
 import { gameStore, type BreedNurseryV2RejectionReason } from '../game/store';
-import { NURSERY_TRAY_CAPACITY } from '../game/nurseryV2';
+import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel } from '../game/nurseryV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -79,8 +79,7 @@ export function LabPanelV2({ specimens, nurseryTray, onClose }: LabPanelV2Props)
         </p>
 
         <div className={trayFull ? 'lab-gene-lock-warning' : 'album-dust'}>
-          Питомник: {nurseryTray.length}/{NURSERY_TRAY_CAPACITY}
-          {trayFull ? ' — питомник заполнен' : ''}
+          {nurseryTrayLabel(nurseryTray.length, NURSERY_TRAY_CAPACITY)}
         </div>
 
         {notice && <p className="sheet-empty lab-hint">{notice}</p>}
