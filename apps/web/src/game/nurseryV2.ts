@@ -54,6 +54,23 @@ export function nurseryTrayLabel(count: number, capacity: number = NURSERY_TRAY_
   return count >= capacity ? `Питомник заполнен: ${count}/${capacity}` : `Питомник: ${count}/${capacity}`;
 }
 
+/**
+ * Slice 7 UI-фикс (defect report bug 1): подсказка при заполненном питомнике
+ * — ОТДЕЛЬНАЯ строка от `nurseryTrayLabel()` выше, не дописанная в тот же DOM-
+ * элемент. `LabPanelV2.tsx` раньше конкатенировал ` — посади одно из семян…`
+ * в тот же элемент, что и точный текст `Питомник заполнен: 8/8` — это
+ * технически меняло текстовое содержимое элемента с точного текста на
+ * составную строку. Вынесена в чистую функцию по тому же принципу, что и
+ * `nurseryTrayLabel` (нет RTL/`.tsx`-vitest — иначе точный текст было бы
+ * нечем проверить автоматически). `null`, пока питомник не заполнен — `.tsx`
+ * решает, рендерить ли отдельный элемент вообще.
+ */
+export function nurseryTrayFullHint(count: number, capacity: number = NURSERY_TRAY_CAPACITY): string | null {
+  return count >= capacity
+    ? 'Посади одно из семян на грядку или переработай его, чтобы освободить место.'
+    : null;
+}
+
 export interface GrowthStatusV2 {
   ready: boolean;
   /** 0..1. */

@@ -3,6 +3,7 @@ import {
   NURSERY_TRAY_CAPACITY,
   SPECIES_GROWTH_V2,
   hybridGrowthStatusV2,
+  nurseryTrayFullHint,
   nurseryTrayLabel,
   regrowStatusV2,
   speciesGrowthV2,
@@ -169,5 +170,38 @@ describe('nurseryTrayLabel', () => {
 
   it('count > capacity (защитный случай) — тоже считается "заполнен"', () => {
     expect(nurseryTrayLabel(9, 8)).toBe('Питомник заполнен: 9/8');
+  });
+});
+
+// ============================================================================
+// Slice 7 UI-фикс (defect report bug 1) — подсказка при заполненном питомнике
+// как ОТДЕЛЬНОЕ значение от nurseryTrayLabel(), не дописанное в ту же строку.
+// ============================================================================
+
+describe('nurseryTrayFullHint', () => {
+  it('7/8 — ещё не полный, подсказки нет (null)', () => {
+    expect(nurseryTrayFullHint(7, 8)).toBeNull();
+  });
+
+  it('ровно 8/8 (capacity) — дословный текст подсказки', () => {
+    expect(nurseryTrayFullHint(8, 8)).toBe(
+      'Посади одно из семян на грядку или переработай его, чтобы освободить место.'
+    );
+  });
+
+  it('по умолчанию capacity = NURSERY_TRAY_CAPACITY', () => {
+    expect(nurseryTrayFullHint(NURSERY_TRAY_CAPACITY)).toBe(
+      'Посади одно из семян на грядку или переработай его, чтобы освободить место.'
+    );
+  });
+
+  it('пустой трей (0/8) — подсказки нет', () => {
+    expect(nurseryTrayFullHint(0, 8)).toBeNull();
+  });
+
+  it('count > capacity (защитный случай) — подсказка тоже показывается', () => {
+    expect(nurseryTrayFullHint(9, 8)).toBe(
+      'Посади одно из семян на грядку или переработай его, чтобы освободить место.'
+    );
   });
 });

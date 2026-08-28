@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GameState } from '../game/types';
 import { gameStore } from '../game/store';
 import { buildHybridCardViewModel } from '../game/hybridCardViewModel';
+import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -30,7 +31,10 @@ interface AlbumPanelV2Props {
 }
 
 export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPanelV2Props) {
-  const [notice, setNotice] = useState<string | null>(null);
+  // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
+  // результат переработки (`dustGained`), НЕ собранная строка — рендерится
+  // как два отдельных DOM-элемента ниже, без объединяющей пунктуации.
+  const [recycleNotice, setRecycleNotice] = useState<RecycleNoticeLines | null>(null);
   // Genetics V2 — Slice 7: id specimen, для которого сейчас показан
   // двухшаговый экран подтверждения переработки. Отмена — полный no-op на
   // уровне UI, `recycleSpecimenV2` не вызывается вообще.
@@ -54,7 +58,9 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
     const result = gameStore.recycleSpecimenV2(id);
     setPendingRecycleId(null);
     if (result.ok) {
-      setNotice(`+${result.dustGained} генетической пыли · Пыль пригодится в лаборатории`);
+      // Structured result straight from the store — no string built then
+      // parsed apart (defect report bug 2).
+      setRecycleNotice(recycleNoticeLines(result.dustGained));
     }
   }
 
@@ -69,7 +75,12 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, onClose }: AlbumPa
         </div>
         <div className="album-dust">Генетическая пыль: {geneticDust}</div>
 
-        {notice && <p className="sheet-empty lab-hint">{notice}</p>}
+        {recycleNotice && (
+          <>
+            <p className="sheet-empty lab-hint">{recycleNotice.primary}</p>
+            <p className="sheet-empty lab-hint">{recycleNotice.secondary}</p>
+          </>
+        )}
 
         {sorted.length === 0 ? (
           <div className="sheet-empty-block sheet-empty-centered">

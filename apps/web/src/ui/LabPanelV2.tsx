@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { GameState } from '../game/types';
 import { gameStore, type BreedNurseryV2RejectionReason } from '../game/store';
-import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel } from '../game/nurseryV2';
+import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel, nurseryTrayFullHint } from '../game/nurseryV2';
 import { breedCostV2 } from '../game/pollenV2';
+import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -52,6 +53,10 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
 export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaimed, onClose }: LabPanelV2Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
+  // результат переработки (`dustGained`), НЕ собранная строка — рендерится
+  // как два отдельных DOM-элемента ниже, без объединяющей пунктуации.
+  const [recycleNotice, setRecycleNotice] = useState<RecycleNoticeLines | null>(null);
   // Genetics V2 — Slice 7 (contract §4.10.5): id семени, для которого сейчас
   // показан двухшаговый экран подтверждения переработки ("Да, переработать" /
   // "Отмена"). Отмена сбрасывает это состояние без вызова store —
@@ -64,6 +69,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
   function toggle(id: string) {
     setNotice(null);
+    setRecycleNotice(null);
     setSelected((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= 2) return [prev[1], id];
@@ -96,6 +102,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
   function doBreed() {
     if (selected.length !== 2 || interspeciesSelected) return;
+    setRecycleNotice(null);
     const result = gameStore.breedNurseryV2(selected[0], selected[1]);
     if (!result.ok) {
       if (result.reason === 'insufficient_pollen') {
@@ -114,7 +121,10 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
     const result = gameStore.recycleNurserySeedV2(id);
     setPendingRecycleSeedId(null);
     if (result.ok) {
-      setNotice(`+${result.dustGained} генетической пыли · Пыль пригодится в лаборатории`);
+      // Structured result straight from the store — no string built then
+      // parsed apart (defect report bug 2).
+      setNotice(null);
+      setRecycleNotice(recycleNoticeLines(result.dustGained));
     }
   }
 
@@ -136,12 +146,24 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
         <div className={trayFull ? 'lab-gene-lock-warning' : 'album-dust'}>
           {nurseryTrayLabel(nurseryTray.length, NURSERY_TRAY_CAPACITY)}
-          {trayFull && ' — посади одно из семян ниже или перерабатывай, чтобы освободить место'}
         </div>
+        {/* Slice 7 UI-фикс (defect report bug 1): подсказка при заполненном
+            питомнике — ОТДЕЛЬНЫЙ элемент, не дописанная в тот же элемент, что
+            и точный текст "Питомник заполнен: 8/8" выше. */}
+        {trayFull && <p className="sheet-empty lab-hint">{nurseryTrayFullHint(nurseryTray.length, NURSERY_TRAY_CAPACITY)}</p>}
 
         <div className="album-dust">Пыльца: {pollen}</div>
 
         {notice && <p className="sheet-empty lab-hint">{notice}</p>}
+        {/* Slice 7 UI-фикс (defect report bug 2): два отдельных элемента, без
+            объединяющей пунктуации (не " · "), из структурированного
+            RecycleNoticeLines. */}
+        {recycleNotice && (
+          <>
+            <p className="sheet-empty lab-hint">{recycleNotice.primary}</p>
+            <p className="sheet-empty lab-hint">{recycleNotice.secondary}</p>
+          </>
+        )}
 
         {candidates.length < 2 ? (
           <div className="sheet-empty-block sheet-empty-centered">

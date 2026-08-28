@@ -393,6 +393,27 @@ assert(
   `first-ever recycle tops up to at least 3 dust regardless of rarity (got ${afterSeedRecycle.geneticDust})`
 );
 assert(afterSeedRecycle.firstRecycleTopUpClaimed === true, 'firstRecycleTopUpClaimed flipped to true after the first recycle');
+
+// --- Slice 7 UI-фикс (defect report bug 2), exact assertions: after a
+// successful Nursery Seed recycle, the "+N генетической пыли" total and the
+// "Пыль пригодится в лаборатории" line must be TWO separate DOM elements,
+// never joined with "·" or any other punctuation into one string. ---
+const dustGainedFromSeed = afterSeedRecycle.geneticDust - dustBeforeCancel;
+const seedPrimaryText = `+${dustGainedFromSeed} генетической пыли`;
+const seedPrimaryVisible = await page.getByText(seedPrimaryText, { exact: true }).first().isVisible().catch(() => false);
+assert(seedPrimaryVisible, `nursery seed recycle shows an exact separate element "${seedPrimaryText}"`);
+const seedSecondaryVisible = await page
+  .getByText('Пыль пригодится в лаборатории', { exact: true })
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(seedSecondaryVisible, 'nursery seed recycle shows an exact separate element "Пыль пригодится в лаборатории"');
+const bodyTextAfterSeedRecycle = await page.locator('body').innerText();
+assert(
+  !bodyTextAfterSeedRecycle.includes('·'),
+  'no "·"-joined combined recycle notice string appears anywhere on the page after the nursery seed recycle'
+);
+
 await page.locator('.sheet-close').click();
 await page.waitForTimeout(200);
 
@@ -442,6 +463,29 @@ const freedPlot = afterAlbumRecycle.plots.find((p) => p.id === matureHybridPlot.
 assert(freedPlot.hybridV2 == null, 'the plot that held the recycled mature plant is now free (hybridV2 cleared)');
 assert(afterAlbumRecycle.geneticDust > beforeAlbumRecycle.geneticDust, 'geneticDust increased after the album recycle');
 
+// --- Slice 7 UI-фикс (defect report bug 2), exact assertions: after a
+// successful Specimen recycle from AlbumPanelV2, the same two lines must
+// appear as separate DOM elements, never joined with "·". ---
+const dustGainedFromSpecimen = afterAlbumRecycle.geneticDust - beforeAlbumRecycle.geneticDust;
+const specimenPrimaryText = `+${dustGainedFromSpecimen} генетической пыли`;
+const specimenPrimaryVisible = await page
+  .getByText(specimenPrimaryText, { exact: true })
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(specimenPrimaryVisible, `specimen recycle shows an exact separate element "${specimenPrimaryText}"`);
+const specimenSecondaryVisible = await page
+  .getByText('Пыль пригодится в лаборатории', { exact: true })
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(specimenSecondaryVisible, 'specimen recycle shows an exact separate element "Пыль пригодится в лаборатории"');
+const bodyTextAfterSpecimenRecycle = await page.locator('body').innerText();
+assert(
+  !bodyTextAfterSpecimenRecycle.includes('·'),
+  'no "·"-joined combined recycle notice string appears anywhere on the page after the specimen recycle'
+);
+
 // --- Test G2: favorite specimens are protected from recycling in the V2 album. ---
 const remainingCards = page.locator('.album-card');
 await remainingCards.nth(0).locator('.album-card-favorite').click();
@@ -457,6 +501,57 @@ assert(favoriteProtectedVisible, 'favorite specimen shows a blocking message ins
 const albumCardsAfterFavoriteAttempt = await page.locator('.album-card').count();
 assert(albumCardsAfterFavoriteAttempt === 2, 'attempting to recycle a favorite specimen did not remove it');
 await page.locator('.sheet-close').click();
+
+// --- Test H: Slice 7 UI-фикс (defect report bug 1), exact assertions —
+// force the Nursery Tray to 8/8 (localStorage injection, same time-travel
+// technique the rest of this script uses) and verify the full-tray label and
+// the hint below it are TWO separate DOM elements with the exact required
+// text, not one element with the hint appended to the label. ---
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('genesis-garden-save-v1'));
+  const template = state.specimens.find((s) => !!s.genomeV2).genomeV2;
+  state.nurseryTray = Array.from({ length: 8 }, (_, i) => ({
+    id: `synthetic-tray-full-${i}`,
+    genomeV2: template,
+    parentIds: ['synthetic-parent-a', 'synthetic-parent-b'],
+    createdAt: Date.now(),
+    plantedAt: null,
+    plotId: null,
+  }));
+  localStorage.setItem('genesis-garden-save-v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await dismissOnboarding();
+{
+  const nearLabScreenH = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+  await page.mouse.click(nearLabScreenH.x, nearLabScreenH.y);
+  let enteredLabH = false;
+  for (let i = 0; i < 30 && !enteredLabH; i++) {
+    const labScreen = await worldToScreen(labWorld.x, labWorld.y - 40);
+    await page.mouse.click(labScreen.x, labScreen.y);
+    await page.waitForTimeout(500);
+    enteredLabH = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
+  }
+  assert(enteredLabH, 'walked back into LaboratoryScene for the tray-full (8/8) UI-copy test');
+  const canvasBoxH = await page.locator('canvas').boundingBox();
+  await page.mouse.click(canvasBoxH.x + startX, canvasBoxH.y + hotspotY);
+  await page.waitForTimeout(400);
+}
+const trayFullLabelVisible = await page
+  .getByText('Питомник заполнен: 8/8', { exact: true })
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(trayFullLabelVisible, 'tray-full state shows an exact separate element "Питомник заполнен: 8/8" (nothing appended)');
+const trayFullHintVisible = await page
+  .getByText('Посади одно из семян на грядку или переработай его, чтобы освободить место.', { exact: true })
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(trayFullHintVisible, 'tray-full state shows the hint as an exact separate element');
+await page.locator('.sheet-close').click();
+await page.waitForTimeout(200);
 
 const realErrors = errors.filter((e) => !e.includes('ERR_TUNNEL_CONNECTION_FAILED'));
 assert(realErrors.length === 0, `no unexpected console/page errors (found: ${JSON.stringify(realErrors)})`);

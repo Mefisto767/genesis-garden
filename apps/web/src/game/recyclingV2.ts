@@ -82,3 +82,24 @@ export function firstRecycleTopUpV2(
   const topUpDust = firstRecycleTopUpClaimed || baseDust >= 3 ? 0 : 3 - baseDust;
   return { baseDust, topUpDust, dustGained: baseDust + topUpDust };
 }
+
+/** Slice 7 UI-фикс (defect report bug 2): две строки, показанные игроку после
+ * успешной переработки (`LabPanelV2.tsx`/`AlbumPanelV2.tsx`, contract
+ * §4.10.5) — как ДВА раздельных значения, не одна собранная строка. Раньше
+ * оба компонента строили `` `+${dustGained} генетической пыли · Пыль
+ * пригодится в лаборатории` `` одной строкой (с ` · ` посередине) и рендерили
+ * её одним DOM-элементом — по заданию это два отдельных элемента/строки, без
+ * объединяющей пунктуации. */
+export interface RecycleNoticeLines {
+  /** `+N генетической пыли`. */
+  primary: string;
+  /** `Пыль пригодится в лаборатории` — не зависит от `dustGained`. */
+  secondary: string;
+}
+
+/** Строит структурированные строки уведомления из уже посчитанного
+ * `dustGained` (`RecycleV2Success.dustGained`, store.ts) — вызывающая сторона
+ * не разбирает никакую сформированную строку, только передаёт число. */
+export function recycleNoticeLines(dustGained: number): RecycleNoticeLines {
+  return { primary: `+${dustGained} генетической пыли`, secondary: 'Пыль пригодится в лаборатории' };
+}

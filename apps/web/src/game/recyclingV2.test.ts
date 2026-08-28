@@ -4,6 +4,7 @@ import {
   grownRecycleDustV2,
   nurseryRecycleDustV2,
   firstRecycleTopUpV2,
+  recycleNoticeLines,
 } from './recyclingV2';
 import type { AllelePair, GenomeV2 } from './geneticsV2';
 import type { RarityTierV2 } from './rarityV2';
@@ -136,5 +137,42 @@ describe('firstRecycleTopUpV2 — компенсация до 3 при перв�
 
   it('флаг уже true -> компенсация не повторяется, даже если base < 3', () => {
     expect(firstRecycleTopUpV2(1, true)).toEqual({ baseDust: 1, topUpDust: 0, dustGained: 1 });
+  });
+});
+
+// ============================================================================
+// Slice 7 UI-фикс (defect report bug 2) — структурированный результат
+// уведомления о переработке: ДВЕ раздельные строки, не одна собранная через
+// ` · ` строка. `.tsx` рендерит `primary`/`secondary` как два отдельных
+// DOM-элемента (см. LabPanelV2.tsx/AlbumPanelV2.tsx) — здесь проверяется
+// только чистая модель представления.
+// ============================================================================
+
+describe('recycleNoticeLines', () => {
+  it('dustGained=3 -> primary "+3 генетической пыли", secondary дословно, без общей строки', () => {
+    expect(recycleNoticeLines(3)).toEqual({
+      primary: '+3 генетической пыли',
+      secondary: 'Пыль пригодится в лаборатории',
+    });
+  });
+
+  it('dustGained=1 -> "+1 генетической пыли"', () => {
+    expect(recycleNoticeLines(1)).toEqual({
+      primary: '+1 генетической пыли',
+      secondary: 'Пыль пригодится в лаборатории',
+    });
+  });
+
+  it('dustGained=80 (Mythic, полный тариф) -> "+80 генетической пыли"', () => {
+    expect(recycleNoticeLines(80)).toEqual({
+      primary: '+80 генетической пыли',
+      secondary: 'Пыль пригодится в лаборатории',
+    });
+  });
+
+  it('ни primary, ни secondary не содержат "·" — они не объединены в одну строку', () => {
+    const lines = recycleNoticeLines(5);
+    expect(lines.primary).not.toContain('·');
+    expect(lines.secondary).not.toContain('·');
   });
 });
