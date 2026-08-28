@@ -1,8 +1,10 @@
 # Genesis Garden — Gate 1 implementation contract (Genetics V2, 9-locus model)
 
-Дата: 2026-08-28 (проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, новый §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
-Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`) и Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) **завершены и приняты владельцем** 28.08.2026. Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9) начат этим проходом (проход 9): сначала этот docs-only contract-lock, затем отдельный код-коммит. Slice 7 и далее не начинаются без отдельного подтверждения владельца.
-Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+Дата: 2026-08-28 (проход 10 — Slice 6 принят владельцем, Slice 7 contract-lock, новый §4.10; проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
+Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`), Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) и Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9, docs `55d55ae` + код `08e9206`) **завершены и приняты владельцем** 28.08.2026. Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль — технический контракт §4.10) начат этим проходом (проход 10): сначала этот docs-only contract-lock, затем отдельный код-коммит. Slice 8 и далее не начинаются без отдельного подтверждения владельца.
+Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6, §0.9 — экономика переработки Slice 7), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+
+**Проход 10 — Slice 6 принят; contract-lock экономики переработки перед Slice 7**: владелец принял Slice 6 целиком (docs `55d55ae` + код `08e9206`) единым пакетом и разрешил начать только Slice 7. Технический контракт переработки (модуль `recyclingV2.ts`, `recycleNurserySeedV2`/`recycleSpecimenV2`, единая первая компенсация до 3, UI `LabPanelV2` nursery-список + новый `AlbumPanelV2`, защитный фикс `pollenRewardV2` для неподдерживаемого species) зафиксирован новым §4.10 ниже, ДО начала кода Slice 7. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7), persisted nursery lifecycle (§4.8) и пыльцевая экономика (§4.9, кроме точечного защитного фикса из §4.10.1) **не пересматривались**.
 
 **Проход 9 — Slice 5 принят; contract-lock пыльцевой экономики перед Slice 6**: владелец принял Slice 5 целиком (docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) единым пакетом и разрешил начать только Slice 6. Технический контракт пыльцевой экономики (модуль `pollenV2.ts`, точный расширенный порядок `breedNurseryV2`, причина отказа `insufficient_pollen` с `requiredPollen`/`availablePollen`, формула награды за сбор) зафиксирован новым §4.9 ниже, ДО начала кода Slice 6. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7) и persisted nursery lifecycle (§4.8) **не пересматривались**.
 
@@ -750,9 +752,118 @@ type BreedNurseryV2Result =
 
 ---
 
+## 4.10. Slice 7 — recycling economy (проход 10, contract-lock перед Slice 7)
+
+Технический контракт решений владельца из `GENETICS_TARGET_DELTA.md` §0.9 — обязателен для реализации Slice 7, наравне с §4.1-§4.9 для Slice 1-6. `SAVE_VERSION` остаётся `4` — `geneticDust`/`firstRecycleTopUpClaimed` уже существуют в схеме с Slice 1 (§4.1), Slice 7 только начинает их читать/писать игровой логикой V2, никакой новой миграции не требуется.
+
+### 4.10.1. Модуль `apps/web/src/game/recyclingV2.ts` — чистые функции и константы
+
+Новый модуль, без RNG и без чтения/записи `GameState` — та же дисциплина, что `pollenV2.ts`/`nurseryV2.ts`/`rarityV2.ts`. Экспортирует:
+
+```ts
+/** Пыль за переработку выращенного Specimen (100% тарифа), по тиру редкости.
+ *  Redcord<RarityTierV2, number> — TypeScript не скомпилирует таблицу с
+ *  пропущенным тиром, тот же приём полноты, что RARITY_POLLEN_BONUS (§4.9.1). */
+export const RARITY_RECYCLE_DUST: Record<RarityTierV2, number> = {
+  Common: 1, Uncommon: 2, Rare: 5, Epic: 12, Legendary: 30, Mythic: 80,
+};
+
+/** grownRecycleDustV2(genomeV2) = RARITY_RECYCLE_DUST[rarityOfV2(genomeV2, genomeV2.mutationId)].
+ *  Использует rarityOfV2 (Slice 3-4, без изменений) — не пересчитывает редкость самостоятельно,
+ *  тот же принцип, что pollenRewardV2 (§4.9.1). */
+export function grownRecycleDustV2(genomeV2: GenomeV2): number;
+
+/** nurseryRecycleDustV2(genomeV2) = Math.max(1, Math.floor(grownRecycleDustV2(genomeV2) / 2)).
+ *  Math.floor зафиксирован явно (не Math.round) — снимает неоднозначность 50% для Rare:
+ *  floor(5/2)=2, не 3. Math.max(1, …) — Common (floor(1/2)=0) не даёт 0 пыли. */
+export function nurseryRecycleDustV2(genomeV2: GenomeV2): number;
+
+export interface FirstRecycleTopUpResult {
+  /** Обычная награда по тарифу (grownRecycleDustV2 или nurseryRecycleDustV2 — вызывающая
+   *  сторона уже выбрала нужную ставку до вызова этой функции). */
+  baseDust: number;
+  /** 0, если firstRecycleTopUpClaimed уже true, или baseDust>=3; иначе 3-baseDust. */
+  topUpDust: number;
+  /** baseDust + topUpDust — итоговая сумма, единственное число, которое видит игрок в UI. */
+  dustGained: number;
+}
+
+/** Чистая функция первой компенсации (contract §0.9 п.2, delta doc §5.3 п.2) — не читает и не
+ *  пишет GameState, вызывающая сторона (store) сама решает, атомарно устанавливать ли
+ *  firstRecycleTopUpClaimed=true по результату. */
+export function firstRecycleTopUpV2(baseDust: number, firstRecycleTopUpClaimed: boolean): FirstRecycleTopUpResult;
+```
+
+`firstRecycleTopUpV2` — единственная точка правды для правила «дополнить до 3»: `topUpDust = firstRecycleTopUpClaimed || baseDust >= 3 ? 0 : 3 - baseDust`. Вызывается одинаково из `recycleNurserySeedV2` и `recycleSpecimenV2` — обе store-операции передают ей уже посчитанный `baseDust` своей ставки (половинной или полной) и текущее значение флага; ни одна не дублирует эту арифметику инлайном.
+
+**Защитный фикс Slice 6 (contract §0.9 п.3, delta doc §0.9 п.3).** `pollenRewardV2` (`pollenV2.ts`) переписывается на явную раннюю проверку неподдерживаемого `speciesId`:
+
+```ts
+export function pollenRewardV2(genomeV2: GenomeV2): number {
+  if (!isSupportedPollenSpecies(genomeV2.speciesId)) return 0;
+  const rarity = rarityOfV2(genomeV2, genomeV2.mutationId);
+  return SPECIES_BASE_POLLEN[genomeV2.speciesId] + RARITY_POLLEN_BONUS[rarity];
+}
+```
+
+Прежняя формула (`speciesBasePollenV2(id) + RARITY_POLLEN_BONUS[rarity]`) давала `0 + rarityBonus` для неподдерживаемого вида с достаточно редким геномом (например, Rare → `0+1=1`) — ненулевой результат для явно защитного пути, что противоречит собственной документированной цели «безопасный дефолт для неизвестного значения» (§4.9.1, тот же принцип `migrateMutationId`, §4.4). Новый unit-тест — редкий/мутировавший неподдерживаемый species должен давать ровно `0`, не `rarityBonus`.
+
+### 4.10.2. Store: `GameStore.recycleNurserySeedV2(hybridSeedId)`
+
+```ts
+type RecycleNurserySeedV2RejectionReason = 'seed_not_found';
+
+type RecycleNurserySeedV2Result =
+  | { ok: true; baseDust: number; topUpDust: number; dustGained: number }
+  | { ok: false; reason: RecycleNurserySeedV2RejectionReason };
+```
+
+Проверки строго по порядку: (1) `hybridSeedId` найден в `state.nurseryTray` (иначе `seed_not_found` — посаженный растущий гибрид уже не в трее, эта операция его физически не видит). Успех — один атомарный `this.state = {...}`: `nurseryTray` фильтруется без этого семени, `geneticDust: state.geneticDust + dustGained` (`dustGained` из `firstRecycleTopUpV2(nurseryRecycleDustV2(seed.genomeV2), state.firstRecycleTopUpClaimed)`), `firstRecycleTopUpClaimed: state.firstRecycleTopUpClaimed || true` (безусловно `true` после любого успеха — идемпотентно, если уже был `true`). `pollen`/`coins`/`pityCounter`/родители/`plots`/`specimens`/`labLevel` — не читаются и не пишутся этим методом. Отказ — полный no-op, ничего не меняется. Геном/фенотип семени нигде не раскрываются этим методом (ни в успехе, ни в отказе) — только факт удаления и сумма пыли.
+
+### 4.10.3. Store: `GameStore.recycleSpecimenV2(specimenId)`
+
+```ts
+type RecycleSpecimenV2RejectionReason =
+  | 'specimen_not_found'
+  | 'missing_genome_v2'
+  | 'favorite'
+  | 'ambiguous_plot_reference';
+
+type RecycleSpecimenV2Result =
+  | { ok: true; baseDust: number; topUpDust: number; dustGained: number }
+  | { ok: false; reason: RecycleSpecimenV2RejectionReason };
+```
+
+Проверки строго по порядку:
+
+1. `specimen = state.specimens.find(s => s.id === specimenId)` существует (иначе `specimen_not_found`);
+2. `specimen.genomeV2` существует (иначе `missing_genome_v2` — легаси-specimen без sidecar, защитный путь того же рода, что уже применён в `breedNurseryV2` шаг 3);
+3. `!specimen.favorite` (иначе `favorite` — защита от случайной переработки, тот же принцип, что уже действует в legacy `recycleSpecimen()`);
+4. найти все `plots`, у которых `hybridV2?.phase === 'mature' && hybridV2.specimenId === specimenId` — если таких грядок **больше одной**, это повреждённый save (два независимых mature-состояния не могут физически ссылаться на один и тот же `specimenId` при корректной работе `harvestHybridV2`, §4.8.4) → `ambiguous_plot_reference`, безопасный отказ без единого изменения (не удаление нескольких растений, не удаление ни одного).
+
+Успех — один атомарный `this.state = {...}`: `specimens` фильтруется без этого specimen; если на шаге 4 найдена **ровно одна** связанная mature-грядка — эта грядка получает `hybridV2: null` (в том же обновлении, не отдельным вызовом); если связанных грядок не найдено (specimen не на грядке) — `plots` не трогаются вообще; `geneticDust: state.geneticDust + dustGained` (`dustGained` из `firstRecycleTopUpV2(grownRecycleDustV2(specimen.genomeV2), state.firstRecycleTopUpClaimed)`), `firstRecycleTopUpClaimed` — то же правило, что §4.10.2. `parentIds` других specimens не переписываются — переработка specimen, на которого кто-то ссылается как на родителя, не каскадит удаление потомков (родословная — только текстовая ссылка на ID, Slice 10). `pollen`/`coins`/`pityCounter`/`nurseryTray`/`labLevel` — не меняются. Отказ на любом шаге — полный no-op.
+
+Растущий (`growing`) гибрид на грядке — не `Specimen` (§4.8.1, тип `PlotHybridV2`), физически не проходит шаг 1 этой проверки ни при каких условиях и недоступен обеим recycle-операциям.
+
+### 4.10.4. Legacy `recycleSpecimen()` — без изменений
+
+Существующий `GameStore.recycleSpecimen(id)` (плоская legacy-экономика, фиксированная награда `BREEDING_CONFIG.recycleDustReward`, уже действующий guard против переработки specimen на mature-V2-грядке, добавленный Slice 5 fix-pass'ом) не переписывается и не расширяется тарифами Slice 7 — legacy `AlbumPanel.tsx` продолжает вызывать именно его, не `recycleSpecimenV2`.
+
+### 4.10.5. UI — `LabPanelV2` (список Nursery Tray) и новый `AlbumPanelV2` (Overhaul + V2 only)
+
+`LabPanelV2` дополняется списком семян `nurseryTray`: на каждой строке — только безопасный номер/идентификатор семени (не геном/фенотип/редкость/размер будущей награды) и кнопка «Переработать»; клик переводит строку в состояние подтверждения («Да, переработать» / «Отмена») — отмена не вызывает `recycleNurserySeedV2` вообще (полный no-op на уровне UI, тот же принцип, что отмена скрещивания в Slice 6, §4.9.3); подтверждение вызывает `recycleNurserySeedV2` и по успеху показывает ровно две строки: `+N генетической пыли` (N = `dustGained`, без разделения на тариф/компенсацию) и следующей строкой «Пыль пригодится в лаборатории»; счётчик Nursery Tray обновляется немедленно (реактивно из `state.nurseryTray.length`, без отдельного пересчёта). При 8/8 текст питомника дополняется предложением и посадить, и переработать (не только посадить, как в Slice 5-6).
+
+Новый компонент `apps/web/src/ui/AlbumPanelV2.tsx`, отдельный от legacy `AlbumPanel.tsx`, подключаемый в `OverhaulApp.tsx` условно — той же веткой `GENETICS_V2_ENABLED ? <AlbumPanelV2 .../> : <AlbumPanel .../>`, что уже принята для `panel==='lab'` (Slice 5). Показывает текущий баланс `geneticDust`, простую V2-карточку на каждый specimen (переиспользует уже существующий `resolveSimpleCard`/`SpecimenThumbnail`, без скрытых аллелей/микроскопа/Reveal/родословной, без полной тарифной таблицы), действие «Переработать» с тем же двухшаговым подтверждением, что и в `LabPanelV2`; для `favorite` specimen кнопка «Переработать» либо отсутствует, либо ведёт к понятному сообщению-блокеру (тот же принцип, что уже действует в legacy `AlbumPanel` через `recycleSpecimen()==='favorite'`); если переработка удалит mature-растение с грядки — предупреждение об этом показывается ДО подтверждения, не только в toast после факта. После успеха — те же две строки, что в §4.10.5 для Nursery Tray.
+
+**Исправление UI-дефекта Slice 6.** `LabPanelV2` теперь явно блокирует выбор межвидовой пары: если выбранные два specimen принадлежат разным поддерживаемым видам, UI показывает сообщение о блокировке (тот же текст, что уже зарезервирован в `REJECTION_MESSAGE.interspecies_locked`) и не позволяет вызвать `breedNurseryV2` для этой пары — раньше (Slice 6) UI позволял выбрать такую пару и только store отклонял её после клика «Скрестить». Store-level `interspecies_locked` (`validateSameSpeciesParentsV2`, Slice 3-4) остаётся обязательным защитным слоем независимо от UI-уровня блокировки — defense-in-depth, тот же принцип, что уже применён для `unsupported_species`.
+
+Не меняются: `ClassicApp.tsx`, `GardenScene.ts`, legacy `ui/AlbumPanel.tsx`, legacy `ui/LabPanel.tsx`, legacy `ui/PlantPicker.tsx`, legacy-экономика (`recycleSpecimen()`/`BREEDING_CONFIG.recycleDustReward`), поведение Overhaul + Legacy Genetics (`AlbumPanelV2`/расширенный `LabPanelV2` не рендерятся вообще при выключенном `GENETICS_V2_ENABLED`).
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5) и в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-9) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6) и в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-10) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
 - **Статус на момент прохода 9**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7) и Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) **завершены и приняты владельцем** 28.08.2026, единым пакетом для Slice 5. Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, технический контракт §4.9) начат этим проходом: сначала этот docs-only contract-lock коммит (`docs(genetics): lock Slice 6 pollen economy`), затем отдельный код-коммит `feat(genetics): add V2 pollen economy` поверх Slice 5 fix-pass (`d51d5c5`). Slice 7 и далее (переработка/микроскоп/межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 6.
