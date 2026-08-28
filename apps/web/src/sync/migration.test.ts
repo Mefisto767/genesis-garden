@@ -22,6 +22,14 @@ function stateWith(overrides: Partial<GameState>): GameState {
     questProgress: {},
     questsClaimed: [],
     entitlements: [],
+    // Genetics V2 Slice 1 — новые поля GameState, не относящиеся к этим
+    // тестам (миграция облачного прогресса), но обязательные по типу.
+    pollen: 0,
+    labLevel: 1,
+    nurseryTray: [],
+    firstBreedFreeClaimed: false,
+    firstHybridRewardClaimed: false,
+    firstRecycleTopUpClaimed: false,
     ...overrides,
   };
 }

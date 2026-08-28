@@ -2,6 +2,7 @@ import type { Entitlement, GameState, Plot, Specimen } from './types';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
+import { ensureGenomeV2Sidecars } from './geneticsV2';
 import { GARDEN_CONFIG, BREEDING_CONFIG, STARTING_STATE_CONFIG } from './config';
 import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
@@ -9,7 +10,36 @@ import type { RngFn } from './rng';
 import { defaultRng } from './rng';
 
 const SAVE_KEY = 'genesis-garden-save-v1';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
+
+/**
+ * Миграция `pityCounter` при переходе save V3->V4 (Genetics V2 Slice 1,
+ * docs/GENETICS_TARGET_DELTA.md §6.3): `clamp(floor(existingPityCounter),0,9)`.
+ * Чистая функция — экспортирована отдельно для прямого unit-теста на
+ * граничных значениях (отрицательное/0/дробное/5/9/10/15), без обхода
+ * через loadState()/localStorage.
+ */
+export function migratePityCounter(existingPityCounter: number): number {
+  const floored = Math.floor(existingPityCounter);
+  return Math.min(9, Math.max(0, floored));
+}
+
+/**
+ * Критерий «save с историей скрещиваний» (Genetics V2 Slice 1,
+ * docs/GENETICS_TARGET_DELTA.md §7 п.6) — хотя бы одно из трёх условий,
+ * проверенных на состоянии save ДО миграции. Экспортирована отдельно для
+ * прямого unit-теста на каждое условие в изоляции.
+ */
+export function hasBreedingHistory(state: {
+  specimens?: unknown[];
+  pityCounter?: number;
+  geneticDust?: number;
+}): boolean {
+  const specimensCount = Array.isArray(state.specimens) ? state.specimens.length : 0;
+  const pityCounter = typeof state.pityCounter === 'number' ? state.pityCounter : 0;
+  const geneticDust = typeof state.geneticDust === 'number' ? state.geneticDust : 0;
+  return specimensCount > 2 || pityCounter > 0 || geneticDust > 0;
+}
 
 function unlockCost(plotId: number): number {
   // Растёт с каждым следующим участком за пределами стартовых шести.
@@ -35,10 +65,16 @@ function createInitialState(rng: RngFn): GameState {
   }
   // Два стартовых экземпляра с геномом — чтобы можно было сразу пойти
   // в лабораторию и скрестить первую пару, не грея кнопки вслепую.
-  const starterSpecimens: Specimen[] = Array.from(
+  const starterSpecimensRaw: Specimen[] = Array.from(
     { length: STARTING_STATE_CONFIG.startingSpecimenCount },
     () => ({ id: nextId(), genome: randomGenome(rng), createdAt: Date.now() })
   );
+  // Новый save получает genomeV2 sidecar сразу для стартовых specimens
+  // (Genetics V2 Slice 1, миграционная матрица docs/GENETICS_TARGET_DELTA.md
+  // §7.1, строка «Новый») — тем же самым идемпотентным backfill-механизмом,
+  // который используется для загрузки существующих save (см. loadState
+  // ниже), не отдельной параллельной веткой кода.
+  const starterSpecimens = ensureGenomeV2Sidecars(starterSpecimensRaw);
   return {
     coins: STARTING_STATE_CONFIG.startingCoins,
     plots,
@@ -49,6 +85,13 @@ function createInitialState(rng: RngFn): GameState {
     questProgress: {},
     questsClaimed: [],
     entitlements: [],
+    // Genetics V2 Slice 1 — честные дефолты нового игрока (delta doc §7 п.8).
+    pollen: 0,
+    labLevel: 1,
+    nurseryTray: [],
+    firstBreedFreeClaimed: false,
+    firstHybridRewardClaimed: false,
+    firstRecycleTopUpClaimed: false,
   };
 }
 
@@ -78,6 +121,35 @@ function loadState(rng: RngFn, storage: StorageLike | null): GameState {
       if (!parsed.questProgress || typeof parsed.questProgress !== 'object') parsed.questProgress = {};
       if (!Array.isArray(parsed.questsClaimed)) parsed.questsClaimed = [];
       if (!Array.isArray(parsed.entitlements)) parsed.entitlements = [];
+    }
+    // Genetics V2 Slice 1 — глобальная миграция save-уровневых полей
+    // (docs/GENETICS_TARGET_DELTA.md §7/§7.2, механизм 1). Запускается РОВНО
+    // ОДИН РАЗ, только при version<4 — критерий «история скрещиваний»
+    // считается по состоянию save ДО этой миграции (§7 п.6), не после.
+    // Не трогает coins/plots/inventory/geneticDust/квесты/entitlements/legacy
+    // genome ни одного specimen (§7.2) — эта миграция касается ровно шести
+    // новых save-уровневых полей ниже.
+    if (version < 4) {
+      const hasHistory = hasBreedingHistory(parsed);
+      if (typeof parsed.pollen !== 'number') parsed.pollen = hasHistory ? 24 : 0;
+      if (typeof parsed.labLevel !== 'number') parsed.labLevel = hasHistory ? 3 : 1;
+      if (!Array.isArray(parsed.nurseryTray)) parsed.nurseryTray = [];
+      if (typeof parsed.firstBreedFreeClaimed !== 'boolean') parsed.firstBreedFreeClaimed = hasHistory;
+      if (typeof parsed.firstHybridRewardClaimed !== 'boolean') parsed.firstHybridRewardClaimed = hasHistory;
+      if (typeof parsed.firstRecycleTopUpClaimed !== 'boolean') parsed.firstRecycleTopUpClaimed = hasHistory;
+      parsed.pityCounter = migratePityCounter(
+        typeof parsed.pityCounter === 'number' ? parsed.pityCounter : 0
+      );
+    }
+    // Genetics V2 Slice 1 — ensureGenomeV2Sidecars (механизм 2, §7.2).
+    // Запускается БЕЗУСЛОВНО на КАЖДОЙ загрузке, независимо от SAVE_VERSION —
+    // после глобальной миграции выше (порядок обязателен, §7.2), чтобы
+    // и новый V4-специмен, и любой legacy-specimen без sidecar (включая
+    // сценарий V2->Legacy breed->V2, §7.2) гарантированно получили genomeV2
+    // за один проход загрузки. Идемпотентно: specimen с уже существующим
+    // genomeV2 не трогается вообще.
+    if (Array.isArray(parsed.specimens)) {
+      parsed.specimens = ensureGenomeV2Sidecars(parsed.specimens);
     }
     return parsed;
   } catch {

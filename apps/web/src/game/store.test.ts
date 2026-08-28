@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameStore } from './store';
+import { GameStore, migratePityCounter, hasBreedingHistory } from './store';
 import { GARDEN_CONFIG, STARTING_STATE_CONFIG, BOOSTS_CONFIG, BREEDING_CONFIG } from './config';
 import { mulberry32 } from './rng';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
@@ -348,5 +348,265 @@ describe('квесты', () => {
     const store = freshStore();
     const ok = store.claimQuest('harvest_five'); // цель 5, прогресс 0
     expect(ok).toBe(false);
+  });
+});
+
+// ============================================================================
+// Genetics V2 — Slice 1 (save/state/feature flags). Тесты 1-6, 20-22 из
+// обязательного списка задания (docs/GENETICS_TARGET_DELTA.md §10.4).
+// Тесты на сам genomeV2-маппинг/sidecar (7-19) — apps/web/src/game/geneticsV2.test.ts.
+// ============================================================================
+
+function withMemoryStorage<T>(run: () => T): T {
+  const memoryStorage = new Map<string, string>();
+  const storageLike = {
+    getItem: (k: string) => memoryStorage.get(k) ?? null,
+    setItem: (k: string, v: string) => void memoryStorage.set(k, v),
+  };
+  const originalLocalStorage = globalThis.localStorage;
+  // @ts-expect-error — подмена для теста миграции
+  globalThis.localStorage = storageLike;
+  try {
+    return run();
+  } finally {
+    globalThis.localStorage = originalLocalStorage;
+  }
+}
+
+function legacyPlots() {
+  return Array.from({ length: MAX_PLOTS }, (_, i) => ({
+    id: i,
+    unlocked: i < START_UNLOCKED_PLOTS,
+    seedId: null,
+    plantedAt: null,
+  }));
+}
+
+function legacySpecimen(id: string) {
+  return {
+    id,
+    genome: {
+      shape: 1,
+      primary: '#FF8C77',
+      secondary: '#F5A623',
+      leaf: '#6FBE44',
+      pattern: 'solid' as const,
+      size: 'normal' as const,
+      aura: 'none' as const,
+      mutationId: null,
+    },
+    createdAt: 0,
+  };
+}
+
+/** Сырой V3-save (без genomeV2/pollen/labLevel/nurseryTray/трёх флагов) — то, что реально лежит на диске у существующих игроков до Slice 1. */
+function rawV3Save(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 3,
+    coins: 100,
+    plots: legacyPlots(),
+    inventory: { sprout: 3 },
+    specimens: [legacySpecimen('s1'), legacySpecimen('s2')],
+    geneticDust: 0,
+    pityCounter: 0,
+    questProgress: {},
+    questsClaimed: [],
+    entitlements: [],
+    ...overrides,
+  };
+}
+
+describe('Genetics V2 Slice 1 — pity clamp (migratePityCounter)', () => {
+  it.each([
+    [-1, 0],
+    [0, 0],
+    [2.7, 2],
+    [5, 5],
+    [9, 9],
+    [10, 9],
+    [15, 9],
+  ])('migratePityCounter(%s) === %s', (input, expected) => {
+    expect(migratePityCounter(input)).toBe(expected);
+  });
+});
+
+describe('Genetics V2 Slice 1 — критерий "save с историей" (hasBreedingHistory)', () => {
+  it('specimens.length>2 достаточно само по себе', () => {
+    expect(hasBreedingHistory({ specimens: [1, 2, 3], pityCounter: 0, geneticDust: 0 })).toBe(true);
+  });
+  it('specimens.length===2 (только стартовые) недостаточно', () => {
+    expect(hasBreedingHistory({ specimens: [1, 2], pityCounter: 0, geneticDust: 0 })).toBe(false);
+  });
+  it('pityCounter>0 достаточно само по себе', () => {
+    expect(hasBreedingHistory({ specimens: [1, 2], pityCounter: 1, geneticDust: 0 })).toBe(true);
+  });
+  it('geneticDust>0 достаточно само по себе', () => {
+    expect(hasBreedingHistory({ specimens: [1, 2], pityCounter: 0, geneticDust: 1 })).toBe(true);
+  });
+  it('ни одно условие — нетронутый save', () => {
+    expect(hasBreedingHistory({ specimens: [1, 2], pityCounter: 0, geneticDust: 0 })).toBe(false);
+  });
+});
+
+describe('Genetics V2 Slice 1 — тест 1: новый V4-save получает правильные дефолты', () => {
+  it('createInitialState даёт честные дефолты нового игрока', () => {
+    const store = freshStore();
+    const state = store.getState();
+    expect(state.pollen).toBe(0);
+    expect(state.labLevel).toBe(1);
+    expect(state.nurseryTray).toEqual([]);
+    expect(state.firstBreedFreeClaimed).toBe(false);
+    expect(state.firstHybridRewardClaimed).toBe(false);
+    expect(state.firstRecycleTopUpClaimed).toBe(false);
+    // Новая матрица §7.1 «Новый»: genomeV2 создаётся сразу для стартовых specimens.
+    expect(state.specimens).toHaveLength(STARTING_STATE_CONFIG.startingSpecimenCount);
+    for (const specimen of state.specimens) {
+      expect(specimen.genomeV2).toBeDefined();
+      expect(specimen.genome).toBeDefined(); // legacy-геном не удалён
+    }
+  });
+});
+
+describe('Genetics V2 Slice 1 — тест 2: нетронутый V3→V4', () => {
+  it('save без истории получает pollen=0, labLevel=1, флаги false, pityCounter=0', () => {
+    withMemoryStorage(() => {
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(rawV3Save()));
+      const store = new GameStore({ rng: mulberry32(1) });
+      const state = store.getState();
+      expect(state.pollen).toBe(0);
+      expect(state.labLevel).toBe(1);
+      expect(state.nurseryTray).toEqual([]);
+      expect(state.firstBreedFreeClaimed).toBe(false);
+      expect(state.firstHybridRewardClaimed).toBe(false);
+      expect(state.firstRecycleTopUpClaimed).toBe(false);
+      expect(state.pityCounter).toBe(0);
+      // Существующие поля не тронуты миграцией.
+      expect(state.coins).toBe(100);
+      expect(state.inventory.sprout).toBe(3);
+    });
+  });
+});
+
+describe('Genetics V2 Slice 1 — тесты 3-5: save с историей по каждому условию отдельно', () => {
+  it('тест 3: история через specimens.length>2', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({
+        specimens: [legacySpecimen('s1'), legacySpecimen('s2'), legacySpecimen('s3')],
+      });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+      const store = new GameStore({ rng: mulberry32(1) });
+      const state = store.getState();
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.firstBreedFreeClaimed).toBe(true);
+      expect(state.firstHybridRewardClaimed).toBe(true);
+      expect(state.firstRecycleTopUpClaimed).toBe(true);
+    });
+  });
+
+  it('тест 4: история через pityCounter>0', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({ pityCounter: 4 });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+      const store = new GameStore({ rng: mulberry32(1) });
+      const state = store.getState();
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.firstBreedFreeClaimed).toBe(true);
+      expect(state.firstHybridRewardClaimed).toBe(true);
+      expect(state.firstRecycleTopUpClaimed).toBe(true);
+      expect(state.pityCounter).toBe(4); // clamp(floor(4),0,9) = 4
+    });
+  });
+
+  it('тест 5: история через geneticDust>0', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({ geneticDust: 7 });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+      const store = new GameStore({ rng: mulberry32(1) });
+      const state = store.getState();
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.firstBreedFreeClaimed).toBe(true);
+      expect(state.firstHybridRewardClaimed).toBe(true);
+      expect(state.firstRecycleTopUpClaimed).toBe(true);
+      expect(state.geneticDust).toBe(7); // не тронуто глобальной миграцией
+    });
+  });
+});
+
+describe('Genetics V2 Slice 1 — миграционная матрица не перевыдаёт ресурсы повторно', () => {
+  it('повторная загрузка уже мигрированного V4-save (сериализованного стором) не меняет pollen/labLevel/флаги/pity', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({ pityCounter: 4 });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+      const first = new GameStore({ rng: mulberry32(1) });
+      // Форсируем persist текущего (уже мигрированного) состояния на диск.
+      first.grantEntitlement({ id: 'noop', type: 'growth_boost', percent: 0, expiresAt: null });
+      const afterFirst = first.getState();
+
+      const second = new GameStore({ rng: mulberry32(2) });
+      const afterSecond = second.getState();
+
+      expect(afterSecond.pollen).toBe(afterFirst.pollen);
+      expect(afterSecond.labLevel).toBe(afterFirst.labLevel);
+      expect(afterSecond.firstBreedFreeClaimed).toBe(afterFirst.firstBreedFreeClaimed);
+      expect(afterSecond.pityCounter).toBe(afterFirst.pityCounter);
+    });
+  });
+});
+
+describe('Genetics V2 Slice 1 — тест 20: переключение флагов не теряет новые поля', () => {
+  it('пыльца/labLevel, изменённые между "переключениями флага", переживают несколько циклов перезагрузки store', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({ pollen: 12, labLevel: 2, geneticDust: 1 });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+
+      // Слайс 1 не читает feature flag в loadState вообще — переключение
+      // VITE_DIPLOID_GENETICS_ENABLED не должно ничего пересчитывать. Здесь
+      // это проверяется тем, что несколько независимых циклов
+      // создание-стора-из-того-же-storage (эквивалент выкл→вкл→выкл→вкл,
+      // поскольку флаг не участвует в loadState()) сохраняют значения.
+      const cycles = [1, 2, 3, 4].map(() => new GameStore({ rng: mulberry32(1) }).getState());
+      for (const state of cycles) {
+        expect(state.pollen).toBe(12);
+        expect(state.labLevel).toBe(2);
+      }
+    });
+  });
+});
+
+describe('Genetics V2 Slice 1 — тест 21: повреждённый save безопасно создаёт новую игру', () => {
+  it('невалидный JSON не роняет игру и создаёт честный новый V4-стейт', () => {
+    withMemoryStorage(() => {
+      globalThis.localStorage.setItem('genesis-garden-save-v1', '{ не валидный json, V4');
+      const store = new GameStore({ rng: mulberry32(5) });
+      const state = store.getState();
+      expect(state.coins).toBe(STARTING_STATE_CONFIG.startingCoins);
+      expect(state.pollen).toBe(0);
+      expect(state.labLevel).toBe(1);
+      expect(state.nurseryTray).toEqual([]);
+      expect(state.specimens.every((s) => s.genomeV2)).toBe(true);
+    });
+  });
+
+  it('specimen с повреждённым legacy genome (null) не роняет загрузку остального save', () => {
+    withMemoryStorage(() => {
+      const save = rawV3Save({
+        coins: 555,
+        specimens: [{ id: 'broken', genome: null, createdAt: 0 }, legacySpecimen('ok')],
+      });
+      globalThis.localStorage.setItem('genesis-garden-save-v1', JSON.stringify(save));
+      const store = new GameStore({ rng: mulberry32(5) });
+      const state = store.getState();
+      // Save целиком не откатился на новую игру — coins сохранены.
+      expect(state.coins).toBe(555);
+      expect(state.specimens).toHaveLength(2);
+      // "ok" получил sidecar, "broken" безопасно остался без него.
+      const ok = state.specimens.find((s) => s.id === 'ok');
+      const broken = state.specimens.find((s) => s.id === 'broken');
+      expect(ok?.genomeV2).toBeDefined();
+      expect(broken?.genomeV2).toBeUndefined();
+    });
   });
 });

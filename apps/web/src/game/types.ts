@@ -1,5 +1,6 @@
 import type { PlantColorway } from './plantPalette';
 import type { Genome } from './genetics';
+import type { GenomeV2, HybridSeedV2, RevealedLocusEntry } from './geneticsV2';
 import { GARDEN_CONFIG, type QuestGoalType } from './config';
 
 export interface SeedDef {
@@ -26,6 +27,19 @@ export interface Specimen {
    * читается как false, миграция SAVE_VERSION не нужна.
    */
   favorite?: boolean;
+  /**
+   * Genetics V2 sidecar (Slice 1, GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md
+   * §4.1/§4.4). Legacy `genome` выше НЕ удаляется и не переписывается —
+   * legacy-движок продолжает читать только его. `genomeV2` заполняется
+   * `ensureGenomeV2Sidecars()` (game/geneticsV2.ts) при каждой загрузке save
+   * для любого specimen, у которого его ещё нет; undefined до первого
+   * прохода backfill. В Slice 1 никакая игровая логика это поле не читает.
+   */
+  genomeV2?: GenomeV2;
+  /** Родословная (Slice 10) — не заполняется в Slice 1. */
+  parentIds?: [string, string] | null;
+  /** Раскрытые скрытые локусы (Slice 8, delta doc §6.1) — не заполняется в Slice 1. */
+  revealedLoci?: RevealedLocusEntry[];
 }
 
 export interface Plot {
@@ -61,6 +75,25 @@ export interface GameState {
   questsClaimed: string[];
   /** Активные ускорители (сейчас всегда []; Этап 7 подключит покупки). */
   entitlements: Entitlement[];
+
+  // --- Genetics V2 — Slice 1 (save/state/feature flags), см.
+  // docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.1 и
+  // docs/GENETICS_TARGET_DELTA.md §12 Slice 1. Никакая игровая логика,
+  // кроме миграции default-значений, эти поля в Slice 1 не читает и не
+  // пишет — экономика/UI/breed подключаются в Slice 3+.
+
+  /** Пыльца — новая валюта Genetics V2 (Slice 6). В Slice 1 только хранится. */
+  pollen: number;
+  /** Уровень лаборатории (1-4). В Slice 1 только мигрирует/хранится. */
+  labLevel: number;
+  /** Nursery Tray, вместимость 8 (Slice 5). В Slice 1 всегда пуст. */
+  nurseryTray: HybridSeedV2[];
+  /** Бесплатное первое скрещивание уже использовано (delta doc §6.2). */
+  firstBreedFreeClaimed: boolean;
+  /** Обучающий грант пыльцы + открытие Колокольника/Lab L2 уже выдан (delta doc §6.2). */
+  firstHybridRewardClaimed: boolean;
+  /** Компенсация пыли до 3 при первой переработке уже выдана (delta doc §6.2). */
+  firstRecycleTopUpClaimed: boolean;
 }
 
 export type { QuestGoalType };
