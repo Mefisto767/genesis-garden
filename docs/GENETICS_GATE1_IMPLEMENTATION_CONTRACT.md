@@ -1,8 +1,10 @@
 # Genesis Garden — Gate 1 implementation contract (Genetics V2, 9-locus model)
 
-Дата: 2026-08-28 (проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 в реализации, новый §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
-Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`) и Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`) **завершены и приняты владельцем**. Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8) реализуется этим проходом (проход 8).
-Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+Дата: 2026-08-28 (проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, новый §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
+Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`) и Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) **завершены и приняты владельцем** 28.08.2026. Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9) начат этим проходом (проход 9): сначала этот docs-only contract-lock, затем отдельный код-коммит. Slice 7 и далее не начинаются без отдельного подтверждения владельца.
+Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+
+**Проход 9 — Slice 5 принят; contract-lock пыльцевой экономики перед Slice 6**: владелец принял Slice 5 целиком (docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) единым пакетом и разрешил начать только Slice 6. Технический контракт пыльцевой экономики (модуль `pollenV2.ts`, точный расширенный порядок `breedNurseryV2`, причина отказа `insufficient_pollen` с `requiredPollen`/`availablePollen`, формула награды за сбор) зафиксирован новым §4.9 ниже, ДО начала кода Slice 6. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7) и persisted nursery lifecycle (§4.8) **не пересматривались**.
 
 **Проход 7 — докоррекция перед пакетным Slice 3-4**: владелец обнаружил, что предыдущий отчёт по Slice 2 утверждал обновление статусов этого документа, но правки фактически не попали в файл репозитория (были внесены только в отдельную рабочую копию сессии) — исправлено здесь (заголовок выше). Дополнительно зафиксировано точное правило применения mutation-аллеля к унаследованной паре `aura` и обязательный RNG call order внутри `breedV2` — см. §4.7 ниже. Каталоги аллелей, dominance ranks, rarity points, пороги редкости и mutation floors §4.5 **не пересматривались** — только формулировки статуса и новый раздел §4.7.
 
@@ -664,9 +666,93 @@ type BreedNurseryV2Result =
 
 ---
 
+## 4.9. Slice 6 — pollen economy (проход 9, contract-lock перед Slice 6)
+
+Технический контракт решений владельца из `GENETICS_TARGET_DELTA.md` §0.8 — обязателен для реализации Slice 6, наравне с §4.1-§4.8 для Slice 1-5. `SAVE_VERSION` остаётся `4` — `pollen`/`firstBreedFreeClaimed` уже существуют в схеме с Slice 1 (§4.1), Slice 6 только начинает их читать/писать игровой логикой, никакой новой миграции не требуется.
+
+### 4.9.1. Модуль `apps/web/src/game/pollenV2.ts` — чистые функции и константы
+
+Новый модуль, без RNG и без чтения/записи `GameState` — та же дисциплина, что `nurseryV2.ts`/`rarityV2.ts`. Экспортирует:
+
+```ts
+export const SAME_SPECIES_BREED_COST = 8;
+export const INTERSPECIES_BREED_COST = 12;   // зафиксирована и тестируется, engine остаётся interspecies_locked до Slice 9
+
+export const SPECIES_BASE_POLLEN: Record<1 | 2, number> = { 1: 2, 2: 2 }; // Солнечник/Колокольник
+
+export const RARITY_POLLEN_BONUS: Record<RarityTierV2, number> = {
+  Common: 0, Uncommon: 0, Rare: 1, Epic: 1, Legendary: 2, Mythic: 2,
+};
+
+/** Стоимость скрещивания по паре ПОДДЕРЖИВАЕМЫХ speciesId (1/2 — Slice 3-4 SUPPORTED_PARENT_SPECIES_V2).
+ *  seedSpeciesId === pollenSpeciesId → SAME_SPECIES_BREED_COST; иначе → INTERSPECIES_BREED_COST.
+ *  Не решает, разрешено ли скрещивание (interspecies_locked решает breedV2/species-валидация,
+ *  §4.9.3 п.5) — только считает цену ДЛЯ уже прошедшей валидацию пары. */
+export function breedCostV2(seedSpeciesId: number, pollenSpeciesId: number): number;
+
+/** speciesId, не входящий в SPECIES_BASE_POLLEN (не 1/2), обрабатывается явно и безопасно:
+ *  возвращает 0 (не бросает, не начисляет случайное значение) — защитный путь, не ожидаемый для
+ *  Gate-1-поддерживаемых V2-родителей, тот же принцип "безопасный дефолт для неизвестного значения",
+ *  что уже применён в migrateMutationId (§4.4). */
+export function speciesBasePollenV2(speciesId: number): number;
+
+/** pollenRewardV2(genomeV2) = speciesBasePollenV2(genomeV2.speciesId) + RARITY_POLLEN_BONUS[rarityOfV2(genomeV2, genomeV2.mutationId)].
+ *  Использует rarityOfV2 (Slice 3-4, без изменений) — не пересчитывает редкость самостоятельно. */
+export function pollenRewardV2(genomeV2: GenomeV2): number;
+```
+
+### 4.9.2. Пыльца за сбор — расширение `GameStore.harvestHybridV2(plotId, now)`
+
+Оба атомарных обновления §4.8.4 (первый сбор созревшего `HybridSeedV2` → `Specimen`+`mature`; готовый повторный цикл → обновление `lastHarvestAt`) дополняются в ТОМ ЖЕ `this.state = {...}`: `pollen: this.state.pollen + pollenRewardV2(genomeV2)` — тем же `genomeV2`, что уже используется для создания/поиска `Specimen` на этом шаге (`hybrid.genomeV2` при первом сборе, `specimen.genomeV2` при повторном). Сбор до готовности и повреждённый mature-plot без specimen/`genomeV2` (существующие `false`-ветки §4.8.4) остаются полным no-op — `pollen` не меняется. Повторный вызов на том же `now`/после уже состоявшегося обновления `lastHarvestAt` не начисляет награду второй раз — тот же идемпотентный guard §4.8.4 (грядка уже не готова к повторному циклу, `status.ready === false`), не новый механизм. `firstHybridRewardClaimed`, `labLevel`, `coins`, `geneticDust` — не меняются (остаются Slice 7/8, §4.8.8 без изменений).
+
+### 4.9.3. Стоимость и бесплатность — расширение `GameStore.breedNurseryV2(seedParentId, pollenParentId)`
+
+```ts
+type BreedNurseryV2RejectionReason =
+  | 'same_parent' | 'parent_not_found' | 'parent_missing_genome_v2' | 'nursery_tray_full'
+  | BreedRejectionReasonV2               // 'unsupported_species' | 'interspecies_locked', Slice 3-4
+  | 'insufficient_pollen';               // новое в Slice 6
+
+type BreedNurseryV2Failure =
+  | { ok: false; reason: Exclude<BreedNurseryV2RejectionReason, 'insufficient_pollen'> }
+  | { ok: false; reason: 'insufficient_pollen'; requiredPollen: number; availablePollen: number };
+
+type BreedNurseryV2Result =
+  | { ok: true; hybridSeed: HybridSeedV2; mutated: boolean; nextPityCounter: number }
+  | BreedNurseryV2Failure;
+```
+
+Проверки строго в этом порядке — расширение уже принятого §4.8.7, без изменения первых четырёх шагов:
+
+1. `seedParentId !== pollenParentId` (иначе `same_parent`);
+2. оба specimens существуют (иначе `parent_not_found`);
+3. у обоих есть `genomeV2` (иначе `parent_missing_genome_v2`);
+4. `nurseryTray.length < 8` (иначе `nursery_tray_full`);
+5. чистая species-валидация **без RNG** — та же проверка, что уже делает `breedV2` внутри себя (Slice 3-4), но вызванная здесь ЯВНО, ДО денежной проверки, чтобы `interspecies_locked`/`unsupported_species` никогда не маскировались `insufficient_pollen` (запрещённая пара всегда возвращает свою собственную причину, независимо от баланса пыльцы);
+6. определение стоимости — `cost = state.firstBreedFreeClaimed ? breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId) : 0`;
+7. `state.pollen >= cost` (иначе `insufficient_pollen`, с `requiredPollen: cost, availablePollen: state.pollen`);
+8. вызов `breedV2(seedParent.genomeV2, pollenParent.genomeV2, state.pityCounter, rng)` — без изменений, единственное место реального наследования/mutation RNG;
+9. один атомарный `this.state = {...}`: `HybridSeedV2` добавляется в `nurseryTray` (без изменений §4.8.7), `pityCounter` обновляется на `nextPityCounter` (без изменений), **новое** — `pollen: state.pollen - cost`, **новое** — `firstBreedFreeClaimed: true` (устанавливается безусловно в `true`; уже `true` → остаётся `true`, идемпотентно).
+
+Любой отказ на шагах 1-7 (до вызова `breedV2` на шаге 8) — 0 RNG-вызовов, полный no-op: `pollen`/`pityCounter`/`firstBreedFreeClaimed`/родители/`nurseryTray` не меняются ни на бит. В частности: `insufficient_pollen` на шаге 7 не расходует бесплатную попытку (шаг 6 уже определил `cost`, но шаг 9 с `firstBreedFreeClaimed:true` не выполняется, потому что отказ произошёл раньше); отказ на шаге 5 (`unsupported_species`/`interspecies_locked`) и на шагах 1-4 — тем же путём. Отмена на уровне UI (игрок закрыл экран подтверждения ДО вызова `breedNurseryV2`) не доходит до store вообще — `breedNurseryV2` в этом случае не вызывается, флаг физически не может измениться.
+
+Родители, `coins`, `geneticDust` не меняются ни при успехе, ни при отказе (без изменений §4.8.8) — `breedNurseryV2` затрагивает исключительно `pollen`/`pityCounter`/`nurseryTray`/`firstBreedFreeClaimed`.
+
+### 4.9.4. Межвидовое скрещивание остаётся заблокированным
+
+`INTERSPECIES_BREED_COST = 12` фиксируется и тестируется в `pollenV2.ts` (§4.9.1) уже на этом slice — как экономика будущего разрешённого пути (Slice 9). Это не значит, что межвидовое скрещивание становится доступным: species-валидация на шаге 5 (§4.9.3) — та же самая функция, что уже возвращает `interspecies_locked` для любой пары species1×species2/species2×species1 в Slice 3-4, без изменений в этом slice. `breedCostV2(1, 2)`/`breedCostV2(2, 1)` корректно возвращают `12`, но шаг 5 отклоняет такую пару раньше, чем шаг 6 успевает посчитать эту стоимость для реального применения — стоимость 12 в проде Slice 6 недостижима ни при каких условиях, только через прямой unit-тест самой функции `breedCostV2`.
+
+### 4.9.5. UI — `LabPanelV2` (Overhaul + V2 only)
+
+`pollen` и `firstBreedFreeClaimed` передаются в `LabPanelV2` пропсами (тот же паттерн, что уже принят для `nurseryTray`/`specimens`). Текущий баланс пыльцы отображается постоянно. До первого успеха — дословно «Первое скрещивание: бесплатно»; после — стоимость выбранной операции (8 для выбранной одновидовой пары; интерфейс выбора родителей не предлагает межвидовые пары как активные — Slice 9 остаётся единственным местом, где это меняется). При `insufficient_pollen` — дословно «Не хватает пыльцы: нужно N, есть M» (`N`/`M` — `requiredPollen`/`availablePollen` из результата отказа, без повторного пересчёта на стороне UI), кнопка платного скрещивания в этом состоянии `disabled`. Полный Nursery Tray (8/8, §4.8.7) остаётся более ранним блокером — блокирует раньше, чем UI вообще предлагает выбрать родителей для платного скрещивания, без изменений относительно Slice 5. Геном `HybridSeedV2` до maturity не раскрывается (§4.8.1, без изменений).
+
+Не меняются: `ClassicApp.tsx`, `GardenScene.ts`, legacy `ui/LabPanel.tsx`, legacy `ui/PlantPicker.tsx`, legacy-экономика (`BREED_COST`/`geneticDust` путь `breedSpecimens`), поведение Overhaul + Legacy Genetics (V2-флаг выключен — `LabPanelV2` не рендерится вообще, тот же гейт `GENETICS_V2_ENABLED`, что уже принят Slice 5 fix-pass'ом).
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order) и в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-8) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5) и в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-9) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
-- **Статус на момент прохода 8**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`) и Slice 4 (`e483c94`, §4.7) **завершены и приняты владельцем**. Slice 5 (Nursery Tray/рост/постоянные растения, технический контракт §4.8) реализуется этим проходом, коммитом `feat(genetics): add V2 nursery and persistent plants` поверх docs-only коммита `docs(genetics): lock Slice 5 nursery lifecycle`. Slice 6 и далее (пыльца/переработка/микроскоп/межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 5.
+- **Статус на момент прохода 9**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7) и Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) **завершены и приняты владельцем** 28.08.2026, единым пакетом для Slice 5. Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, технический контракт §4.9) начат этим проходом: сначала этот docs-only contract-lock коммит (`docs(genetics): lock Slice 6 pollen economy`), затем отдельный код-коммит `feat(genetics): add V2 pollen economy` поверх Slice 5 fix-pass (`d51d5c5`). Slice 7 и далее (переработка/микроскоп/межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 6.
