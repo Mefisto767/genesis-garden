@@ -95,13 +95,30 @@ function createInitialState(rng: RngFn): GameState {
   };
 }
 
-function loadState(rng: RngFn, storage: StorageLike | null): GameState {
+/**
+ * Результат загрузки save (Genetics V2 Slice 1 fix-pass —
+ * docs/GENETICS_TARGET_DELTA.md §7.2 дополнено этим проходом контрактом
+ * «мигрированное состояние персистится сразу, без ожидания игрового
+ * действия»). `needsPersist` говорит вызывающей стороне (конструктору
+ * `GameStore`), нужно ли немедленно записать `state` обратно в storage —
+ * true ровно тогда, когда load() реально что-то изменил относительно того,
+ * что физически лежит на диске (глобальная V3→V4 миграция версии и/или
+ * backfill хотя бы одного отсутствовавшего `genomeV2` sidecar), false для
+ * обычной загрузки уже полностью актуального save и для случая «нет save
+ * вовсе / save повреждён» (создание новой игры не форсирует лишнюю запись
+ * до первого реального игрового действия — это не регрессия, этот путь не
+ * входит в описанный дефект).
+ */
+function loadState(
+  rng: RngFn,
+  storage: StorageLike | null
+): { state: GameState; needsPersist: boolean } {
   try {
     const raw = storage?.getItem(SAVE_KEY);
-    if (!raw) return createInitialState(rng);
+    if (!raw) return { state: createInitialState(rng), needsPersist: false };
     const parsed = JSON.parse(raw) as GameState & { version?: number };
     if (!parsed.plots || !Array.isArray(parsed.plots) || typeof parsed.coins !== 'number') {
-      return createInitialState(rng);
+      return { state: createInitialState(rng), needsPersist: false };
     }
     // Миграции без потери прогресса игрока — каждая версия добавляет только
     // недостающие поля, никогда не удаляет и не обнуляет существующие.
@@ -147,13 +164,37 @@ function loadState(rng: RngFn, storage: StorageLike | null): GameState {
     // и новый V4-специмен, и любой legacy-specimen без sidecar (включая
     // сценарий V2->Legacy breed->V2, §7.2) гарантированно получили genomeV2
     // за один проход загрузки. Идемпотентно: specimen с уже существующим
-    // genomeV2 не трогается вообще.
+    // genomeV2 не трогается вообще — `ensureGenomeV2Sidecars` возвращает тот
+    // же самый объект по ссылке для такого specimen (см. geneticsV2.ts), что
+    // и используется ниже для честного обнаружения «а backfill вообще что-то
+    // сделал в этот раз?», без отдельного параллельного учёта.
+    let sidecarsCreated = false;
     if (Array.isArray(parsed.specimens)) {
-      parsed.specimens = ensureGenomeV2Sidecars(parsed.specimens);
+      const beforeSpecimens = parsed.specimens;
+      const migratedSpecimens = ensureGenomeV2Sidecars(beforeSpecimens);
+      sidecarsCreated = migratedSpecimens.some((specimen, i) => specimen !== beforeSpecimens[i]);
+      parsed.specimens = migratedSpecimens;
     }
-    return parsed;
+
+    // Fix-pass (defect report): персистить нужно ровно тогда, когда load()
+    // реально изменил save относительно диска — версия была ниже текущей
+    // (V3→V4 и любая более старая, п.1), или backfill создал хотя бы один
+    // ранее отсутствовавший sidecar на уже-V4 save (п.2). Обычная загрузка
+    // полностью актуального V4-save (все specimens уже с genomeV2) не
+    // форсирует запись (п.3).
+    const needsPersist = version < SAVE_VERSION || sidecarsCreated;
+
+    // Fix-pass (defect report, п.4): версия самого возвращаемого
+    // (в памяти) состояния тоже должна стать актуальной сразу же — раньше
+    // здесь бампилось только то, что летит в persist()'е при следующем
+    // emit(), а getState() сразу после `new GameStore()` всё ещё видел
+    // старую version. Нормализация ничего не пишет в storage сама по себе —
+    // запись решает только needsPersist выше.
+    parsed.version = SAVE_VERSION;
+
+    return { state: parsed, needsPersist };
   } catch {
-    return createInitialState(rng);
+    return { state: createInitialState(rng), needsPersist: false };
   }
 }
 
@@ -214,7 +255,25 @@ export class GameStore {
   constructor(options: GameStoreOptions = {}) {
     this.rng = options.rng ?? defaultRng;
     this.storage = options.disablePersistence ? null : safeStorage();
-    this.state = options.initialState ?? loadState(this.rng, this.storage);
+    if (options.initialState) {
+      // Тесты передают готовый сценарий напрямую — loadState()/persist() не
+      // участвуют, это не проход через storage вообще.
+      this.state = options.initialState;
+      return;
+    }
+    const loaded = loadState(this.rng, this.storage);
+    this.state = loaded.state;
+    // Fix-pass (defect report): V3→V4-миграция и/или backfill отсутствовавших
+    // genomeV2 sidecars, случившиеся при загрузке, должны сразу лечь на диск
+    // — не ждать первого игрового действия, вызывающего emit(). persist()
+    // сама решает, есть ли вообще storage, и сама глотает ошибку
+    // storage.setItem() (переполнение квоты/приватный режим) — падение записи
+    // здесь не откатывает this.state и не запускает createInitialState():
+    // мигрированное состояние остаётся корректным в памяти, просто не
+    // записанным на этот раз (defect report п.5).
+    if (loaded.needsPersist) {
+      this.persist();
+    }
   }
 
   getState(): GameState {

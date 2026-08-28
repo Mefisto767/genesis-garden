@@ -610,3 +610,192 @@ describe('Genetics V2 Slice 1 — тест 21: повреждённый save б�
     });
   });
 });
+
+// ============================================================================
+// Genetics V2 Slice 1 — FIX-PASS поверх коммита 36c861d15acf4d53304b2cd162582
+// e16290d549f: миграция должна персистить себя сразу при загрузке, не ждать
+// первого emit()/persist() от игрового действия. Регрессия, которую старые
+// тесты выше не ловили именно потому, что "тест: миграционная матрица не
+// перевыдаёт ресурсы повторно" (см. выше) форсирует persist через
+// grantEntitlement() до второй загрузки — здесь та же проверка сделана БЕЗ
+// единого вызова игрового метода.
+// ============================================================================
+
+/** Storage-обёртка, считающая реальные вызовы setItem — нужно отличить
+ * "не было лишней записи" от "запись была, но с тем же содержимым". */
+function countingMemoryStorage() {
+  const memoryStorage = new Map<string, string>();
+  let setItemCalls = 0;
+  const storageLike = {
+    getItem: (k: string) => memoryStorage.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      setItemCalls += 1;
+      memoryStorage.set(k, v);
+    },
+  };
+  return { storageLike, memoryStorage, getSetItemCalls: () => setItemCalls };
+}
+
+function installGlobalStorage(storageLike: StorageLike) {
+  const original = globalThis.localStorage;
+  // @ts-expect-error — подмена глобального localStorage для теста
+  globalThis.localStorage = storageLike;
+  return () => {
+    globalThis.localStorage = original;
+  };
+}
+
+type StorageLike = { getItem(k: string): string | null; setItem(k: string, v: string): void };
+
+describe('Genetics V2 Slice 1 fix-pass — миграция персистится немедленно при загрузке (без игрового действия)', () => {
+  it('V3-save после одного new GameStore() физически лежит в storage как version:4, со всеми глобальными полями и sidecar', () => {
+    const { storageLike, memoryStorage } = countingMemoryStorage();
+    const restore = installGlobalStorage(storageLike);
+    try {
+      const save = rawV3Save({ pityCounter: 4 }); // "история" -> pollen=24/labLevel=3/флаги=true
+      memoryStorage.set('genesis-garden-save-v1', JSON.stringify(save));
+
+      // Ключевой момент теста: НИ ОДНОГО игрового метода не вызывается —
+      // только конструктор. Раньше миграция существовала лишь в памяти до
+      // первого emit()/persist().
+      const store = new GameStore({ rng: mulberry32(1) });
+      void store; // сам факт создания — единственное действие теста
+
+      const onDisk = JSON.parse(memoryStorage.get('genesis-garden-save-v1')!);
+      expect(onDisk.version).toBe(4);
+      expect(onDisk.pollen).toBe(24);
+      expect(onDisk.labLevel).toBe(3);
+      expect(onDisk.firstBreedFreeClaimed).toBe(true);
+      expect(onDisk.firstHybridRewardClaimed).toBe(true);
+      expect(onDisk.firstRecycleTopUpClaimed).toBe(true);
+      expect(onDisk.pityCounter).toBe(4);
+      expect(Array.isArray(onDisk.nurseryTray)).toBe(true);
+      // Sidecar тоже физически на диске, не только в памяти.
+      expect(onDisk.specimens).toHaveLength(2);
+      for (const specimen of onDisk.specimens) {
+        expect(specimen.genomeV2).toBeDefined();
+        expect(specimen.genome).toBeDefined(); // legacy-геном не удалён
+      }
+
+      // getState() сразу после конструктора видит то же самое, что легло на диск.
+      const state = store.getState();
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.specimens.every((s) => s.genomeV2)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it('вторая загрузка этого же save не запускает повторную глобальную миграцию и не делает лишнюю запись', () => {
+    const { storageLike, memoryStorage, getSetItemCalls } = countingMemoryStorage();
+    const restore = installGlobalStorage(storageLike);
+    try {
+      const save = rawV3Save({ pityCounter: 4 });
+      memoryStorage.set('genesis-garden-save-v1', JSON.stringify(save));
+
+      new GameStore({ rng: mulberry32(1) }); // первая загрузка — мигрирует и пишет
+      const callsAfterFirst = getSetItemCalls();
+      expect(callsAfterFirst).toBe(1); // ровно одна запись — сама миграция
+
+      const onDiskAfterFirst = memoryStorage.get('genesis-garden-save-v1');
+
+      const second = new GameStore({ rng: mulberry32(2) }); // вторая загрузка — уже V4 c sidecar
+      expect(getSetItemCalls()).toBe(callsAfterFirst); // никакой дополнительной записи
+      expect(memoryStorage.get('genesis-garden-save-v1')).toBe(onDiskAfterFirst); // содержимое не менялось
+
+      const state = second.getState();
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.pityCounter).toBe(4);
+    } finally {
+      restore();
+    }
+  });
+
+  it('обычная загрузка уже полностью мигрированного V4-save (все sidecars на месте) не делает вообще ни одной записи', () => {
+    const { storageLike, memoryStorage, getSetItemCalls } = countingMemoryStorage();
+    const restore = installGlobalStorage(storageLike);
+    try {
+      // Полностью актуальный V4-save, собранный так же, как реальный persist().
+      const bootstrap = new GameStore({ rng: mulberry32(1), disablePersistence: true });
+      const fullyMigrated = { ...bootstrap.getState(), version: 4 };
+      memoryStorage.set('genesis-garden-save-v1', JSON.stringify(fullyMigrated));
+
+      new GameStore({ rng: mulberry32(2) });
+
+      expect(getSetItemCalls()).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('V4-save с одним отсутствующим sidecar сразу перезаписывается в storage; следующая загрузка — no-op', () => {
+    const { storageLike, memoryStorage, getSetItemCalls } = countingMemoryStorage();
+    const restore = installGlobalStorage(storageLike);
+    try {
+      const bootstrap = new GameStore({ rng: mulberry32(1), disablePersistence: true });
+      const base = bootstrap.getState();
+      const [withSidecar] = base.specimens;
+      // Смешанный V4-save: один specimen без genomeV2 (сценарий V2->Legacy
+      // breed->V2, delta doc §7.2), второй — уже с sidecar.
+      const missingSidecarSpecimen = { id: 'legacy-new', genome: withSidecar.genome, createdAt: 0 };
+      const mixedV4Save = {
+        ...base,
+        version: 4,
+        specimens: [withSidecar, missingSidecarSpecimen],
+      };
+      memoryStorage.set('genesis-garden-save-v1', JSON.stringify(mixedV4Save));
+
+      new GameStore({ rng: mulberry32(2) }); // должен backfill'ить и сразу записать
+      expect(getSetItemCalls()).toBe(1);
+
+      const onDisk = JSON.parse(memoryStorage.get('genesis-garden-save-v1')!);
+      expect(onDisk.specimens.find((s: { id: string }) => s.id === 'legacy-new').genomeV2).toBeDefined();
+      // Save-уровневые поля (pollen/labLevel/флаги/pity) НЕ тронуты этой
+      // записью — механизм backfill'а не перевыдаёт ресурсы (§7.2).
+      expect(onDisk.pollen).toBe(base.pollen);
+      expect(onDisk.labLevel).toBe(base.labLevel);
+
+      // Следующая загрузка — уже все specimens с sidecar, no-op.
+      new GameStore({ rng: mulberry32(3) });
+      expect(getSetItemCalls()).toBe(1); // не увеличилось
+    } finally {
+      restore();
+    }
+  });
+
+  it('если storage.setItem() бросает исключение — сохраняются загруженные coins/specimens и мигрированное состояние в памяти, новая игра не создаётся', () => {
+    const memoryStorage = new Map<string, string>();
+    const throwingStorage: StorageLike = {
+      getItem: (k: string) => memoryStorage.get(k) ?? null,
+      setItem: () => {
+        throw new Error('QuotaExceededError: имитация приватного режима/переполненной квоты');
+      },
+    };
+    const restore = installGlobalStorage(throwingStorage);
+    try {
+      const save = rawV3Save({ coins: 4321, pityCounter: 4 });
+      memoryStorage.set('genesis-garden-save-v1', JSON.stringify(save));
+
+      // Конструктор не должен пробрасывать исключение из persist() наружу.
+      expect(() => new GameStore({ rng: mulberry32(1) })).not.toThrow();
+
+      const store = new GameStore({ rng: mulberry32(1) });
+      const state = store.getState();
+
+      // Загруженные данные сохранены — это НЕ новая игра.
+      expect(state.coins).toBe(4321);
+      expect(state.specimens).toHaveLength(2);
+      // Мигрированное состояние в памяти корректно, несмотря на то что
+      // фактическая запись на диск не удалась.
+      expect(state.pollen).toBe(24);
+      expect(state.labLevel).toBe(3);
+      expect(state.firstBreedFreeClaimed).toBe(true);
+      expect(state.pityCounter).toBe(4);
+      expect(state.specimens.every((s) => s.genomeV2)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+});
