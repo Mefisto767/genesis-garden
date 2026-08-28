@@ -1,11 +1,15 @@
-import type { Entitlement, GameState, Plot, Specimen } from './types';
+import type { Entitlement, GameState, Plot, PlotHybridV2, Specimen } from './types';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
-import { ensureGenomeV2Sidecars } from './geneticsV2';
+import { ensureGenomeV2Sidecars, type HybridSeedV2 } from './geneticsV2';
+import type { BreedRejectionReasonV2 } from './inheritanceV2';
+import { breedV2 } from './mutationV2';
 import { GARDEN_CONFIG, BREEDING_CONFIG, STARTING_STATE_CONFIG } from './config';
 import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
+import { NURSERY_TRAY_CAPACITY, hybridGrowthStatusV2, regrowStatusV2, type GrowthStatusV2 } from './nurseryV2';
+import { projectGenomeV2ToLegacy } from './legacyProjectionV2';
 import type { RngFn } from './rng';
 import { defaultRng } from './rng';
 
@@ -223,6 +227,45 @@ export interface PlotStatus {
   growMs: number;
 }
 
+// ----------------------------------------------------------------------------
+// Genetics V2 — Slice 5 (Nursery Tray, рост, постоянные растения).
+// docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8.
+// ----------------------------------------------------------------------------
+
+/** Причины отказа `breedNurseryV2` (contract §4.8.7) — четыре новые store-
+ * level причины плюс прозрачно прокинутые причины Slice 3-4 species-
+ * валидации (`unsupported_species`/`interspecies_locked`), не переопределяя
+ * и не заменяя их. */
+export type BreedNurseryV2RejectionReason =
+  | 'same_parent'
+  | 'parent_not_found'
+  | 'parent_missing_genome_v2'
+  | 'nursery_tray_full'
+  | BreedRejectionReasonV2;
+
+export interface BreedNurseryV2Success {
+  ok: true;
+  hybridSeed: HybridSeedV2;
+  mutated: boolean;
+  nextPityCounter: number;
+}
+
+export interface BreedNurseryV2Failure {
+  ok: false;
+  reason: BreedNurseryV2RejectionReason;
+}
+
+export type BreedNurseryV2Result = BreedNurseryV2Success | BreedNurseryV2Failure;
+
+/** Причины отказа `plantHybridSeedV2` (contract §4.8.2). */
+export type PlantHybridV2RejectionReason = 'seed_not_found' | 'plot_not_found' | 'plot_locked' | 'plot_occupied';
+
+export type PlantHybridV2Result = { ok: true } | { ok: false; reason: PlantHybridV2RejectionReason };
+
+/** Статус роста/повторного цикла `Plot.hybridV2`, единая точка правды для UI
+ * и `harvestHybridV2` (тот же принцип, что `PlotStatus`/`plotStatus()` выше). */
+export type HybridPlotStatusV2 = GrowthStatusV2 & { phase: 'growing' | 'mature' };
+
 interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -356,7 +399,11 @@ export class GameStore {
   plantSeed(plotId: number, seedId: string): boolean {
     const plot = this.state.plots.find((p) => p.id === plotId);
     const owned = this.state.inventory[seedId] ?? 0;
-    if (!plot || !plot.unlocked || plot.seedId !== null) return false;
+    // Genetics V2 Slice 5 — mutual-exclusion invariant (contract §4.8.1):
+    // `hybridV2` (в любой фазе) и legacy-посадка никогда не сосуществуют на
+    // одной грядке. `plot.hybridV2` всегда `undefined`/`null` вне V2-пути
+    // (Classic/Overhaul+Legacy), поэтому это НЕ меняет поведение для них.
+    if (!plot || !plot.unlocked || plot.seedId !== null || plot.hybridV2 != null) return false;
     if (owned <= 0) return false;
     this.state = {
       ...this.state,
@@ -446,6 +493,22 @@ export class GameStore {
     const specimen = this.state.specimens.find((s) => s.id === id);
     if (!specimen) return null;
     if (specimen.favorite) return 'favorite';
+    // Genetics V2 Slice 5 — defensive guard, not requested by any single
+    // decision but necessary to avoid a real data-corruption bug: a specimen
+    // still referenced as the permanent plant on a Plot
+    // (`Plot.hybridV2.specimenId`, contract §4.8.1/§4.8.4) must not be
+    // removed by this unrelated legacy flat-rate mechanic — doing so would
+    // leave that Plot's `hybridV2` reference dangling (the plot could never
+    // progress or be collected again). Tiered nursery/grown-specimen
+    // recycling itself is Slice 7 scope (not implemented here) — this guard
+    // only protects the existing mechanic from corrupting V2 plot state.
+    // From the caller's perspective this is indistinguishable from "not
+    // found" (`null`), matching how AlbumPanel already treats other no-op
+    // outcomes — no UI change needed.
+    const onPlot = this.state.plots.some(
+      (p) => p.hybridV2?.phase === 'mature' && p.hybridV2.specimenId === id
+    );
+    if (onPlot) return null;
     const dustGained = BREEDING_CONFIG.recycleDustReward;
     this.state = {
       ...this.state,
@@ -478,6 +541,145 @@ export class GameStore {
       coins: this.state.coins + def.rewardCoins,
       geneticDust: this.state.geneticDust + def.rewardDust,
       questsClaimed: [...this.state.questsClaimed, questId],
+    };
+    this.emit();
+    return true;
+  }
+
+  // --------------------------------------------------------------------
+  // Genetics V2 — Slice 5 (Nursery Tray, рост, постоянные растения).
+  // docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8. Экономика (coins/
+  // pollen/geneticDust/три обучающих флага) сознательно НЕ читается и не
+  // пишется ни одним из методов ниже — Slice 6/7 (delta doc §0.7 п.9).
+  // --------------------------------------------------------------------
+
+  /**
+   * V2-скрещивание двух специменов из коллекции в `HybridSeedV2`,
+   * помещаемый в Nursery Tray (не готовый `Specimen` — contract §4.8.7).
+   * Все проверки ниже выполняются строго по порядку, ДО вызова `breedV2` —
+   * при любом отказе `breedV2` не вызывается вообще: 0 RNG-вызовов,
+   * `pityCounter`/родители/`nurseryTray`/остальной `GameState` не меняются.
+   * Species-валидация (`unsupported_species`/`interspecies_locked`)
+   * выполняется внутри самого `breedV2` (Slice 3-4, без изменений).
+   */
+  breedNurseryV2(seedParentId: string, pollenParentId: string): BreedNurseryV2Result {
+    if (seedParentId === pollenParentId) return { ok: false, reason: 'same_parent' };
+    const seedParent = this.state.specimens.find((s) => s.id === seedParentId);
+    const pollenParent = this.state.specimens.find((s) => s.id === pollenParentId);
+    if (!seedParent || !pollenParent) return { ok: false, reason: 'parent_not_found' };
+    if (!seedParent.genomeV2 || !pollenParent.genomeV2) return { ok: false, reason: 'parent_missing_genome_v2' };
+    if (this.state.nurseryTray.length >= NURSERY_TRAY_CAPACITY) return { ok: false, reason: 'nursery_tray_full' };
+
+    const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, this.rng);
+    if (!result.ok) return { ok: false, reason: result.reason };
+
+    const hybridSeed: HybridSeedV2 = {
+      id: nextId(),
+      genomeV2: result.genomeV2,
+      parentIds: [seedParentId, pollenParentId],
+      createdAt: Date.now(),
+      plantedAt: null,
+      plotId: null,
+    };
+    this.state = {
+      ...this.state,
+      nurseryTray: [...this.state.nurseryTray, hybridSeed],
+      pityCounter: result.nextPityCounter,
+    };
+    this.emit();
+    return { ok: true, hybridSeed, mutated: result.mutated, nextPityCounter: result.nextPityCounter };
+  }
+
+  /**
+   * Посадить `HybridSeedV2` из Nursery Tray на конкретную грядку (contract
+   * §4.8.2). Неуспех — полный no-op: семя остаётся в трее, грядка не
+   * меняется. Проверки строго по порядку.
+   */
+  plantHybridSeedV2(hybridId: string, plotId: number): PlantHybridV2Result {
+    const seed = this.state.nurseryTray.find((h) => h.id === hybridId);
+    if (!seed) return { ok: false, reason: 'seed_not_found' };
+    const plot = this.state.plots.find((p) => p.id === plotId);
+    if (!plot) return { ok: false, reason: 'plot_not_found' };
+    if (!plot.unlocked) return { ok: false, reason: 'plot_locked' };
+    if (plot.seedId !== null || plot.hybridV2 != null) return { ok: false, reason: 'plot_occupied' };
+
+    const plantedAt = Date.now();
+    const plantedSeed: HybridSeedV2 = { ...seed, plantedAt, plotId };
+    const growing: PlotHybridV2 = { phase: 'growing', hybrid: plantedSeed };
+    this.state = {
+      ...this.state,
+      nurseryTray: this.state.nurseryTray.filter((h) => h.id !== hybridId),
+      plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: growing } : p)),
+    };
+    this.emit();
+    return { ok: true };
+  }
+
+  /** Статус роста (`growing`) или повторного цикла (`mature`) V2-гибрида на
+   * грядке — единая точка правды для UI и `harvestHybridV2` (тот же принцип,
+   * что `plotStatus()` выше). `null`, если на грядке нет V2-гибрида, или если
+   * данные повреждены (mature-грядка ссылается на несуществующий specimen). */
+  hybridPlotStatusV2(plot: Plot, now: number = Date.now()): HybridPlotStatusV2 | null {
+    const hybridV2 = plot.hybridV2;
+    if (!hybridV2) return null;
+    if (hybridV2.phase === 'growing') {
+      const status = hybridGrowthStatusV2(hybridV2.hybrid, now);
+      return status ? { ...status, phase: 'growing' } : null;
+    }
+    const specimen = this.state.specimens.find((s) => s.id === hybridV2.specimenId);
+    if (!specimen || !specimen.genomeV2) return null;
+    const status = regrowStatusV2(specimen.genomeV2.speciesId, hybridV2.lastHarvestAt, now);
+    return status ? { ...status, phase: 'mature' } : null;
+  }
+
+  /**
+   * Сбор V2-гибрида на грядке (contract §4.8.4). Первый успешный сбор
+   * созревшего `HybridSeedV2` создаёт РОВНО ОДИН `Specimen` и атомарно
+   * переключает грядку в `mature` — присутствие `mature`-состояния с уже
+   * установленным `specimenId` физически исключает повторное создание
+   * `Specimen` на последующих вызовах (включая после reload). Повторный сбор
+   * (уже `mature`) — идемпотентен: no-op до готовности повторного цикла,
+   * иначе обновляет только `lastHarvestAt`, без экономической награды
+   * (Slice 6/7). Растение никогда не удаляется с грядки этим методом.
+   */
+  harvestHybridV2(plotId: number, now: number = Date.now()): boolean {
+    const plot = this.state.plots.find((p) => p.id === plotId);
+    if (!plot || !plot.hybridV2) return false;
+
+    if (plot.hybridV2.phase === 'growing') {
+      const hybrid = plot.hybridV2.hybrid;
+      const status = hybridGrowthStatusV2(hybrid, now);
+      if (!status || !status.ready) return false;
+
+      const specimen: Specimen = {
+        id: nextId(),
+        genome: projectGenomeV2ToLegacy(hybrid.genomeV2),
+        genomeV2: hybrid.genomeV2,
+        createdAt: now,
+        parentIds: hybrid.parentIds,
+      };
+      const mature: PlotHybridV2 = { phase: 'mature', specimenId: specimen.id, lastHarvestAt: now };
+      this.state = {
+        ...this.state,
+        specimens: [...this.state.specimens, specimen],
+        plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: mature } : p)),
+      };
+      this.emit();
+      return true;
+    }
+
+    // phase === 'mature' — повторный цикл. Идемпотентный guard — грядка уже
+    // не в состоянии 'growing', эта ветка не может создать второй Specimen.
+    const matureState = plot.hybridV2;
+    const specimen = this.state.specimens.find((s) => s.id === matureState.specimenId);
+    if (!specimen || !specimen.genomeV2) return false;
+    const status = regrowStatusV2(specimen.genomeV2.speciesId, matureState.lastHarvestAt, now);
+    if (!status || !status.ready) return false;
+
+    const updated: PlotHybridV2 = { phase: 'mature', specimenId: matureState.specimenId, lastHarvestAt: now };
+    this.state = {
+      ...this.state,
+      plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: updated } : p)),
     };
     this.emit();
     return true;

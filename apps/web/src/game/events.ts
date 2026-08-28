@@ -20,6 +20,14 @@ export class Emitter<Events extends object> {
 export interface GardenEvents {
   requestPlant: { plotId: number };
   toast: { text: string };
+  /**
+   * Genetics V2 — Slice 5 (contract §4.8.4, delta doc §0.7 п.11): открыть
+   * минимальную простую карточку постоянного V2-растения на грядке. Эмитится
+   * только из EstateScene при клике по грядке в фазе `mature`
+   * (`Plot.hybridV2.phase === 'mature'`) — растущий гибрид (`growing`) этот
+   * ивент не эмитит, геном ещё не раскрыт.
+   */
+  requestHybridCard: { plotId: number };
 }
 
 export const gardenEvents = new Emitter<GardenEvents>();

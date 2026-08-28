@@ -42,11 +42,44 @@ export interface Specimen {
   revealedLoci?: RevealedLocusEntry[];
 }
 
+/**
+ * Genetics V2 nursery lifecycle (Slice 5,
+ * docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.8.1). Единственный
+ * источник истины по посаженному/зрелому V2-гибриду на грядке — сознательно
+ * НЕ отдельный массив `GameState.plantedHybrids` (владелец, pre-Slice-5
+ * contract-lock pass).
+ *
+ * `growing` хранит ПОЛНЫЙ `HybridSeedV2` (включая `genomeV2`) — тот же
+ * объект, что лежал в `nurseryTray`, без пересборки; геном игроку не
+ * показывается до созревания (ограничение UI, не данных).
+ *
+ * `mature` хранит только `specimenId`/`lastHarvestAt` — геном/фенотип/
+ * родословная читаются исключительно из `GameState.specimens`, не
+ * дублируются здесь. Присутствие `mature`-состояния с уже установленным
+ * `specimenId` — единственный и достаточный идемпотентный guard против
+ * повторного создания `Specimen` (см. `store.ts` `harvestHybridV2`).
+ */
+export type PlotHybridV2 =
+  | { phase: 'growing'; hybrid: HybridSeedV2 }
+  | { phase: 'mature'; specimenId: string; lastHarvestAt: number };
+
 export interface Plot {
   id: number;
   unlocked: boolean;
   seedId: string | null;
   plantedAt: number | null;
+  /**
+   * Genetics V2 nursery lifecycle (Slice 5) — аддитивное nullable поле.
+   * Отсутствует/`undefined` у любой грядки, никогда не тронутой V2-кодом
+   * (Classic, Overhaul+Legacy, старые save до Slice 5) — не требует миграции
+   * или бампа `SAVE_VERSION` (contract §4.8.9).
+   *
+   * Инвариант: `hybridV2` (в любой фазе) и legacy-посадка (`seedId!==null`)
+   * никогда не сосуществуют на одной грядке одновременно — обеспечивается
+   * проверками в `GameStore.plantSeed()`/`GameStore.plantHybridSeedV2()`, не
+   * структурой типа.
+   */
+  hybridV2?: PlotHybridV2 | null;
 }
 
 /** Временный буст (сейчас пусто — Этап 7 заполнит покупками ускорений). */

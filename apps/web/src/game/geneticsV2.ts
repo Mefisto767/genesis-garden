@@ -169,7 +169,13 @@ function homozygous<T extends string>(value: T): AllelePair<T> {
  * значению без синхронной правки config.ts и implementation contract §4.2:
  * там же (аудит §3.2) описано, что это существующие цвета кода, не новые.
  */
-const PRIMARY_HEX_TO_ID: Record<string, PrimaryColorAllele> = {
+/**
+ * Экспортировано (без изменения значений) начиная со Slice 5 — переиспользуется
+ * 1:1 инверсией в `legacyProjectionV2.ts`, чтобы обратная V2->legacy проекция
+ * (contract §4.8.6) не заводила отдельную, потенциально расходящуюся копию
+ * той же таблицы hex<->id.
+ */
+export const PRIMARY_HEX_TO_ID: Record<string, PrimaryColorAllele> = {
   '#FFC85C': 'primary_honey',
   '#F5A623': 'primary_amber',
   '#FF6F59': 'primary_sunset',
@@ -180,7 +186,8 @@ const PRIMARY_HEX_TO_ID: Record<string, PrimaryColorAllele> = {
   '#CBE9F2': 'primary_frost',
 };
 
-const SECONDARY_HEX_TO_ID: Record<string, SecondaryColorAllele> = {
+/** Экспортировано с тем же обоснованием, что и `PRIMARY_HEX_TO_ID` выше. */
+export const SECONDARY_HEX_TO_ID: Record<string, SecondaryColorAllele> = {
   '#57993A': 'secondary_forest',
   '#FF6F59': 'secondary_sunset',
   '#F5A623': 'secondary_amber',
@@ -190,7 +197,8 @@ const SECONDARY_HEX_TO_ID: Record<string, SecondaryColorAllele> = {
   '#D98C12': 'secondary_ochre',
 };
 
-const LEAF_COLOR_HEX_TO_ID: Record<string, LeafColorAllele> = {
+/** Экспортировано с тем же обоснованием, что и `PRIMARY_HEX_TO_ID` выше. */
+export const LEAF_COLOR_HEX_TO_ID: Record<string, LeafColorAllele> = {
   '#89D65C': 'leaf_color_meadow',
   '#6FBE44': 'leaf_color_fresh',
   '#57993A': 'leaf_color_forest',

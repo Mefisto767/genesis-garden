@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { gameStore } from '../store';
 import { getSeedDef } from '../seedCatalog';
-import type { Plot } from '../types';
+import type { Plot, PlotHybridV2 } from '../types';
 import { gardenEvents } from '../events';
 import { overhaulEvents } from '../../overhaul/events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
@@ -57,6 +57,17 @@ function formatRemaining(ms: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Genetics V2 — Slice 5 (delta doc §0.7 п.11): проекция legacy hex-строки
+ * (`#RRGGBB`, из `projectGenomeV2ToLegacy`/`Specimen.genome`) в Phaser-тинт
+ * (число), тот же формат, что уже используют `PlantColorway`/`PALETTE`
+ * (plantPalette.ts). Обратной синхронизации с движком не требует — чисто
+ * презентационная конвертация форматов одного и того же цвета.
+ */
+function hexStringToTint(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
 }
 
 type EstateDebugApi = {
@@ -283,6 +294,16 @@ export class EstateScene extends Phaser.Scene {
       return;
     }
 
+    // Genetics V2 — Slice 5 (contract §4.8.1/§4.8.3, delta doc §0.7 п.11):
+    // `hybridV2` — отдельная от legacy-посадки ветка рендера. Проверяется
+    // ДО `!plot.seedId`, т.к. занятая V2-грядка тоже имеет `seedId === null`
+    // (инвариант mutual-exclusion, contract §4.8.1) — иначе она ошибочно
+    // отрисовалась бы как пустая "+" грядка.
+    if (plot.hybridV2) {
+      this.renderHybridPlotCell(plot, plot.hybridV2, x, y, size);
+      return;
+    }
+
     if (!plot.seedId) {
       const tile = this.addTile(x, y, size, false);
       const plus = this.add
@@ -358,6 +379,118 @@ export class EstateScene extends Phaser.Scene {
       const ok = gameStore.harvest(plot.id);
       if (ok) track('plant_harvested', { plotId: plot.id, seedId: plot.seedId });
     });
+  }
+
+  /**
+   * Genetics V2 — Slice 5 (contract §4.8.1/§4.8.3/§4.8.4, delta doc §0.7 п.11)
+   * — визуально отдельная от legacy ветка одной и той же грядки. Растущий
+   * гибрид (`growing`) — нейтральный окрас (PALETTE.neutral на всех трёх
+   * каналах), геном НЕ раскрывается до созревания; стадии 1/2/3 те же
+   * пороги, что у legacy-растений (STAGE2_THRESHOLD). Постоянное растение
+   * (`mature`) — ВСЕГДА стадия 3 (растение не исчезает и не "перерастает"
+   * после первого сбора, contract §4.8.4 "растение остаётся"), реальный
+   * окрас через legacy-проекцию specimen.genome (см. legacyProjectionV2.ts),
+   * повторный цикл показан отдельным прогресс-баром поверх постоянного
+   * растения, не как рост самого растения.
+   */
+  private renderHybridPlotCell(plot: Plot, hybridV2: PlotHybridV2, x: number, y: number, size: number) {
+    const status = gameStore.hybridPlotStatusV2(plot);
+    if (!status) return; // повреждённые данные (contract §4.8.4) — не рендерим, не роняем сцену
+
+    const tile = this.addTile(x, y, size, false);
+
+    if (hybridV2.phase === 'growing') {
+      const speciesId = hybridV2.hybrid.genomeV2.speciesId;
+      const { ready, progress, remainingMs } = status;
+      const stage = ready ? 3 : progress < STAGE2_THRESHOLD ? 1 : 2;
+      const neutralColorway = { primary: PALETTE.neutral, secondary: PALETTE.neutral, leaf: PALETTE.leafDark };
+
+      if (ready) {
+        const glow = this.add.circle(x, y - size * 0.06, size * 0.5, PALETTE.amberLight, 0.55);
+        glow.setDepth(y - 1);
+        this.tweens.add({ targets: glow, alpha: 0.2, duration: 700, yoyo: true, repeat: -1 });
+        this.plotsContainer.add(glow);
+      }
+
+      const plantSize = size * (ready ? 0.98 : 0.9);
+      const plant = buildPlantSprite(this, x, y - size * 0.06, plantSize, speciesId, stage, neutralColorway);
+      plant.setDepth(y);
+      this.plotsContainer.add(plant);
+
+      if (ready) {
+        const labelText = this.add
+          .text(x, y + size * 0.38, 'Собрать', {
+            fontFamily: FONT_HEAD,
+            fontSize: `${size * 0.15}px`,
+            color: INK,
+            backgroundColor: '#F5A623',
+            padding: { left: 8, right: 8, top: 2, bottom: 2 },
+          })
+          .setOrigin(0.5);
+        labelText.setDepth(y + 1);
+        this.plotsContainer.add(labelText);
+      } else {
+        this.renderProgressBar(x, y, size, progress, remainingMs);
+      }
+
+      tile.on('pointerdown', () => {
+        if (!ready) return;
+        gameStore.harvestHybridV2(plot.id);
+      });
+      return;
+    }
+
+    // phase === 'mature' — постоянное растение, всегда стадия 3.
+    const state = gameStore.getState();
+    const specimen = state.specimens.find((s) => s.id === hybridV2.specimenId);
+    if (!specimen) return; // повреждённые данные — не рендерим (contract §4.8.4 idempotency guard)
+
+    const colorway = {
+      primary: hexStringToTint(specimen.genome.primary),
+      secondary: hexStringToTint(specimen.genome.secondary),
+      leaf: hexStringToTint(specimen.genome.leaf),
+    };
+    const plant = buildPlantSprite(this, x, y - size * 0.06, size * 0.98, specimen.genome.shape, 3, colorway);
+    plant.setDepth(y);
+    this.plotsContainer.add(plant);
+
+    if (status.ready) {
+      const glow = this.add.circle(x, y - size * 0.06, size * 0.5, PALETTE.amberLight, 0.4);
+      glow.setDepth(y - 1);
+      this.tweens.add({ targets: glow, alpha: 0.15, duration: 900, yoyo: true, repeat: -1 });
+      this.plotsContainer.add(glow);
+    } else {
+      this.renderProgressBar(x, y, size, status.progress, status.remainingMs);
+    }
+
+    tile.on('pointerdown', () => gardenEvents.emit('requestHybridCard', { plotId: plot.id }));
+  }
+
+  /** Прогресс-бар роста/повторного цикла — общий кусок разметки, использовался
+   * повторно (было продублировано между legacy- и V2-веткой рендера грядки). */
+  private renderProgressBar(x: number, y: number, size: number, progress: number, remainingMs: number) {
+    const barWidth = size * 0.72;
+    const barBg = this.add
+      .rectangle(x, y + size * 0.33, barWidth, size * 0.08, PALETTE.cream, 0.95)
+      .setOrigin(0.5)
+      .setStrokeStyle(2, PALETTE.ink, 0.9);
+    const barFill = this.add
+      .rectangle(x - barWidth / 2, y + size * 0.33, barWidth * progress, size * 0.08, PALETTE.amber, 1)
+      .setOrigin(0, 0.5);
+    const timer = this.add
+      .text(x, y + size * 0.48, formatRemaining(remainingMs), {
+        fontFamily: FONT_BODY,
+        fontSize: `${size * 0.13}px`,
+        fontStyle: '700',
+        color: INK,
+        backgroundColor: '#FDF3D9',
+        padding: { left: 5, right: 5, top: 1, bottom: 1 },
+      })
+      .setOrigin(0.5);
+    barBg.setDepth(y + 1);
+    barFill.setDepth(y + 1);
+    timer.setDepth(y + 1);
+    this.plotsContainer.add([barBg, barFill, timer]);
   }
 
   // ---- персонаж -------------------------------------------------------------
