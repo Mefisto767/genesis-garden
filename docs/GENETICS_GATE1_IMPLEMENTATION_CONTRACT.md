@@ -1,8 +1,10 @@
 # Genesis Garden — Gate 1 implementation contract (Genetics V2, 9-locus model)
 
-Дата: 2026-08-28 (проход 10 — Slice 6 принят владельцем, Slice 7 contract-lock, новый §4.10; проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
-Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`), Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) и Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9, docs `55d55ae` + код `08e9206`) **завершены и приняты владельцем** 28.08.2026. Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль — технический контракт §4.10) начат этим проходом (проход 10): сначала этот docs-only contract-lock, затем отдельный код-коммит. Slice 8 и далее не начинаются без отдельного подтверждения владельца.
-Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6, §0.9 — экономика переработки Slice 7), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+Дата: 2026-08-28 (проход 11 — Slice 7 принят владельцем целиком (3 коммита), Slice 8 contract-lock, новый §4.11; проход 10 — Slice 6 принят владельцем, Slice 7 contract-lock, §4.10; проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
+Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`), Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9, docs `55d55ae` + код `08e9206`) и Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль — технический контракт §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`) **завершены и приняты владельцем** 28.08.2026. Slice 8 (Lab L2 — обучающий грант «первый гибрид» + минимальный микроскоп — технический контракт §4.11) начат этим проходом (проход 11): сначала этот docs-only contract-lock, затем отдельный код-коммит. Slice 9 и далее не начинаются без отдельного подтверждения владельца.
+Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6, §0.9 — экономика переработки Slice 7, §0.10 — Lab L2/микроскоп Slice 8), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+
+**Проход 11 — Slice 7 принят; contract-lock Lab L2/микроскопа перед Slice 8**: владелец принял Slice 7 целиком (docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`, три коммита единым пакетом) и разрешил начать только Slice 8 — явно запретив начинать Slice 9 без отдельного подтверждения. Технический контракт обучающего гранта «первый гибрид» (модуль `labV2.ts`, расширение `harvestHybridV2` — §4.11.1), гейта Колокольника (`isSpeciesUnlockedV2`, `buySeedV2`/`plantSeedV2`/`breedNurseryV2` — §4.11.2) и минимального микроскопа (модуль `microscopeV2.ts`, `revealHiddenLocusV2` — §4.11.3, точные тексты — §4.11.4, UI — §4.11.5) зафиксирован новым §4.11 ниже, ДО начала кода Slice 8. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7), persisted nursery lifecycle (§4.8), пыльцевая экономика (§4.9) и экономика переработки (§4.10) **не пересматривались**.
 
 **Проход 10 — Slice 6 принят; contract-lock экономики переработки перед Slice 7**: владелец принял Slice 6 целиком (docs `55d55ae` + код `08e9206`) единым пакетом и разрешил начать только Slice 7. Технический контракт переработки (модуль `recyclingV2.ts`, `recycleNurserySeedV2`/`recycleSpecimenV2`, единая первая компенсация до 3, UI `LabPanelV2` nursery-список + новый `AlbumPanelV2`, защитный фикс `pollenRewardV2` для неподдерживаемого species) зафиксирован новым §4.10 ниже, ДО начала кода Slice 7. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7), persisted nursery lifecycle (§4.8) и пыльцевая экономика (§4.9, кроме точечного защитного фикса из §4.10.1) **не пересматривались**.
 
@@ -861,9 +863,142 @@ type RecycleSpecimenV2Result =
 
 ---
 
+## 4.11. Slice 8 — Lab L2 (обучающий грант «первый гибрид») + минимальный микроскоп (проход 11, contract-lock перед Slice 8)
+
+Технический контракт решений владельца из `GENETICS_TARGET_DELTA.md` §0.10 — обязателен для реализации Slice 8, наравне с §4.1-§4.10 для Slice 1-7. `SAVE_VERSION` остаётся `4` — `labLevel`/`firstHybridRewardClaimed`/`geneticDust` уже существуют в схеме с Slice 1 (§4.1), `Specimen.revealedLoci` уже существует в схеме с Slice 8-Ready-типом, введённым в `geneticsV2.ts` заранее (§4.1, поле помечено «Slice 8», не используется до этого прохода) — Slice 8 только начинает читать/писать эти поля игровой логикой, никакой новой миграции не требуется.
+
+Разрешена **только** эта пара механик — Slice 9 и далее (межвидовое скрещивание, естественное раскрытие через потомство, экран «Reveal»/«Почему так вышло?», родословная/pedigree, GeneLock, Lab L3/L4, Lumi, полный онбординг, Botanical book, новые здания/NPC/зоны/арт) не начинается без отдельного подтверждения владельца.
+
+### 4.11.1. Обучающий грант «первый гибрид» — расширение `GameStore.harvestHybridV2(plotId, now)`
+
+```ts
+export const LAB_LEVEL_2 = 2;
+export const FIRST_HYBRID_POLLEN_GRANT = 8;
+```
+
+(`apps/web/src/game/labV2.ts`, новый модуль — чистые константы и предикат гейта, §4.11.2; без RNG и без чтения/записи `GameState`, та же дисциплина, что `pollenV2.ts`/`recyclingV2.ts`.)
+
+Оба атомарных обновления §4.8.4/§4.9.2 (первый сбор созревшего `HybridSeedV2` → `Specimen`+`mature`; готовый повторный цикл → обновление `lastHarvestAt`) дополняются в ТОМ ЖЕ `this.state = {...}`, единым условием `grantFirstHybridReward = !state.firstHybridRewardClaimed`:
+
+- `pollen: state.pollen + pollenRewardV2(genomeV2) + (grantFirstHybridReward ? FIRST_HYBRID_POLLEN_GRANT : 0)` — грант **поверх** обычной формульной награды (§4.9.2), не вместо неё;
+- `firstHybridRewardClaimed: grantFirstHybridReward ? true : state.firstHybridRewardClaimed`;
+- `labLevel: grantFirstHybridReward ? Math.max(state.labLevel, LAB_LEVEL_2) : state.labLevel` — `Math.max`, не безусловное присваивание: ветеранский save с `labLevel` уже `>2` (открытым другим путём/будущим Slice) никогда не понижается этим грантом.
+
+Все три поля меняются **в одном и том же** `this.state = {...}`, тем же вызовом `this.emit()`, что и `pollen`/`specimens`/`plots` — не отдельным вторым обновлением состояния.
+
+**Условие гранта — единственное и симметричное для обеих веток `harvestHybridV2`**: `!state.firstHybridRewardClaimed`, проверяется одинаково и в ветке `growing→mature` (первое созревание), и в ветке повторного цикла (`mature`, уже готов к новому сбору). Это осознанное расширение сверх буквального прочтения «при первом успешном переходе `growing→mature`» — необходимое для корректной обработки существующих Slice 5-7 save, зафиксированное здесь явно:
+
+> **Существующие save (Slice 5-7), где зрелый V2-гибрид уже есть, но `firstHybridRewardClaimed` ещё `false`.** Флаг `firstHybridRewardClaimed` появляется в игровой логике только в этом slice — ни один переход `growing→mature`, случившийся до Slice 8, не мог его установить. Если бы грант проверялся исключительно в ветке `growing→mature`, такой игрок физически не мог бы больше получить грант никаким действием: его единственный `growing→mature` переход уже состоялся в прошлом, а требование задания прямо запрещает вынуждать игрока «вырастить ещё одного первого гибрида». Проверка `!firstHybridRewardClaimed` в ОБЕИХ ветках решает это без специального кода миграции: у такого игрока следующий же сбор — независимо от того, growing это ещё не собранный гибрид или повторный цикл уже мature-растения — легитимно является «первым сбором после появления этого флага» и получает грант ровно один раз. После этого `firstHybridRewardClaimed=true` персистентен (save/reload), и ни одна из веток больше никогда не выдаёт грант повторно этому save — в том числе после reload, в том числе при следующих сборах того же или другого V2-растения.
+
+Ранний сбор (растение ещё не готово), повреждённые данные (mature-грядка без существующего `specimen`/без `genomeV2`) и повторный вызов на уже собранной в этом цикле грядке остаются полным no-op на уровне уже существующих `false`-веток §4.8.4/§4.9.2 — эти ветки возвращаются раньше, чем строится `firstHybridBonus`, поэтому грант, `firstHybridRewardClaimed`, `labLevel` не меняются ни на бит. Legacy `harvest()` (плоский посевной сбор, `game/store.ts`) этот метод не переиспользует и не читает ни `firstHybridRewardClaimed`, ни `labLevel` вообще — legacy-сбор ничего не открывает, ни при каких условиях.
+
+Не меняются этим механизмом: `firstBreedFreeClaimed`, `firstRecycleTopUpClaimed`, `geneticDust`, `coins`, `pityCounter`, Nursery Tray (`nurseryTray`/`plantHybridSeedV2`/`breedNurseryV2` логика §4.8-4.9 — без изменений).
+
+### 4.11.2. Гейт Колокольника (`speciesId: 2`) — `apps/web/src/game/labV2.ts`
+
+```ts
+export const GATED_SPECIES_ID_V2 = 2;
+export const COLOKOLNIK_LOCKED_TEXT_V2 =
+  'Этот вид пока недоступен — вырасти своего первого гибрида, чтобы открыть его';
+
+export function isSpeciesUnlockedV2(speciesId: number, labLevel: number): boolean {
+  return speciesId !== GATED_SPECIES_ID_V2 || labLevel >= LAB_LEVEL_2;
+}
+```
+
+Единственный источник истины гейта — переиспользуется без дублирования каждым слоем, который должен его проверять:
+
+- **Store, `buySeedV2(seedId, qty)`** — новая V2-обёртка над немодифицированным legacy `buySeed()`: одна дополнительная проверка `isSpeciesUnlockedV2(def.speciesId, state.labLevel)` ДО вызова `buySeed()`; отказ — `{ ok:false, reason:'species_locked' }`, полный no-op, `buySeed()` не вызывается вообще, ни `coins`, ни `inventory` не меняются.
+- **Store, `plantSeedV2(plotId, seedId)`** — та же схема поверх немодифицированного legacy `plantSeed()`; покрывает и редкий путь посадки уже лежащего в инвентаре семени Колокольника (возможен только если оно туда попало до открытия L2, например через legacy-миграцию).
+- **Store, `breedNurseryV2(seedParentId, pollenParentId)`** — новый шаг 4 (после «оба specimen существуют» и «у обоих есть `genomeV2`», ДО `nursery_tray_full` и species-валидации Slice 3-4): если `genomeV2.speciesId` любого из двух родителей не проходит `isSpeciesUnlockedV2`, возвращается `{ ok:false, reason:'species_locked' }` — раньше, чем `nursery_tray_full` или `interspecies_locked`/`unsupported_species` успевают сработать первыми, то есть запрещённый по лабу вид никогда не маскируется этими более поздними причинами. `BreedNurseryV2RejectionReason` расширяется значением `'species_locked'`.
+- **UI, `ShopPanelV2`/`PlantPickerV2`/`LabPanelV2`** — тот же `isSpeciesUnlockedV2` определяет визуальную блокировку (см. §4.11.5); все три store-метода выше остаются обязательным defense-in-depth независимо от UI-уровня блокировки — прямой клик мимо UI-проверки (или будущий баг в ней) всё равно отклоняется на уровне store.
+
+После открытия Lab L2 (`labLevel>=2`) Колокольник доступен для покупки/посадки/как V2-родитель наравне с Солнечником — `isSpeciesUnlockedV2` возвращает `true` для любого `speciesId`, если `labLevel>=LAB_LEVEL_2`. Пара Колокольник×Колокольник после открытия L2 разрешена как обычное одновидовое V2-скрещивание (проходит species-валидацию Slice 3-4 без изменений — оба родителя одного вида). Межвидовая пара (Солнечник×Колокольник) после открытия L2 **остаётся** заблокированной как `interspecies_locked` — Lab L2 снимает только видовой гейт Колокольника, не межвидовую блокировку (Slice 9, без изменений в этом slice).
+
+Не меняются этим гейтом: общий legacy `ShopPanel.tsx`/`PlantPicker.tsx`/`buySeed()`/`plantSeed()` — Classic/Overhaul+Legacy поведение не затронуто ни в одном байте (§4.11.5).
+
+### 4.11.3. Минимальный микроскоп — `apps/web/src/game/microscopeV2.ts` + `GameStore.revealHiddenLocusV2(specimenId, locus)`
+
+```ts
+// apps/web/src/game/microscopeV2.ts — чистый модуль, без RNG и без
+// чтения/записи GameState (та же дисциплина, что pollenV2.ts/recyclingV2.ts).
+export const MICROSCOPE_REVEAL_COST = 3;
+
+/** Использует существующее состояние `unresearched` из `resolveExtendedCard`
+ *  (Slice 2, без изменений) — единственный источник истины «что реально
+ *  доступно для раскрытия»: не предлагает гомозиготные локусы (`homozygous`)
+ *  и уже раскрытые локусы (`revealed`). Кодоминирование в Gate 1 не
+ *  реализовано (§4.3) — у гетерозиготного локуса всегда ровно один скрытый
+ *  аллель либо он уже раскрыт; отдельного случая «признак без единственного
+ *  скрытого аллеля» не существует. */
+export function availableLociForRevealV2(
+  genomeV2: GenomeV2,
+  revealedLoci?: readonly RevealedLocusEntry[]
+): GenomeV2LocusKey[];
+
+/** Точный текст (§4.11.4): "Не хватает пыли: нужно 3, есть M". */
+export function insufficientDustLabelV2(availableDust: number): string;
+```
+
+```ts
+type RevealHiddenLocusV2RejectionReason =
+  | 'lab_locked' | 'specimen_not_found' | 'missing_genome_v2'
+  | 'locus_not_available' | 'insufficient_dust';
+
+type RevealHiddenLocusV2Result =
+  | { ok: true; locus: GenomeV2LocusKey; revealedAllele: string; dustSpent: number }
+  | { ok: false; reason: Exclude<RevealHiddenLocusV2RejectionReason, 'insufficient_dust'> }
+  | { ok: false; reason: 'insufficient_dust'; requiredDust: number; availableDust: number };
+```
+
+`GameStore.revealHiddenLocusV2(specimenId, locus)` — проверки строго в этом порядке, задание фиксирует именно эту последовательность:
+
+1. `state.labLevel >= LAB_LEVEL_2` (иначе `lab_locked`);
+2. `specimen = state.specimens.find(s => s.id === specimenId)` существует (иначе `specimen_not_found`);
+3. `specimen.genomeV2` существует (иначе `missing_genome_v2` — легаси-specimen без sidecar, тот же защитный путь, что `breedNurseryV2` шаг 3/`recycleSpecimenV2` шаг 2);
+4. `locus` входит в `availableLociForRevealV2(specimen.genomeV2, specimen.revealedLoci ?? [])` (иначе `locus_not_available` — покрывает и гомозиготные локусы, и уже раскрытые, единой причиной);
+5. `state.geneticDust >= MICROSCOPE_REVEAL_COST` (иначе `insufficient_dust`, с `requiredDust: 3, availableDust: state.geneticDust`);
+6. один атомарный `this.state = {...}`: `geneticDust: state.geneticDust - 3`; в `Specimen.revealedLoci` этого (и только этого) specimen добавляется ровно одна новая запись `{ locus, source: 'microscope' }` immutable-append'ом (`[...revealedLoci, {...}]`, не заменой массива) — шаг 4 уже гарантирует отсутствие дубликата для этого локуса и то, что этот локус ещё не занят записью `source:'natural'` (гомозиготные и уже-раскрытые локусы туда не проходят). Никакие другие поля `Specimen`/`GameState` не меняются.
+
+Любой отказ на шагах 1-5 — полный no-op: `geneticDust`, `specimens`/`revealedLoci` не меняются ни на бит, `this.emit()` не вызывается. `revealedLoci` живёт на самом `Specimen` (не на геноме/виде/родителе/потомке) — раскрытие физически не может затронуть другой specimen, даже с идентичным `genomeV2`, и переживает JSON save/reload round-trip и переключение V2↔Legacy↔V2 без изменений (Lab L2/`revealedLoci` — обычные поля `GameState`/`Specimen`, участвующие в том же save-формате, что и всё остальное).
+
+Определение раскрытого аллеля внутри шага 6 переиспользует `resolveExtendedCard` (Slice 2) для того же locus, чтобы узнать, какой из двух аллелей пары (`a`/`b`) сейчас **выражен** — раскрываемый аллель является другим. Отдельного повторного вычисления доминирования этот метод не вводит.
+
+### 4.11.4. Точные тексты (contract, обязательны дословно)
+
+| Место | Текст |
+|---|---|
+| Заголовок панели микроскопа | `Микроскоп` |
+| Подсказка выбора | `Выбери скрытый признак` |
+| Кнопка раскрытия | `Раскрыть за 3 пыли` |
+| Недостаток пыли | `Не хватает пыли: нужно 3, есть M` (M = `availableDust`) |
+| Успех раскрытия | `Признак раскрыт` |
+| Пустое состояние (нет нераскрытых скрытых признаков) | `У этого растения нет нераскрытых скрытых признаков` |
+| Блокировка Колокольника (шоп/питомник/лаборатория) | `Этот вид пока недоступен — вырасти своего первого гибрида, чтобы открыть его` |
+
+До оплаты список выбора показывает только русское название категории локуса (`Стебель`/`Форма листвы`/.../`Аура` — та же таблица подписей, что уже используется простой карточкой, `hybridCardViewModel.ts`), никогда значение скрытого аллеля. После успешного раскрытия — точное русское название раскрытого аллеля и его источник (`· раскрыт микроскопом` / `· раскрыт естественно`) через существующий расширенный резолвер (`resolveExtendedCard` + `alleleLabelV2`) — никогда сырой ID.
+
+### 4.11.5. UI — `ShopPanelV2`, новый `MicroscopePanel`, расширения `AlbumPanelV2`/`LabPanelV2`/`PlantPickerV2`
+
+Новый `apps/web/src/ui/ShopPanelV2.tsx`, отдельный от legacy `ShopPanel.tsx` (owner decision: не менять общий `ShopPanel`/`buySeed` так, чтобы изменилось Classic/Overhaul+Legacy поведение) — тот же `SEED_CATALOG`/`buyCost`/`sellValue`, покупка через `buySeedV2()`; единственное отличие — строка Колокольника до Lab L2 рендерится заблокированным вариантом с точным текстом §4.11.4 вместо роста/цены, кнопка покупки `disabled`. Подключается в `OverhaulApp.tsx` веткой `GENETICS_V2_ENABLED ? <ShopPanelV2 .../> : <ShopPanel .../>` — тем же паттерном, что уже принят для `panel==='lab'`/`panel==='album'` (Slice 5/7).
+
+`PlantPickerV2` получает проп `labLevel` — строка уже принадлежащего игроку семени Колокольника (редкий путь, инвентарный сид до открытия L2) рендерится заблокированной с тем же текстом §4.11.4, посадка идёт через `plantSeedV2()` вместо немодифицированного `plantSeed()`.
+
+`LabPanelV2` получает проп `labLevel` — карточка specimen-кандидата Колокольника до открытия L2 рендерится заблокированной (`🔒`, `title` с точным текстом §4.11.4, `aria-disabled`); клик по заблокированной карточке не добавляет её в выбор (полный no-op на уровне UI, тот же принцип, что уже применён для явно исключённой межвидовой пары, Slice 7 UI-фикс §4.10.5) — `breedNurseryV2` `species_locked` (§4.11.2) остаётся обязательным защитным слоем независимо от этой UI-проверки.
+
+`AlbumPanelV2` получает проп `labLevel` — кнопка «Микроскоп» рядом с «Переработать» на каждой карточке рендерится только при `labLevel>=LAB_LEVEL_2`; клик открывает новый `apps/web/src/ui/MicroscopePanel.tsx`. `MicroscopePanel` рендерится как отдельный DOM-sibling поверх `AlbumPanelV2`, не вложенным внутрь его собственного `sheet-backdrop` — клик по фону микроскопа закрывает только его, не альбом под ним (два независимых `sheet-backdrop`, не один вложенный в другой). Этот же компонент удваивает роль «расширенной карточки»: рендерит все девять локусов через `resolveExtendedCard` — гомозиготные значением напрямую, нераскрытые гетерозиготные строкой «Не исследован» + кнопкой раскрытия (`disabled`, если `geneticDust < 3`), раскрытые — точным значением и источником (§4.11.4). Пустое состояние (ноль `unresearched`-локусов у этого specimen) показывает точный текст §4.11.4 вместо списка. Простая карточка (`HybridCardPanel`/сама сетка `AlbumPanelV2`) не меняется и продолжает показывать только выраженный фенотип — без скрытых данных.
+
+Не меняются: `ClassicApp.tsx`, `GardenScene.ts`, legacy `ui/ShopPanel.tsx`/`PlantPicker.tsx`/`LabPanel.tsx`/`AlbumPanel.tsx`, legacy-методы `buySeed()`/`plantSeed()`/`recycleSpecimen()`, поведение Overhaul + Legacy Genetics (ни один из новых/расширенных компонентов не рендерится и не импортируется по достижимому пути при выключенном `GENETICS_V2_ENABLED` — тот же гейт, что уже принят предыдущими слайсами).
+
+### 4.11.6. Явно вне рамок Slice 8
+
+Ничего из перечисленного не реализуется и не отображается в этом slice, независимо от того, насколько тривиальным могло бы показаться расширение уже написанного кода: межвидовое скрещивание (species-валидация Slice 3-4 не меняется, `interspecies_locked` остаётся заблокирован даже после открытия L2, §4.11.2); естественное раскрытие скрытого признака через потомство; экран «Reveal»/«Почему так вышло?»; отображение родословной/pedigree; GeneLock; Lab L3/L4; система подсказок Lumi (остаётся Slice 12); полный онбординг-контур; Botanical book; новые здания/NPC/зоны/арт; SQL/Supabase/Paddle/NFT. Событие «первое открытие» (обучающий грант §4.11.1) — атомарный игровой анлок внутри уже существующего `harvestHybridV2`, не новая система квестов/диалогов.
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6) и в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-10) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species) и в проходе 11 (статус заголовка + новый §4.11, Lab L2 «первый гибрид»/гейт Колокольника/минимальный микроскоп Slice 8), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-11) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
-- **Статус на момент прохода 9**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7) и Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`) **завершены и приняты владельцем** 28.08.2026, единым пакетом для Slice 5. Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, технический контракт §4.9) начат этим проходом: сначала этот docs-only contract-lock коммит (`docs(genetics): lock Slice 6 pollen economy`), затем отдельный код-коммит `feat(genetics): add V2 pollen economy` поверх Slice 5 fix-pass (`d51d5c5`). Slice 7 и далее (переработка/микроскоп/межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 6.
+- **Статус на момент прохода 11**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7), Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, §4.9, docs `55d55ae` + код `08e9206`) и Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль, §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`) **завершены и приняты владельцем** 28.08.2026, каждый единым пакетом. Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп, технический контракт §4.11) начат этим проходом: сначала этот docs-only contract-lock коммит (`docs(genetics): lock Slice 8 lab L2 and microscope`), затем отдельный код-коммит `feat(genetics): add V2 lab L2 and microscope` поверх Slice 7 UI fix-pass (`96ee7dc`). Slice 9 и далее (межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 8.
