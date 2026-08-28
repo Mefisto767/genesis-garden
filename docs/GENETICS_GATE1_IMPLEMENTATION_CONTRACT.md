@@ -1,10 +1,12 @@
 # Genesis Garden — Gate 1 implementation contract (Genetics V2, 9-locus model)
 
-Дата: 2026-08-28 (проход 7 — Slice 1/Slice 2 приняты, пакетный проход Slice 3-4 в реализации; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
-Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`) и Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`) **завершены и приняты владельцем**. Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`) и Slice 4 (mutation roll/pity, точное правило mutation-аллеля — новый §4.7) реализуются пакетным проходом 7, двумя последовательными коммитами.
-Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
+Дата: 2026-08-28 (проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 в реализации, новый §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
+Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`) и Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`) **завершены и приняты владельцем**. Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8) реализуется этим проходом (проход 8).
+Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
 
-**Проход 7 — докоррекция перед пакетным Slice 3-4**: владелец обнаружил, что предыдущий отчёт по Slice 2 утверждал обновление статусов этого документа, но правки фактически не попали в файл репозитория (были внесены только в отдельную рабочую копию сессии) — исправлено здесь (заголовок выше). Дополнительно зафиксировано точное правило применения mutation-аллеля к унаследованной паре `aura` и обязательный RNG call order внутри `breedV2` — см. новый §4.7 ниже. Каталоги аллелей, dominance ranks, rarity points, пороги редкости и mutation floors §4.5 **не пересматривались** — только формулировки статуса и новый раздел §4.7.
+**Проход 7 — докоррекция перед пакетным Slice 3-4**: владелец обнаружил, что предыдущий отчёт по Slice 2 утверждал обновление статусов этого документа, но правки фактически не попали в файл репозитория (были внесены только в отдельную рабочую копию сессии) — исправлено здесь (заголовок выше). Дополнительно зафиксировано точное правило применения mutation-аллеля к унаследованной паре `aura` и обязательный RNG call order внутри `breedV2` — см. §4.7 ниже. Каталоги аллелей, dominance ranks, rarity points, пороги редкости и mutation floors §4.5 **не пересматривались** — только формулировки статуса и новый раздел §4.7.
+
+**Проход 8 — pre-Slice-5 contract-lock pass**: владелец принял Slice 3/Slice 4 по игровым результатам, затем зафиксировал решения по всем открытым техническим вопросам Slice 5 (persisted-хранение гибрида на грядке, discriminated-результаты посадки/скрещивания, момент создания `Specimen` и идемпотентность, точное правило legacy-совместимой проекции `genomeV2`→`genome`, `SAVE_VERSION`) одним пакетом — полный технический контракт этих решений зафиксирован здесь, новый §4.8, ДО начала кода Slice 5 (отдельный docs-only коммит `docs(genetics): lock Slice 5 nursery lifecycle`). Каталоги аллелей, dominance ranks, rarity points, mutation chances, pity-кривая и RNG call order внутри `breedV2` (§4.5-§4.7) **не пересматривались**.
 
 **Проход 6 — обязательная коррекция перед стартом Slice 1**: §4.4 (таблица legacy→V2, строка `mutationId`) содержала дефект, пойманный владельцем перед стартом реализации — прежняя редакция требовала, чтобы `genomeV2.mutationId` мигрировавшего specimen всегда был `null`, даже если у него был исторический legacy `mutationId`. Это нарушало собственное требование этого же документа «внешний вид legacy specimen не меняется» (delta doc §7 п.4): будущий V2-рендер, читающий только `genomeV2`, терял бы mutation-эффект и mutation rarity floor у уже мутировавшего растения. Исправлено: все четыре Gate-1-каталожных legacy ID копируются 1:1, `null` остаётся `null`, неизвестный/повреждённый ID не роняет загрузку и даёт `genomeV2.mutationId=null` без изменения legacy-поля. Детали и обоснование — §4.4 ниже.
 
@@ -566,9 +568,105 @@ Mythic присваивается **только** когда одновреме
 
 ---
 
+## 4.8. Slice 5 — persisted nursery lifecycle (проход 8, pre-Slice-5 contract-lock pass)
+
+Технический контракт решений владельца из `GENETICS_TARGET_DELTA.md` §0.7 — обязателен для реализации Slice 5, наравне с §4.1-§4.7 для Slice 1-4.
+
+### 4.8.1. Хранение гибрида на грядке — `Plot.hybridV2`
+
+Не заводится отдельный `GameState.plantedHybrids`. Единственный источник истины по посаженному/зрелому V2-растению — одно аддитивное nullable-поле на существующем `Plot` (`apps/web/src/game/types.ts`):
+
+```ts
+export type PlotHybridV2 =
+  | { phase: 'growing'; hybrid: HybridSeedV2 }
+  | { phase: 'mature'; specimenId: string; lastHarvestAt: number };
+
+export interface Plot {
+  id: number;
+  unlocked: boolean;
+  seedId: string | null;      // legacy — без изменений
+  plantedAt: number | null;   // legacy — без изменений
+  hybridV2?: PlotHybridV2 | null;
+}
+```
+
+- `growing` хранит **полный** `HybridSeedV2` (включая `genomeV2`) — тот же объект, что лежал в `nurseryTray`, без пересборки. Геном игроку не показывается до созревания (UI-ограничение, не ограничение данных).
+- `mature` хранит только `specimenId`+`lastHarvestAt` — геном/фенотип/родословная читаются исключительно из `state.specimens`, не дублируются на `Plot`.
+- **Инвариант**: `hybridV2` (в любой фазе) и legacy-посадка (`seedId !== null`) никогда не сосуществуют на одной грядке. Обеспечивается проверками в `GameStore.plantSeed()` (дополнена проверкой `plot.hybridV2 == null`) и `GameStore.plantHybridSeedV2()` (проверяет `plot.seedId === null && plot.hybridV2 == null`), не инвариантом на уровне типа.
+- Legacy-поля `seedId`/`plantedAt` не переименованы, не удалены, семантика не изменена — существующий код (`plotStatus`/`harvest`/`GardenScene`/Classic) не видит нового поля вообще, и оно всегда `undefined`/`null` вне V2-пути.
+
+### 4.8.2. Посадка — `GameStore.plantHybridSeedV2(hybridId, plotId)`
+
+```ts
+type PlantHybridV2RejectionReason = 'seed_not_found' | 'plot_not_found' | 'plot_locked' | 'plot_occupied';
+type PlantHybridV2Result = { ok: true } | { ok: false; reason: PlantHybridV2RejectionReason };
+```
+
+Проверки строго в этом порядке, до любой мутации состояния: семя с этим `id` есть в `nurseryTray` (иначе `seed_not_found`) → грядка с этим `id` существует (иначе `plot_not_found`) → грядка разблокирована (иначе `plot_locked`) → грядка свободна — `seedId === null && hybridV2 == null` (иначе `plot_occupied`). Успех — один атомарный `this.state = {...}`: семя удаляется из `nurseryTray`, тот же объект (с установленными `plantedAt`/`plotId`) записывается в `Plot.hybridV2` как `{phase:'growing', hybrid}`. Неуспех — состояние не меняется вообще, семя остаётся в трее.
+
+### 4.8.3. Рост — `apps/web/src/game/nurseryV2.ts`
+
+Новая, отдельная от legacy V2-конфигурация тайминга (не `SEED_BALANCE.growMs`), по `genomeV2.speciesId`, значения — `GENETICS_TARGET_DELTA.md` §2.1:
+
+| speciesId | Первый рост | Повторный цикл |
+|---:|---:|---:|
+| 1 (Солнечник) | 5 мин | 20 мин |
+| 2 (Колокольник) | 8 мин | 30 мин |
+
+Расчёт статуса — чистые функции над реальным elapsed-time (`now - plantedAt` / `now - lastHarvestAt`), тот же принцип, что и legacy `plotStatus` (`store.ts`). Ускорители роста (`entitlements`) на V2-таймеры **не распространяются** в Slice 5 — решение не запрашивалось и не принималось, это не regression, а осознанный пропуск; отдельное решение владельца потребуется, если ускорители должны действовать на V2-грядки в будущем.
+
+### 4.8.4. Создание `Specimen` и идемпотентность — `GameStore.harvestHybridV2(plotId, now)`
+
+Первый успешный сбор (`plot.hybridV2.phase === 'growing'` и рост завершён): один атомарный `this.state = {...}` одновременно (a) добавляет новый `Specimen` в `state.specimens` (`genomeV2`, спроецированный `genome` — §4.8.6, `parentIds` — §4.8.5, `createdAt`), (b) переключает `Plot.hybridV2` на `{phase:'mature', specimenId, lastHarvestAt: now}`. Присутствие `mature`-состояния с уже присвоенным `specimenId` — единственный и достаточный guard: последующие вызовы `harvestHybridV2` на этой грядке (включая после reload) видят `phase==='mature'`, а не `'growing'`, и физически не могут повторно попасть в ветку создания `Specimen` — только в ветку повторного цикла (ниже). Повторный сбор до готовности регроста — no-op (`false`); по готовности — обновляет только `lastHarvestAt`, без экономической награды (delta doc §0.7 п.9) и без создания нового `Specimen`.
+
+### 4.8.5. Родословная — `HybridSeedV2.parentIds`
+
+Заполняется в `breedNurseryV2` (§4.8.7) в порядке `[seedParentId, pollenParentId]` — уже существующее поле типа (Slice 1), впервые заполняется реальными значениями в Slice 5. Копируется без изменений в `Specimen.parentIds` в момент созревания (§4.8.4). Отображение/использование родословной вне этого — по-прежнему Slice 10.
+
+### 4.8.6. Legacy-совместимая проекция — `projectGenomeV2ToLegacy(genomeV2): Genome`
+
+Новая чистая функция (`apps/web/src/game/legacyProjectionV2.ts`), обязательная для каждого V2-`Specimen` (`Specimen.genome` — обязательное поле типа с Этапа 2, единственный путь показать V2-растение в legacy-режиме/Classic после выключения флага). Работает НАД уже выраженным фенотипом (`resolvePhenotypeV2`, Slice 2) — не над сырыми парами аллелей:
+
+| Поле `Genome` (legacy) | Правило |
+|---|---|
+| `shape` | `= genomeV2.speciesId`, без изменений. |
+| `primary` | Обратный точный HEX по выраженному `primaryColor` — инверсия `PRIMARY_HEX_TO_ID` (`geneticsV2.ts`, та же таблица, что использует прямая Slice 1 миграция; не заводится заново). |
+| `secondary` | Обратный точный HEX по выраженному `secondaryColor` — **кроме** случая, когда итоговый legacy `pattern` (см. ниже) равен `'solid'`: тогда `secondary = primary` (тот же инвариант, что уже действует в `genetics.ts` `randomGenome()`/`breed()` — не новое правило, перенесённое 1:1). |
+| `leaf` | Обратный точный HEX по выраженному `leafColor` — инверсия `LEAF_COLOR_HEX_TO_ID`. |
+| `size` | Выраженный `size_*` → legacy-тир по имени без префикса (`size_giant`→`giant` и т.д.) — четыре значения совпадают 1:1 по смыслу. |
+| `aura` | Выраженный `aura_*` → legacy-тир по имени без префикса (`aura_radiant`→`radiant` и т.д.) — четыре значения совпадают 1:1. |
+| `pattern` | `pattern_solid` → `'solid'`; любой другой из пяти V2-pattern (`pattern_duotone`/`pattern_spots`/`pattern_stripes`/`pattern_veins`) → `'duotone'` — legacy знает только два значения, три новых V2-only паттерна не имеют legacy-эквивалента и однозначно проецируются в `'duotone'`. |
+| `mutationId` | Копируется строкой как есть, включая `double_bloom`/`luminous_edge` (`Specimen.genome.mutationId: string \| null` не ограничен известным legacy-каталогом — тип уже это допускает). |
+| *(нет поля)* | `stemForm`/`leafForm`/`flowerForm` не имеют legacy-эквивалента и физически не могут попасть в результат — тип `Genome` их не содержит. |
+
+Скрытые (невыраженные) аллели **не уничтожаются** — функция их не читает вообще, они остаются как есть в `Specimen.genomeV2`. Функция не имеет побочных эффектов, не вызывается повторно для уже существующего `Specimen` и никогда не используется для обратного пересчёта `genomeV2` — переключение `VITE_DIPLOID_GENETICS_ENABLED` false→true→false не меняет `genomeV2` ни на бит; legacy-режим только читает `genome`.
+
+### 4.8.7. Nursery Tray и скрещивание — `GameStore.breedNurseryV2(seedParentId, pollenParentId)`
+
+```ts
+type BreedNurseryV2RejectionReason =
+  | 'same_parent' | 'parent_not_found' | 'parent_missing_genome_v2' | 'nursery_tray_full'
+  | BreedRejectionReasonV2; // 'unsupported_species' | 'interspecies_locked', Slice 3-4, без изменений
+type BreedNurseryV2Result =
+  | { ok: true; hybridSeed: HybridSeedV2; mutated: boolean; nextPityCounter: number }
+  | { ok: false; reason: BreedNurseryV2RejectionReason };
+```
+
+Проверки строго в этом порядке, **до** любого вызова `breedV2`: `seedParentId !== pollenParentId` → оба specimen существуют в `state.specimens` → у обоих есть `genomeV2` → `nurseryTray.length < 8`. Любой отказ на этом этапе — `breedV2` не вызывается: **0 RNG-вызовов**, `pityCounter`/родители/`nurseryTray`/остальной `GameState` не меняются ни на бит. Species-валидация (`unsupported_species`/`interspecies_locked`) выполняется внутри самого `breedV2` (Slice 3-4, без изменений) и её причины прозрачно проходят через `BreedNurseryV2RejectionReason`. После успешного `breedV2` — атомарно создаётся `HybridSeedV2` (`parentIds` — §4.8.5) и добавляется в `nurseryTray`, `pityCounter` обновляется на `nextPityCounter`; готовый `Specimen` на этом шаге не создаётся.
+
+### 4.8.8. Экономика Slice 5
+
+В Slice 5 ни `breedNurseryV2`, ни `plantHybridSeedV2`, ни `harvestHybridV2` не читают и не пишут `coins`/`pollen`/`geneticDust` и не переключают `firstBreedFreeClaimed`/`firstHybridRewardClaimed`/`firstRecycleTopUpClaimed`. Переработка (семени из трея и выращенного specimen) — Slice 7, не реализуется и не отображается в Slice 5.
+
+### 4.8.9. `SAVE_VERSION`
+
+Остаётся `4`. `nurseryTray` уже существовал в схеме с Slice 1 (пустой по умолчанию). `Plot.hybridV2` — новое, но строго аддитивное optional/nullable поле: у старого V4-save (сериализованного до Slice 5) это поле физически отсутствует в JSON, и после `JSON.parse` читается как `undefined` — то же самое безопасное значение, что означает «на этой грядке нет V2-гибрида», без какого-либо read-time backfill/миграции (в отличие от `ensureGenomeV2Sidecars`, которому нужна была реальная трансформация — здесь `undefined` уже корректен как есть). Отдельная глобальная миграция для Slice 5 не заводится, существующие sidecar-правила (`ensureGenomeV2Sidecars`) не меняются.
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`) и в проходе 7 (статус заголовка + новый §4.7, точное правило mutation-аллеля/RNG call order), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-7) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order) и в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-8) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
-- **Статус на момент прохода 7**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`) и Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`) завершены и приняты владельцем. Slice 3 (`breedV2` одновидовое наследование + `rarityOfV2`) и Slice 4 (mutation roll/pity, §4.7) реализуются пакетным проходом 7, двумя последовательными коммитами поверх этого прохода документации. Slice 5 и далее (Nursery Tray/пыльца/переработка/микроскоп/межвидовое скрещивание/родословная/Reveal/UI) не начинаются в рамках этого пакета и ждут отдельного подтверждения владельца после аудита Slice 3-4.
+- **Статус на момент прохода 8**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`) и Slice 4 (`e483c94`, §4.7) **завершены и приняты владельцем**. Slice 5 (Nursery Tray/рост/постоянные растения, технический контракт §4.8) реализуется этим проходом, коммитом `feat(genetics): add V2 nursery and persistent plants` поверх docs-only коммита `docs(genetics): lock Slice 5 nursery lifecycle`. Slice 6 и далее (пыльца/переработка/микроскоп/межвидовое скрещивание/родословная (отображение)/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 5.
