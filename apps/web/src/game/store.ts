@@ -6,6 +6,7 @@ import { ensureGenomeV2Sidecars, type HybridSeedV2 } from './geneticsV2';
 import { validateSameSpeciesParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
 import { breedV2 } from './mutationV2';
 import { breedCostV2, pollenRewardV2 } from './pollenV2';
+import { grownRecycleDustV2, nurseryRecycleDustV2, firstRecycleTopUpV2 } from './recyclingV2';
 import { GARDEN_CONFIG, BREEDING_CONFIG, STARTING_STATE_CONFIG } from './config';
 import { activeGrowthBoostPercent, effectiveElapsedMs } from './entitlements';
 import { advanceQuestProgress, canClaimQuest, QUEST_CATALOG } from './quests';
@@ -273,6 +274,38 @@ export type PlantHybridV2Result = { ok: true } | { ok: false; reason: PlantHybri
 /** Статус роста/повторного цикла `Plot.hybridV2`, единая точка правды для UI
  * и `harvestHybridV2` (тот же принцип, что `PlotStatus`/`plotStatus()` выше). */
 export type HybridPlotStatusV2 = GrowthStatusV2 & { phase: 'growing' | 'mature' };
+
+// ----------------------------------------------------------------------------
+// Genetics V2 — Slice 7 (переработка HybridSeed/Specimen в генетическую
+// пыль). Contract §4.10.
+// ----------------------------------------------------------------------------
+
+/** Причина отказа `recycleNurserySeedV2` (contract §4.10.2) — единственная,
+ * потому что посаженный растущий гибрид уже физически не в `nurseryTray`
+ * (см. `plantHybridSeedV2`) и эта операция его не видит вообще. */
+export type RecycleNurserySeedV2RejectionReason = 'seed_not_found';
+
+export interface RecycleV2Success {
+  ok: true;
+  baseDust: number;
+  topUpDust: number;
+  dustGained: number;
+}
+
+export type RecycleNurserySeedV2Result =
+  | RecycleV2Success
+  | { ok: false; reason: RecycleNurserySeedV2RejectionReason };
+
+/** Причины отказа `recycleSpecimenV2` (contract §4.10.3). */
+export type RecycleSpecimenV2RejectionReason =
+  | 'specimen_not_found'
+  | 'missing_genome_v2'
+  | 'favorite'
+  | 'ambiguous_plot_reference';
+
+export type RecycleSpecimenV2Result =
+  | RecycleV2Success
+  | { ok: false; reason: RecycleSpecimenV2RejectionReason };
 
 interface StorageLike {
   getItem(key: string): string | null;
@@ -731,6 +764,93 @@ export class GameStore {
     };
     this.emit();
     return true;
+  }
+
+  // --------------------------------------------------------------------
+  // Genetics V2 — Slice 7 (переработка HybridSeed/Specimen в генетическую
+  // пыль). Contract §4.10. Отдельные V2-операции — legacy `recycleSpecimen()`
+  // (плоская экономика, фиксированная награда) не меняется и не расширяется
+  // тарифами этого slice (contract §4.10.4); legacy `ui/AlbumPanel.tsx`
+  // продолжает вызывать именно его.
+  // --------------------------------------------------------------------
+
+  /**
+   * Переработать `HybridSeedV2`, ещё лежащий в Nursery Tray (не выращенный) —
+   * contract §4.10.2. Единственная проверка: семя должно существовать именно
+   * в `nurseryTray` (посаженный растущий гибрид уже не в трее — эта операция
+   * его физически не видит и не может обработать). Успех — один атомарный
+   * `this.state = {...}`: семя удаляется из `nurseryTray`, `geneticDust`
+   * увеличивается на `dustGained` (половинный тариф + первая компенсация,
+   * если применимо), `firstRecycleTopUpClaimed` безусловно становится `true`
+   * (идемпотентно, если уже был `true`). `pollen`/`coins`/`pityCounter`/
+   * родители/`plots`/`specimens`/`labLevel` не читаются и не пишутся.
+   * Геном/фенотип семени нигде не раскрываются этим методом.
+   */
+  recycleNurserySeedV2(hybridSeedId: string): RecycleNurserySeedV2Result {
+    const seed = this.state.nurseryTray.find((h) => h.id === hybridSeedId);
+    if (!seed) return { ok: false, reason: 'seed_not_found' };
+
+    const baseDust = nurseryRecycleDustV2(seed.genomeV2);
+    const { topUpDust, dustGained } = firstRecycleTopUpV2(baseDust, this.state.firstRecycleTopUpClaimed);
+
+    this.state = {
+      ...this.state,
+      nurseryTray: this.state.nurseryTray.filter((h) => h.id !== hybridSeedId),
+      geneticDust: this.state.geneticDust + dustGained,
+      firstRecycleTopUpClaimed: true,
+    };
+    this.emit();
+    return { ok: true, baseDust, topUpDust, dustGained };
+  }
+
+  /**
+   * Переработать выращенный `Specimen` — contract §4.10.3. Проверки строго по
+   * порядку: (1) specimen существует; (2) есть `genomeV2` (защитный путь —
+   * legacy-specimen без sidecar, тот же принцип, что `breedNurseryV2` шаг 3);
+   * (3) не `favorite` (тот же принцип, что legacy `recycleSpecimen()`);
+   * (4) если найдено БОЛЬШЕ ОДНОЙ mature-грядки, ссылающейся на этот
+   * `specimenId` — повреждённый save, безопасный отказ без единого изменения
+   * (не удаление нескольких растений). Растущий (`growing`) гибрид на грядке
+   * — не `Specimen` (contract §4.8.1), физически не проходит проверку (1) ни
+   * при каких условиях и недоступен этой операции.
+   *
+   * Успех — один атомарный `this.state = {...}`: specimen удаляется из
+   * коллекции; если найдена ровно одна связанная mature-грядка — её
+   * `hybridV2` очищается тем же обновлением (грядка становится свободной);
+   * если specimen не на грядке — `plots` не трогаются вообще; `geneticDust`
+   * увеличивается на `dustGained` (полный тариф + первая компенсация, если
+   * применимо); `firstRecycleTopUpClaimed` — то же правило, что
+   * `recycleNurserySeedV2`. `parentIds` других specimens не переписываются —
+   * никакого каскадного удаления потомков. `pollen`/`coins`/`pityCounter`/
+   * `nurseryTray`/`labLevel` не меняются.
+   */
+  recycleSpecimenV2(specimenId: string): RecycleSpecimenV2Result {
+    const specimen = this.state.specimens.find((s) => s.id === specimenId);
+    if (!specimen) return { ok: false, reason: 'specimen_not_found' };
+    if (!specimen.genomeV2) return { ok: false, reason: 'missing_genome_v2' };
+    if (specimen.favorite) return { ok: false, reason: 'favorite' };
+
+    const linkedPlots = this.state.plots.filter(
+      (p) => p.hybridV2?.phase === 'mature' && p.hybridV2.specimenId === specimenId
+    );
+    if (linkedPlots.length > 1) return { ok: false, reason: 'ambiguous_plot_reference' };
+
+    const baseDust = grownRecycleDustV2(specimen.genomeV2);
+    const { topUpDust, dustGained } = firstRecycleTopUpV2(baseDust, this.state.firstRecycleTopUpClaimed);
+    const linkedPlotId = linkedPlots[0]?.id;
+
+    this.state = {
+      ...this.state,
+      specimens: this.state.specimens.filter((s) => s.id !== specimenId),
+      plots:
+        linkedPlotId === undefined
+          ? this.state.plots
+          : this.state.plots.map((p) => (p.id === linkedPlotId ? { ...p, hybridV2: null } : p)),
+      geneticDust: this.state.geneticDust + dustGained,
+      firstRecycleTopUpClaimed: true,
+    };
+    this.emit();
+    return { ok: true, baseDust, topUpDust, dustGained };
   }
 
   /** Только для тестов/отладки — добавить временный ускоритель роста. */

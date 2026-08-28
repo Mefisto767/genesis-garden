@@ -129,4 +129,12 @@ describe('pollenRewardV2 — формула speciesBasePollen + rarityBonus', ()
     const genome = fixtureGenomeV2(3);
     expect(pollenRewardV2(genome)).toBe(0); // Common rarity, base 0 (unsupported species) + bonus 0
   });
+
+  it('Slice 7 защитный фикс: редкий/мутировавший неподдерживаемый species даёт РОВНО 0, не rarityBonus поверх нулевой базы', () => {
+    // До фикса (contract §4.10.1, delta doc §0.9 п.3): speciesBasePollenV2(3)=0,
+    // но rarityOfV2 для этого генома — Legendary (Signature-мутация, naturalScore<5) —
+    // RARITY_POLLEN_BONUS.Legendary=2, старая формула дала бы 0+2=2, не 0.
+    const genome = fixtureGenomeV2(3, { mutationId: 'phoenix' });
+    expect(pollenRewardV2(genome)).toBe(0);
+  });
 });

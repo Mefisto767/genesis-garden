@@ -8,21 +8,27 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
 /**
  * Genetics V2 — Slice 5 minimal UI (contract §4.8, delta doc §0.7 п.11),
  * расширено Slice 6 пыльцевой экономикой (contract §4.9.5, delta doc §0.8
- * п.7): текущий баланс пыльцы, "Первое скрещивание: бесплатно" до первого
+ * п.7) и Slice 7 переработкой Nursery Tray (contract §4.10.5, delta doc §0.9
+ * п.6): текущий баланс пыльцы, "Первое скрещивание: бесплатно" до первого
  * успеха, стоимость выбранной операции после, дословный текст при недостатке
- * пыльцы, disabled кнопка платного скрещивания при недостатке.
+ * пыльцы, disabled кнопка платного скрещивания при недостатке, список семян
+ * Nursery Tray с действием "Переработать" (двухшаговое подтверждение перед
+ * удалением).
  *
  * Отдельный компонент для Overhaul+V2 (GENETICS_V2_ENABLED) — НЕ замена
  * `LabPanel.tsx`, который остаётся нетронутым для Classic/Overhaul+Legacy
  * (owner decision, "не трогать существующий LabPanel/PlantPicker").
  *
- * Показывает ровно то, что решено в Slice 5+6: счётчик Питомника (X/8),
+ * Показывает ровно то, что решено в Slice 5-7: счётчик Питомника (X/8),
  * выбор двух родителей с уже существующим `genomeV2`, стоимость/бесплатность
  * и кнопку скрещивания. После успешного `breedNurseryV2` — только факт
  * «гибридное семя появилось», БЕЗ генома/фенотипа нового семени (contract
  * §4.8.7, delta doc §0.7 п.11: "геном/фенотип не показывается до
- * созревания"). Переработка/микроскоп/межвидовое скрещивание/учебные флаги
- * (кроме `firstBreedFreeClaimed`) — вне Slice 6 (Slice 7/8/9).
+ * созревания") — то же самое верно и для семян в списке переработки ниже:
+ * только безопасный номер, никогда геном/фенотип/редкость/размер будущей
+ * награды. Микроскоп/межвидовое скрещивание/учебные флаги (кроме
+ * `firstBreedFreeClaimed`/`firstRecycleTopUpClaimed`) — вне Slice 7 (Slice
+ * 8/9).
  */
 
 interface LabPanelV2Props {
@@ -37,7 +43,7 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
   same_parent: 'Нужны две разные особи.',
   parent_not_found: 'Один из родителей не найден.',
   parent_missing_genome_v2: 'У одного из родителей нет диплоидного генома.',
-  nursery_tray_full: 'Питомник заполнен — сначала посади или дождись места.',
+  nursery_tray_full: 'Питомник заполнен — сначала посади или переработай семя.',
   unsupported_species: 'Этот вид пока не поддерживает V2-скрещивание.',
   interspecies_locked: 'Скрещивание между разными видами пока закрыто.',
   insufficient_pollen: '', // текст строится из requiredPollen/availablePollen на месте, см. doBreed/costLabel ниже.
@@ -46,6 +52,12 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
 export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaimed, onClose }: LabPanelV2Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  // Genetics V2 — Slice 7 (contract §4.10.5): id семени, для которого сейчас
+  // показан двухшаговый экран подтверждения переработки ("Да, переработать" /
+  // "Отмена"). Отмена сбрасывает это состояние без вызова store —
+  // `recycleNurserySeedV2` не вызывается вообще, полный no-op на уровне UI
+  // (тот же принцип, что отмена скрещивания, §4.9.3).
+  const [pendingRecycleSeedId, setPendingRecycleSeedId] = useState<string | null>(null);
 
   const candidates = specimens.filter((s) => !!s.genomeV2);
   const trayFull = nurseryTray.length >= NURSERY_TRAY_CAPACITY;
@@ -62,6 +74,15 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const selectedSpecimens = selected
     .map((id) => candidates.find((s) => s.id === id))
     .filter((s): s is NonNullable<typeof s> => !!s && !!s.genomeV2);
+  // Genetics V2 — Slice 7 UI-фикс (contract §4.10.5): межвидовая пара
+  // блокируется уже на уровне выбора, не только после клика "Скрестить" —
+  // раньше (Slice 6) UI позволял выбрать такую пару, и только store отклонял
+  // её как interspecies_locked. Store-level валидация
+  // (`validateSameSpeciesParentsV2`) остаётся обязательным защитным слоем
+  // независимо от этой UI-проверки (defense-in-depth).
+  const interspeciesSelected =
+    selectedSpecimens.length === 2 &&
+    selectedSpecimens[0]!.genomeV2!.speciesId !== selectedSpecimens[1]!.genomeV2!.speciesId;
   // Стоимость выбранной пары (contract §4.9.5) — 0, пока бесплатная первая
   // попытка ещё не использована; иначе `breedCostV2` по видам выбранной
   // пары (8 одновидовое; 12 межвидовое — недостижимо в проде до Slice 9,
@@ -74,7 +95,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const insufficientForSelection = firstBreedFreeClaimed && selected.length === 2 && pollen < selectedCost;
 
   function doBreed() {
-    if (selected.length !== 2) return;
+    if (selected.length !== 2 || interspeciesSelected) return;
     const result = gameStore.breedNurseryV2(selected[0], selected[1]);
     if (!result.ok) {
       if (result.reason === 'insufficient_pollen') {
@@ -89,7 +110,15 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
     setSelected([]);
   }
 
-  const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection;
+  function recycleSeed(id: string) {
+    const result = gameStore.recycleNurserySeedV2(id);
+    setPendingRecycleSeedId(null);
+    if (result.ok) {
+      setNotice(`+${result.dustGained} генетической пыли · Пыль пригодится в лаборатории`);
+    }
+  }
+
+  const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection && !interspeciesSelected;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -107,6 +136,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
         <div className={trayFull ? 'lab-gene-lock-warning' : 'album-dust'}>
           {nurseryTrayLabel(nurseryTray.length, NURSERY_TRAY_CAPACITY)}
+          {trayFull && ' — посади одно из семян ниже или перерабатывай, чтобы освободить место'}
         </div>
 
         <div className="album-dust">Пыльца: {pollen}</div>
@@ -137,18 +167,45 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
         <div className="lab-footer">
           <div className="lab-footer-cost">
-            {!firstBreedFreeClaimed
-              ? 'Первое скрещивание: бесплатно'
-              : selected.length !== 2
-                ? 'Выбери двух родителей, чтобы увидеть стоимость'
-                : insufficientForSelection
-                  ? `Не хватает пыльцы: нужно ${selectedCost}, есть ${pollen}`
-                  : `Стоимость: ${selectedCost} пыльцы`}
+            {interspeciesSelected
+              ? REJECTION_MESSAGE.interspecies_locked
+              : !firstBreedFreeClaimed
+                ? 'Первое скрещивание: бесплатно'
+                : selected.length !== 2
+                  ? 'Выбери двух родителей, чтобы увидеть стоимость'
+                  : insufficientForSelection
+                    ? `Не хватает пыльцы: нужно ${selectedCost}, есть ${pollen}`
+                    : `Стоимость: ${selectedCost} пыльцы`}
           </div>
           <button className="sheet-buy-btn" disabled={!canBreed} onClick={doBreed}>
             Скрестить
           </button>
         </div>
+
+        {nurseryTray.length > 0 && (
+          <div className="sheet-list">
+            <p className="sheet-empty lab-hint">Питомник — можно переработать в генетическую пыль:</p>
+            {nurseryTray.map((seed, i) => (
+              <div className="sheet-row" key={seed.id}>
+                <div className="sheet-row-title">Семя №{i + 1}</div>
+                {pendingRecycleSeedId === seed.id ? (
+                  <div className="sheet-row-count">
+                    <button className="album-card-sell" onClick={() => recycleSeed(seed.id)}>
+                      Да, переработать
+                    </button>
+                    <button className="album-card-share" onClick={() => setPendingRecycleSeedId(null)}>
+                      Отмена
+                    </button>
+                  </div>
+                ) : (
+                  <button className="album-card-sell" onClick={() => setPendingRecycleSeedId(seed.id)}>
+                    Переработать
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

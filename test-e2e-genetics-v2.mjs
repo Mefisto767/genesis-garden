@@ -3,16 +3,18 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Genetics V2 — Slice 5 focused smoke test (Overhaul+V2 build only, see
+// Genetics V2 — Slice 5-7 focused smoke test (Overhaul+V2 build only, see
 // CLAUDE.md/README for the VITE_VISUAL_OVERHAUL_ENABLED=true
 // VITE_DIPLOID_GENETICS_ENABLED=true build command). Exercises the new
 // nursery lifecycle end-to-end through the real UI (LabPanelV2 ->
-// PlantPickerV2 -> EstateScene mature plot -> HybridCardPanel), the way
-// test-e2e-overhaul.mjs exercises the legacy Overhaul flow. Does NOT
-// duplicate the pure-logic coverage already in store.nurseryV2.test.ts /
-// nurseryV2.test.ts / legacyProjectionV2.test.ts — this only checks that the
-// UI wiring itself is correct and that the genome/phenotype of a hybrid seed
-// is never shown before maturity (delta doc §0.7 п.11/п.13).
+// PlantPickerV2 -> EstateScene mature plot -> HybridCardPanel), the pollen
+// economy (Slice 6) and the recycling economy (Slice 7, LabPanelV2 nursery
+// list + AlbumPanelV2), the way test-e2e-overhaul.mjs exercises the legacy
+// Overhaul flow. Does NOT duplicate the pure-logic coverage already in
+// store.nurseryV2.test.ts / store.pollenV2.test.ts / store.recyclingV2.test.ts
+// / recyclingV2.test.ts — this only checks that the UI wiring itself is
+// correct and that the genome/phenotype of a hybrid seed is never shown
+// before maturity (delta doc §0.7 п.11/п.13).
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.argv[2] || 'http://localhost:4175/genesis-garden/';
@@ -276,7 +278,7 @@ for (let i = 0; i < 10 && !cardOpen; i++) {
 }
 assert(cardOpen, 'clicking the mature V2 plot opens the simple card panel');
 const forbiddenElements = await page.getByText(/Микроскоп|Reveal|Раскрыть|Родословн|Pedigree/).first().isVisible().catch(() => false);
-assert(!forbiddenElements, 'simple card has no microscope/reveal/pedigree elements (Slice 5 scope only)');
+assert(!forbiddenElements, 'simple card has no microscope/reveal/pedigree elements (Slice 5/6/7 scope only)');
 
 // --- Test E2 (fix-pass, bug 3): species name, rarity, and all nine locus
 // rows are shown on the mature card — none of this was revealed before
@@ -304,10 +306,161 @@ const collectDisabled = await page.locator('.sheet-buy-btn', { hasText: 'Соб�
 assert(collectDisabled, 'repeat-cycle collect button correctly disabled (20 min regrow not elapsed yet)');
 await shot('06-hybrid-card-panel');
 await page.locator('.sheet-close').click();
+await page.waitForTimeout(300);
+
+// --- Test F: Slice 7 recycling — breed a fresh HybridSeed into the (now
+// empty) Nursery Tray, then recycle it from LabPanelV2 without ever
+// revealing its genome/phenotype. Parents 'a'/'b' are still in the
+// collection (breeding never consumes them). ---
+{
+  const nearLabScreen3 = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+  await page.mouse.click(nearLabScreen3.x, nearLabScreen3.y);
+  let enteredLab3 = false;
+  for (let i = 0; i < 10 && !enteredLab3; i++) {
+    const labScreen = await worldToScreen(labWorld.x, labWorld.y - 40);
+    await page.mouse.click(labScreen.x, labScreen.y);
+    await page.waitForTimeout(500);
+    enteredLab3 = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
+  }
+  assert(enteredLab3, 'walked back into LaboratoryScene for Slice 7 recycling test');
+  const canvasBox4 = await page.locator('canvas').boundingBox();
+  await page.mouse.click(canvasBox4.x + startX, canvasBox4.y + hotspotY);
+  await page.waitForTimeout(400);
+}
+// Tray may already carry a leftover, never-planted seed from the earlier
+// paid-breed test (Test B3) — Test C only plants ONE seed by name
+// ("Гибридное семя #1"), the script never asserted the tray was emptied by
+// it. Assertions below are deliberately relative (delta-based), not pinned
+// to an absolute "N/8" count, so this test doesn't depend on exactly how
+// many seeds accumulated in earlier steps.
+const trayLenBeforeSecondBreed = (
+  await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))
+).nurseryTray.length;
+await page.locator('.specimen-card').nth(0).click();
+await page.locator('.specimen-card').nth(1).click();
+await page.waitForTimeout(200);
+await page.locator('.sheet-buy-btn').click();
+await page.waitForTimeout(300);
+const trayLenAfterSecondBreed = (
+  await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))
+).nurseryTray.length;
+assert(
+  trayLenAfterSecondBreed === trayLenBeforeSecondBreed + 1,
+  `second real breedV2 added exactly one seed to the Nursery Tray (${trayLenBeforeSecondBreed} -> ${trayLenAfterSecondBreed})`
+);
+const seedRowsVisible = await page.locator('.sheet-list .sheet-row').count();
+assert(
+  seedRowsVisible === trayLenAfterSecondBreed,
+  `LabPanelV2 lists exactly ${trayLenAfterSecondBreed} tray row(s), one per seed — no id/genome/rarity leaked (found ${seedRowsVisible})`
+);
+const anySeedLabelVisible = await page.getByText(/Семя №\d+/).first().isVisible().catch(() => false);
+assert(anySeedLabelVisible, 'each tray row shows only a safe ordinal label ("Семя №N"), never genome/phenotype');
+await shot('07-nursery-recycle-list');
+
+// --- Test F1: opening the confirm step and clicking "Отмена" is a full
+// no-op — no dust gained, seed count in the tray unchanged. ---
+const dustBeforeCancel = (await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))).geneticDust;
+await page.locator('.sheet-list').getByRole('button', { name: 'Переработать' }).first().click();
+await page.waitForTimeout(200);
+const confirmVisible = await page.getByText('Да, переработать').first().isVisible().catch(() => false);
+assert(confirmVisible, 'clicking "Переработать" shows the mandatory confirm step before deletion');
+await page.getByText('Отмена').first().click();
+await page.waitForTimeout(200);
+const stateAfterCancel = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+assert(stateAfterCancel.geneticDust === dustBeforeCancel, 'cancelling the confirm step changes nothing (no dust gained)');
+assert(
+  stateAfterCancel.nurseryTray.length === trayLenAfterSecondBreed,
+  'seed count in the tray unchanged after cancelling recycle'
+);
+
+// --- Test F2: confirming recycles the seed — this is the FIRST-EVER
+// recycle of this save (seed or specimen), so it tops up to at least 3 dust
+// regardless of the seed's real (unseeded-RNG) rarity, and
+// firstRecycleTopUpClaimed flips to true. ---
+await page.locator('.sheet-list').getByRole('button', { name: 'Переработать' }).first().click();
+await page.waitForTimeout(200);
+await page.getByText('Да, переработать').first().click();
+await page.waitForTimeout(300);
+const recycleNotice = await page.getByText(/\+\d+ генетической пыли/).first().isVisible().catch(() => false);
+assert(recycleNotice, 'first-ever recycle shows only the total "+N генетической пыли" (no tariff/top-up split shown)');
+const afterSeedRecycle = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+assert(
+  afterSeedRecycle.nurseryTray.length === trayLenAfterSecondBreed - 1,
+  'exactly one seed removed from the tray after recycling'
+);
+assert(
+  afterSeedRecycle.geneticDust >= 3,
+  `first-ever recycle tops up to at least 3 dust regardless of rarity (got ${afterSeedRecycle.geneticDust})`
+);
+assert(afterSeedRecycle.firstRecycleTopUpClaimed === true, 'firstRecycleTopUpClaimed flipped to true after the first recycle');
+await page.locator('.sheet-close').click();
+await page.waitForTimeout(200);
+
+let backInEstate2 = false;
+for (let i = 0; i < 10 && !backInEstate2; i++) {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  backInEstate2 = await page.locator('.overhaul-mode-estate').isVisible().catch(() => false);
+}
+assert(backInEstate2, 'exited back to Estate after Slice 7 nursery recycle test');
+
+// --- Test G: Slice 7 recycling from AlbumPanelV2 — recycle the grown mature
+// specimen, which frees up its plot (contract §4.10.3). The mature hybrid
+// specimen is the most recently created one, so it sorts first in the album
+// grid (favorites-first, then newest-first — same sort as legacy AlbumPanel). ---
+const beforeAlbumRecycle = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+const matureHybridPlot = beforeAlbumRecycle.plots.find((p) => p.hybridV2 && p.hybridV2.phase === 'mature');
+assert(!!matureHybridPlot, 'save has a mature V2 plot before the album recycle test');
+const matureSpecimenId = matureHybridPlot.hybridV2.specimenId;
+
+await page.getByRole('button', { name: 'Альбом' }).click();
+await page.waitForTimeout(400);
+const albumCardsBeforeRecycle = await page.locator('.album-card').count();
+assert(albumCardsBeforeRecycle === 3, `V2 album shows all 3 specimens before recycling (got ${albumCardsBeforeRecycle})`);
+await page.locator('.album-card').nth(0).getByRole('button', { name: 'Переработать' }).click();
+await page.waitForTimeout(200);
+const matureWarningVisible = await page
+  .getByText(/Растение будет удалено с грядки/)
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(matureWarningVisible, 'AlbumPanelV2 warns BEFORE confirmation that recycling this mature plant frees its plot');
+await page.getByText('Да, переработать').first().click();
+await page.waitForTimeout(300);
+const albumRecycleNotice = await page.getByText(/генетической пыли/).first().isVisible().catch(() => false);
+assert(albumRecycleNotice, 'AlbumPanelV2 shows the "+N генетической пыли" total after a successful recycle');
+const albumCardsAfterRecycle = await page.locator('.album-card').count();
+assert(albumCardsAfterRecycle === 2, `recycled specimen disappeared from the V2 album (${albumCardsAfterRecycle} left, expected 2)`);
+await shot('08-album-v2-after-recycle');
+
+const afterAlbumRecycle = await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')));
+assert(
+  !afterAlbumRecycle.specimens.some((s) => s.id === matureSpecimenId),
+  'recycled specimen removed from state.specimens'
+);
+const freedPlot = afterAlbumRecycle.plots.find((p) => p.id === matureHybridPlot.id);
+assert(freedPlot.hybridV2 == null, 'the plot that held the recycled mature plant is now free (hybridV2 cleared)');
+assert(afterAlbumRecycle.geneticDust > beforeAlbumRecycle.geneticDust, 'geneticDust increased after the album recycle');
+
+// --- Test G2: favorite specimens are protected from recycling in the V2 album. ---
+const remainingCards = page.locator('.album-card');
+await remainingCards.nth(0).locator('.album-card-favorite').click();
+await page.waitForTimeout(200);
+await remainingCards.nth(0).getByRole('button', { name: 'Переработать' }).click().catch(() => {});
+await page.waitForTimeout(200);
+const favoriteProtectedVisible = await page
+  .getByText(/сними звезду, чтобы переработать/)
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(favoriteProtectedVisible, 'favorite specimen shows a blocking message instead of a recycle confirm step');
+const albumCardsAfterFavoriteAttempt = await page.locator('.album-card').count();
+assert(albumCardsAfterFavoriteAttempt === 2, 'attempting to recycle a favorite specimen did not remove it');
+await page.locator('.sheet-close').click();
 
 const realErrors = errors.filter((e) => !e.includes('ERR_TUNNEL_CONNECTION_FAILED'));
 assert(realErrors.length === 0, `no unexpected console/page errors (found: ${JSON.stringify(realErrors)})`);
 
 console.log('CONSOLE/PAGE ERRORS:', errors.length ? errors : 'none');
 await browser.close();
-console.log('genetics v2 (Slice 5) e2e: OK');
+console.log('genetics v2 (Slice 5-7) e2e: OK');

@@ -12,6 +12,7 @@ import { LabPanelV2 } from '../ui/LabPanelV2';
 import { PlantPickerV2 } from '../ui/PlantPickerV2';
 import { HybridCardPanel } from '../ui/HybridCardPanel';
 import { AlbumPanel } from '../ui/AlbumPanel';
+import { AlbumPanelV2 } from '../ui/AlbumPanelV2';
 import { SocialPanel } from '../ui/SocialPanel';
 import { PurchasesPanel } from '../ui/PurchasesPanel';
 import { AdminPanel } from '../ui/AdminPanel';
@@ -218,9 +219,17 @@ export function OverhaulApp() {
             fullscreenReveal
           />
         ))}
-      {panel === 'album' && (
-        <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
-      )}
+      {panel === 'album' &&
+        (GENETICS_V2_ENABLED ? (
+          <AlbumPanelV2
+            specimens={state.specimens}
+            plots={state.plots}
+            geneticDust={state.geneticDust}
+            onClose={() => setPanel(null)}
+          />
+        ) : (
+          <AlbumPanel specimens={state.specimens} geneticDust={state.geneticDust} onClose={() => setPanel(null)} />
+        ))}
       {panel === 'social' && <SocialPanel onClose={() => setPanel(null)} />}
       {panel === 'purchases' && <PurchasesPanel onClose={() => setPanel(null)} />}
       {panel === 'admin' && isAdmin && <AdminPanel onClose={() => setPanel(null)} />}

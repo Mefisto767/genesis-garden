@@ -87,8 +87,16 @@ export function breedCostV2(seedSpeciesId: number, pollenSpeciesId: number): num
  * RARITY_POLLEN_BONUS[rarityOfV2(genomeV2, genomeV2.mutationId)]`. Использует
  * `rarityOfV2` (Slice 3-4, без изменений) — не пересчитывает редкость
  * самостоятельно, единственный источник истины по редкости остаётся один.
+ *
+ * Защитный фикс Slice 7 (contract §4.10.1, delta doc §0.9 п.3): для
+ * неподдерживаемого `speciesId` возвращает `0` ЦЕЛИКОМ, явной ранней
+ * проверкой — не `speciesBasePollenV2(id) + RARITY_POLLEN_BONUS[rarity]`, что
+ * могло бы дать ненулевой результат (например, Rare → `0+1=1`) для явно
+ * защитного пути, обесценивая сам смысл "безопасный дефолт для неизвестного
+ * значения" (тот же принцип, что `migrateMutationId`, geneticsV2.ts).
  */
 export function pollenRewardV2(genomeV2: GenomeV2): number {
+  if (!isSupportedPollenSpecies(genomeV2.speciesId)) return 0;
   const rarity = rarityOfV2(genomeV2, genomeV2.mutationId);
-  return speciesBasePollenV2(genomeV2.speciesId) + RARITY_POLLEN_BONUS[rarity];
+  return SPECIES_BASE_POLLEN[genomeV2.speciesId] + RARITY_POLLEN_BONUS[rarity];
 }
