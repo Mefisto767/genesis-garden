@@ -102,6 +102,33 @@ function countingRng(value: number): { rng: RngFn; count: () => number } {
   };
 }
 
+/** Rng для тестов "без mutation event": принудительно фиксирует первый
+ * draw (mutation event roll) на 0.99 — заведомо выше максимального
+ * возможного pity-шанса до гарантии (§4.2: 3%..11% на попытках 1-9, 100%
+ * только на 10-й) — так что mutation event гарантированно не срабатывает
+ * независимо от seed/pityCounter<9. Все последующие draws (18 inheritance
+ * draws) берутся из обычного mulberry32(seedValue), чтобы наследование
+ * по-прежнему варьировалось по потоку.
+ *
+ * Fix-pass (аудит Slice 9, дефект 2): тесты «без mutation event, направление
+ * 1×2/2×1» ранее вызывали mulberry32(seedValue) напрямую для ВСЕХ draws,
+ * включая первый. Для части значений seed (например 7, 35 при
+ * pityCounter=0, шанс 3%) первый draw оказывается меньше pity-шанса, и
+ * mutation event фактически срабатывает — при этом сами тесты не
+ * содержали assertion на result.mutated, так что название и заявленный
+ * контракт теста не соответствовали его фактическому выполнению. */
+function noMutationSeededRng(seedValue: number): RngFn {
+  const inner = mulberry32(seedValue);
+  let first = true;
+  return () => {
+    if (first) {
+      first = false;
+      return 0.99;
+    }
+    return inner();
+  };
+}
+
 const EIGHTEEN_NEUTRAL_DRAWS = new Array(18).fill(0.5) as number[];
 
 function expectSuccess(result: BreedV2Result): asserts result is BreedV2Result & { ok: true } {
@@ -395,23 +422,25 @@ describe('breedV2 — Slice 9 (contract §4.12): speciesId никогда не �
   // Parent) до применения mutation-аллеля, а mutation-шаг трогает только
   // aura/mutationId.
 
-  it('без mutation event, направление 1×2: speciesId потомка всегда 1, на 50 разных RNG-потоках', () => {
+  it('без mutation event (гарантированно — первый draw принудительно 0.99), направление 1×2: speciesId потомка всегда 1, на 50 разных RNG-потоках', () => {
     const seed = fixtureGenomeV2(1);
     const pollen = fixtureGenomeV2(2);
     for (let seedValue = 1; seedValue <= 50; seedValue++) {
-      const result = breedV2(seed, pollen, 0, mulberry32(seedValue));
+      const result = breedV2(seed, pollen, 0, noMutationSeededRng(seedValue));
       expectSuccess(result);
+      expect(result.mutated).toBe(false);
       expect(result.genomeV2.speciesId).toBe(1);
       expect([3, 4, 5, 6, 7, 8]).not.toContain(result.genomeV2.speciesId);
     }
   });
 
-  it('без mutation event, направление 2×1: speciesId потомка всегда 2, на 50 разных RNG-потоках', () => {
+  it('без mutation event (гарантированно — первый draw принудительно 0.99), направление 2×1: speciesId потомка всегда 2, на 50 разных RNG-потоках', () => {
     const seed = fixtureGenomeV2(2);
     const pollen = fixtureGenomeV2(1);
     for (let seedValue = 1; seedValue <= 50; seedValue++) {
-      const result = breedV2(seed, pollen, 0, mulberry32(seedValue));
+      const result = breedV2(seed, pollen, 0, noMutationSeededRng(seedValue));
       expectSuccess(result);
+      expect(result.mutated).toBe(false);
       expect(result.genomeV2.speciesId).toBe(2);
     }
   });

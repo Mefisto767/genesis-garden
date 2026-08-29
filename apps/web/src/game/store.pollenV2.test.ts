@@ -227,16 +227,24 @@ describe('breedNurseryV2 — отказы не расходуют бесплат
     expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
   });
 
-  it('Slice 9 (contract §4.12): платная межвидовая пара с pollen=11 отклоняется insufficient_pollen (requiredPollen:12), 0 no-op', () => {
+  it('Slice 9 (contract §4.12): платная межвидовая пара с pollen=11 отклоняется insufficient_pollen (requiredPollen:12), 0 RNG, полный no-op', () => {
+    // Fix-pass (аудит Slice 9, дефект 3): предыдущая версия этого теста
+    // проверяла результат и неизменность состояния, но не подтверждала
+    // фактическое число вызовов RNG — countingRng делает это явным, тем же
+    // паттерном, что уже используется в describe-блоке
+    // "breedNurseryV2 — insufficient_pollen: 0 RNG, полный no-op" выше
+    // (строка 133) для одновидовой пары.
     const state = baseState({
       firstBreedFreeClaimed: true,
       pollen: 11,
       labLevel: 2,
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
-    const store = storeWith(state);
+    const { rng, count } = countingRng(0.1);
+    const store = storeWith(state, rng);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
     expect(result).toEqual({ ok: false, reason: 'insufficient_pollen', requiredPollen: 12, availablePollen: 11 });
+    expect(count()).toBe(0);
     expect(store.getState()).toEqual(state);
   });
 

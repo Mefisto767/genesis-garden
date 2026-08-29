@@ -1040,26 +1040,27 @@ export function validateSupportedParentsV2(
 
 ```ts
 type BreedNurseryV2RejectionReason =
-  | 'same_parent' | 'parent_not_found' | 'parent_missing_genome_v2' | 'nursery_tray_full'
+  | 'same_parent' | 'parent_not_found' | 'parent_missing_genome_v2'
   | 'species_locked'                     // Lab-гейт Колокольника, Slice 8, §4.11.2, без изменений
+  | 'nursery_tray_full'
   | BreedRejectionReasonV2               // теперь только 'unsupported_species' — 'interspecies_locked' удалён
   | 'insufficient_pollen';
 ```
 
-Уже принятый порядок §4.11.2/§4.9.3 сохраняется буквально, единственное изменение — сама species-проверка (была «`interspecies_locked`/`unsupported_species`», стала «только `unsupported_species`», через переименованную `validateSupportedParentsV2`):
+Уже принятый порядок §4.11.2/§4.9.3 сохраняется буквально, единственное изменение — сама species-проверка (была «`interspecies_locked`/`unsupported_species`», стала «только `unsupported_species`», через переименованную `validateSupportedParentsV2`). **Исправление этого прохода (fix-pass после Slice 9): предыдущая редакция этой секции ошибочно указывала `nursery_tray_full` шагом 4 и `species_locked` шагом 5 (и в списке типа выше, и в нумерованном списке ниже) — прямое противоречие с §4.11.2 (где `species_locked` зафиксирован раньше `nursery_tray_full`) и с фактическим кодом `store.ts`, который не менялся. Порядок ниже — единственно верный, совпадает буквально с исходным кодом Slice 8/9.**
 
 1. `seedParentId !== pollenParentId` (иначе `same_parent`);
 2. оба specimens существуют (иначе `parent_not_found`);
 3. у обоих есть `genomeV2` (иначе `parent_missing_genome_v2`);
-4. `nurseryTray.length < 8` (иначе `nursery_tray_full`);
-5. `isSpeciesUnlockedV2` для обоих родителей (иначе `species_locked`, Slice 8, §4.11.2, без изменений — до Lab L2 любой родитель species 2, включая пару 1×2/2×1, отклоняется здесь же, раньше species-валидации ниже);
+4. `isSpeciesUnlockedV2` для обоих родителей (иначе `species_locked`, Slice 8, §4.11.2, без изменений — до Lab L2 любой родитель species 2, включая пару 1×2/2×1, отклоняется здесь же, раньше `nursery_tray_full` и раньше species-валидации ниже);
+5. `nurseryTray.length < 8` (иначе `nursery_tray_full`);
 6. `validateSupportedParentsV2` (иначе `unsupported_species`) — теперь пропускает 1×2/2×1 наравне с 1×1/2×2, по-прежнему отклоняет species 3-8;
 7. определение стоимости — `cost = state.firstBreedFreeClaimed ? breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId) : 0` (без изменений — `breedCostV2` теперь реально возвращает `12` на этом пути для 1×2/2×1);
 8. `state.pollen >= cost` (иначе `insufficient_pollen`, с `requiredPollen: cost, availablePollen: state.pollen`);
 9. вызов `breedV2(seedParent.genomeV2, pollenParent.genomeV2, state.pityCounter, rng)` — без изменений, единственное место реального наследования/mutation RNG;
 10. один атомарный `this.state = {...}` — без изменений (`nurseryTray`/`pityCounter`/`pollen`/`firstBreedFreeClaimed`, §4.9.3 шаг 9).
 
-Любой отказ на шагах 1-8 — 0 RNG-вызовов, полный no-op — без изменений (§4.9.3/§4.11.2). После Lab L2 пара 1×2/2×1 впервые доходит до шага 6 и проходит его — прямое следствие того, что шаг 5 (Lab-гейт) и шаг 6 (species-валидация) уже были раздельными независимыми проверками с Slice 8, ни одна из них не требует структурного изменения, только шаг 6 становится более разрешающим.
+Любой отказ на шагах 1-8 — 0 RNG-вызовов, полный no-op — без изменений (§4.9.3/§4.11.2). Однозначно: Lab L1 + родитель species 2 + заполненный Nursery Tray (8/8) → результат строго `{ok:false, reason:'species_locked'}`, не `nursery_tray_full` (шаг 4 отклоняет раньше, чем код доходит до шага 5). После Lab L2 пара 1×2/2×1 впервые доходит до шага 6 и проходит его — прямое следствие того, что шаг 4 (Lab-гейт) и шаг 6 (species-валидация) уже были раздельными независимыми проверками с Slice 8, ни одна из них не требует структурного изменения, только шаг 6 становится более разрешающим.
 
 ### 4.12.5. UI — `LabPanelV2` (Overhaul + V2 only)
 
@@ -1072,6 +1073,12 @@ type BreedNurseryV2RejectionReason =
 ### 4.12.6. Обязательные unit-тесты (расширение §10 — не замена)
 
 Прямой инвариантный тест «`speciesId` потомка никогда не отклоняется от `speciesId` Seed Parent при межвидовом скрещивании» — обязателен именно на этом slice (delta doc §12, п.9): без mutation event, с гарантированной мутацией (`pityCounter=9`), на серии разных RNG-потоков/seed, в обоих направлениях (1×2 и 2×1). Существующие Slice 3-4 тесты одновидового скрещивания (`inheritanceV2.test.ts`, `mutationV2.test.ts`) остаются зелёными без изменения своих ожиданий — переименование `validateSameSpeciesParentsV2`→`validateSupportedParentsV2` требует только обновления имени вызова в самих тестах, не логики проверки.
+
+**Добавлено fix-pass'ом после Slice 9 (исправление §4.12.4 — порядок `species_locked`/`nursery_tray_full`):**
+
+- **Store-регрессия на точный порядок §4.12.4 шагов 4-5**: Lab L1, один родитель species 2, `nurseryTray` заполнен до 8/8 → `breedNurseryV2` возвращает строго `{ok:false, reason:'species_locked'}` (не `nursery_tray_full`), 0 RNG-вызовов, `GameState` не меняется ни в одном поле (`nurseryTray`/`pollen`/`pityCounter`/`firstBreedFreeClaimed`/specimens). Этот тест — прямая проверка того, что код `store.ts` (не менявшийся) действительно реализует порядок §4.12.4, а не только то, что порядок верно описан в документах.
+- **Прямая проверка 0 RNG-вызовов для платной межвидовой пары с `pollen=11`** (contract §4.12.4 шаг 8, `insufficient_pollen`): существующий тест на `requiredPollen:12`/`availablePollen:11`/неизменность `GameState` дополняется явным счётчиком вызовов RNG (`countingRng`-паттерн, уже используемый в `mutationV2.test.ts`/`inheritanceV2.test.ts`) — `expect(count()).toBe(0)`, чтобы отказ по деньгам был подтверждён как полный no-op не только по итоговому состоянию, но и по факту, что до `breedV2`/RNG дело не дошло.
+- **Тесты «без mutation event» для межвидовой пары обязаны фактически гарантировать отсутствие мутации, не полагаться на конкретный seed `mulberry32`.** Первый RNG-draw каждого потока (mutation event roll) должен быть принудительно зафиксирован на значении, заведомо превышающем максимальный возможный шанс события по pity-таблице (§4.2) — например `0.99` — после чего последующие 18 inheritance-draws могут браться из обычного `mulberry32(seed)`. После каждого вызова `breedV2` тест обязан явно проверить `result.ok===true`, `result.mutated===false` и `speciesId` результата равным Seed Parent — не только структуру результата. Симметричный тест с `pityCounter=9` (гарантированное mutation event, §4.2 десятая строка) по-прежнему обязан отдельно подтверждать `result.mutated===true` и неизменность `speciesId` (равен Seed Parent) в обоих направлениях родителей — оба класса тестов (без мутации / с гарантированной мутацией) должны существовать раздельно и не подменять друг друга.
 
 ### 4.12.7. Явно вне рамок Slice 9
 

@@ -6,6 +6,7 @@ import type { AllelePair, GenomeV2 } from './geneticsV2';
 import { projectGenomeV2ToLegacy } from './legacyProjectionV2';
 import { pollenRewardV2 } from './pollenV2';
 import { FIRST_HYBRID_POLLEN_GRANT, GATED_SPECIES_ID_V2, LAB_LEVEL_2 } from './labV2';
+import { NURSERY_TRAY_CAPACITY } from './nurseryV2';
 import { mulberry32 } from './rng';
 import type { RngFn } from './rng';
 
@@ -301,5 +302,42 @@ describe('Колокольник — гейт Lab L2 (Slice 8, contract §4.11.2
     const store = storeWith(state);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
     expect(result).toEqual({ ok: false, reason: 'species_locked' });
+  });
+
+  it('breedNurseryV2: Lab L1 + родитель species 2 + Nursery Tray заполнен 8/8 → строго species_locked, не nursery_tray_full (fix-pass, contract §4.12.4)', () => {
+    // Fix-pass (аудит Slice 9, дефект 1): docs/GENETICS_TARGET_DELTA.md §0.11
+    // п.4 и docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.12.4 ошибочно
+    // ставили nursery_tray_full раньше species_locked в описании порядка —
+    // прямое противоречие с уже принятым §4.11.2 и с фактическим кодом
+    // store.ts (species_locked — шаг 4, nursery_tray_full — шаг 5, без
+    // изменений). Этот тест проверяет реальный код, не только текст
+    // документов: оба условия истинны одновременно, и результат обязан
+    // быть species_locked — если бы порядок в коде был перепутан, тест
+    // получил бы nursery_tray_full и провалился бы.
+    const fullTray = Array.from({ length: NURSERY_TRAY_CAPACITY }, (_, i) => ({
+      id: `tray-${i}`,
+      genomeV2: fixtureGenomeV2(1),
+      parentIds: ['seed-parent', 'pollen-parent'] as [string, string],
+      createdAt: 0,
+      plantedAt: null,
+      plotId: null,
+    }));
+    const state = baseState({
+      labLevel: 1,
+      nurseryTray: fullTray,
+      specimens: [
+        fixtureSpecimen('seed-parent', fixtureGenomeV2(1)),
+        fixtureSpecimen('pollen-parent', fixtureGenomeV2(GATED_SPECIES_ID_V2)),
+      ],
+    });
+    let rngCalls = 0;
+    const store = storeWith(state, () => {
+      rngCalls += 1;
+      return 0.5;
+    });
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result).toEqual({ ok: false, reason: 'species_locked' });
+    expect(rngCalls).toBe(0);
+    expect(store.getState()).toEqual(state);
   });
 });
