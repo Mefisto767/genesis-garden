@@ -5,6 +5,7 @@ import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel, nurseryTrayFullHint } from '..
 import { breedCostV2 } from '../game/pollenV2';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { isSpeciesUnlockedV2, COLOKOLNIK_LOCKED_TEXT_V2 } from '../game/labV2';
+import { isSupportedParentSpeciesV2 } from '../game/inheritanceV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -36,6 +37,13 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
  * подсказка про роль первого/второго родителя (Slice 12, полный онбординг) —
  * вне этого slice, здесь только простые подписи слотов. Микроскоп — отдельный
  * `MicroscopePanel`, не этот компонент.
+ *
+ * Slice 11 (contract §4.13.3): список кандидатов дополнительно фильтруется
+ * через `isSupportedParentSpeciesV2` — species 3-8 полностью исключаются из
+ * `specimen-grid` (не показываются ни активной, ни заблокированной
+ * карточкой). Species 2 (Колокольник) до Lab L2 остаётся в списке —
+ * заблокированной карточкой через уже существующий `isSpeciesUnlockedV2`
+ * (Slice 8) — два независимых механизма, не путаются друг с другом.
  */
 
 interface LabPanelV2Props {
@@ -74,7 +82,16 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   // (тот же принцип, что отмена скрещивания, §4.9.3).
   const [pendingRecycleSeedId, setPendingRecycleSeedId] = useState<string | null>(null);
 
-  const candidates = specimens.filter((s) => !!s.genomeV2);
+  // Genetics V2 — Slice 11 (contract §4.13.3): дополнительный фильтр по
+  // isSupportedParentSpeciesV2 поверх уже существующего фильтра genomeV2 —
+  // species 3-8 полностью исчезают из списка лаборатории (не рендерятся ни
+  // активной, ни is-locked карточкой). Species 2 до Lab L2 остаётся в списке
+  // (уже поддерживаемый вид) и продолжает рендериться заблокированной
+  // карточкой ниже через isCandidateLocked/isSpeciesUnlockedV2 (Slice 8, без
+  // изменений) — два независимых, не путаемых состояния.
+  const candidates = specimens.filter(
+    (s) => !!s.genomeV2 && isSupportedParentSpeciesV2(s.genomeV2.speciesId)
+  );
 
   function isCandidateLocked(id: string): boolean {
     const s = candidates.find((c) => c.id === id);
@@ -208,7 +225,10 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
         {candidates.length < 2 ? (
           <div className="sheet-empty-block sheet-empty-centered">
-            <p className="sheet-empty">Нужно как минимум две особи с диплоидным геномом.</p>
+            {/* Slice 11 (contract §4.13.3): точный текст — candidates уже
+                отфильтрован и по genomeV2, и по isSupportedParentSpeciesV2,
+                так что прежний общий текст про "диплоидный геном" избыточен. */}
+            <p className="sheet-empty">Нужно как минимум две особи поддерживаемых видов.</p>
           </div>
         ) : (
           <div className="specimen-grid">

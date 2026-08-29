@@ -1,6 +1,8 @@
 // ============================================================================
 // Genetics V2 — Slice 3: одновидовое наследование. Slice 9 (contract §4.12)
-// снимает запрет на межвидовые пары 1×2/2×1 — см. правки ниже.
+// снимает запрет на межвидовые пары 1×2/2×1. Slice 11 (contract §4.13.1)
+// добавляет `isSupportedParentSpeciesV2` — единый predicate, переиспользуемый
+// UI (LabPanelV2) для фильтрации списка кандидатов — см. правки ниже.
 //
 // Реализует ТОЛЬКО docs/GENETICS_TARGET_DELTA.md §4.1 (обычное наследование,
 // без mutation roll) и §3 (политика доступа legacy species 3-8), в объёме
@@ -12,8 +14,9 @@
 // Engine этого файла поддерживает ровно четыре комбинации родителей —
 // species1×species1, species2×species2, species1×species2, species2×species1
 // (contract §4.12, Slice 9 сняло прежний запрет на последние две) — species
-// 3-8 как родители (Slice 11 снимает эту политику доступа для V2, не раньше)
-// здесь не реализуются, только детерминированно отклоняются с явной причиной.
+// 3-8 как родители здесь не реализуются, только детерминированно отклоняются
+// с явной причиной (`unsupported_species`, без RNG). Slice 11 не меняет это
+// поведение — только добавляет переиспользуемый predicate поверх него для UI.
 // ============================================================================
 
 import type { AllelePair, GenomeV2 } from './geneticsV2';
@@ -32,13 +35,21 @@ export function inheritAlleleV2<T extends string>(pair: AllelePair<T>, rng: RngF
 }
 
 /**
- * Виды, которых engine этого slice поддерживает как родителей V2 (задание,
- * п.8) — Солнечник (`1`) и Колокольник (`2`). Species 3-8 физически не
- * запрещены резолвером фенотипа (Slice 2, `phenotypeV2.ts` — их мигрировавший
- * фенотип уже читается корректно), но не могут быть родителями до Slice 11
- * (delta doc §3 п.3) — здесь это ограничение проверяется до любого RNG.
+ * Slice 11 (contract §4.13.1, delta doc §0.12 п.3): единственный источник
+ * истины «поддерживается ли `speciesId` как родитель V2» — Солнечник (`1`) и
+ * Колокольник (`2`), `false` для species 3-8, неизвестных чисел и любых
+ * повреждённых значений (сравнение строгое `===`, не диапазоном — `NaN`,
+ * отрицательные и дробные значения тоже дают `false`). Species 3-8
+ * физически не запрещены резолвером фенотипа (Slice 2, `phenotypeV2.ts` —
+ * их мигрировавший фенотип уже читается корректно) и не удаляются из
+ * save/альбома (delta doc §3) — этот predicate ограничивает ТОЛЬКО список
+ * допустимых родителей V2, ничего больше. Переиспользуется UI (`LabPanelV2`,
+ * §4.13.3) — список кандидатов в лаборатории и store-level отказ никогда не
+ * расходятся.
  */
-const SUPPORTED_PARENT_SPECIES_V2: readonly number[] = [1, 2];
+export function isSupportedParentSpeciesV2(speciesId: number): boolean {
+  return speciesId === 1 || speciesId === 2;
+}
 
 /** Discriminated-контракт причины отказа скрещивания (задание — «безопасный
  * discriminated result... без разбора текста исключения»). Ровно одна
@@ -55,16 +66,16 @@ export type BreedRejectionReasonV2 = 'unsupported_species';
  * подразумевает «только один вид»: функция проверяет ТОЛЬКО, что оба
  * родителя входят в уже поддерживаемый V2-набор (species 1-2), и ничего не
  * говорит о совпадении/несовпадении видов между собой — прежняя вторая,
- * отклоняющая межвидовые пары ветка снята этим slice.
+ * отклоняющая межвидовые пары ветка снята Slice 9. Slice 11 (contract
+ * §4.13.1): переписана на использование `isSupportedParentSpeciesV2` вместо
+ * прямого списка — один источник истины, поведение не меняется (те же входы
+ * дают тот же результат, что и раньше).
  */
 export function validateSupportedParentsV2(
   seedSpeciesId: number,
   pollenSpeciesId: number
 ): { ok: true } | { ok: false; reason: BreedRejectionReasonV2 } {
-  if (
-    !SUPPORTED_PARENT_SPECIES_V2.includes(seedSpeciesId) ||
-    !SUPPORTED_PARENT_SPECIES_V2.includes(pollenSpeciesId)
-  ) {
+  if (!isSupportedParentSpeciesV2(seedSpeciesId) || !isSupportedParentSpeciesV2(pollenSpeciesId)) {
     return { ok: false, reason: 'unsupported_species' };
   }
   return { ok: true };

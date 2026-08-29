@@ -3,6 +3,7 @@ import {
   breedSupportedSpeciesV2,
   inheritAlleleV2,
   inheritGenomeV2,
+  isSupportedParentSpeciesV2,
   validateSupportedParentsV2,
   type BreedRejectionReasonV2,
 } from './inheritanceV2';
@@ -294,6 +295,40 @@ describe('валидация поддерживаемых родителей (Sl
   it('BreedRejectionReasonV2 больше не содержит interspecies_locked как достижимое значение (type-level regression через runtime-проверку набора причин)', () => {
     const reasons: BreedRejectionReasonV2[] = ['unsupported_species'];
     expect(reasons).toEqual(['unsupported_species']);
+  });
+});
+
+describe('isSupportedParentSpeciesV2 — Slice 11 (contract §4.13.1), единый predicate', () => {
+  it('species 1 и 2 — true', () => {
+    expect(isSupportedParentSpeciesV2(1)).toBe(true);
+    expect(isSupportedParentSpeciesV2(2)).toBe(true);
+  });
+
+  for (const unsupported of [3, 4, 5, 6, 7, 8]) {
+    it(`species ${unsupported} — false`, () => {
+      expect(isSupportedParentSpeciesV2(unsupported)).toBe(false);
+    });
+  }
+
+  it('неизвестные/повреждённые числовые значения — false (0, 9, -1, NaN, дробное)', () => {
+    expect(isSupportedParentSpeciesV2(0)).toBe(false);
+    expect(isSupportedParentSpeciesV2(9)).toBe(false);
+    expect(isSupportedParentSpeciesV2(-1)).toBe(false);
+    expect(isSupportedParentSpeciesV2(Number.NaN)).toBe(false);
+    expect(isSupportedParentSpeciesV2(1.5)).toBe(false);
+  });
+
+  it('validateSupportedParentsV2 после рефакторинга на predicate даёт тот же результат на всех восьми species + паре неизвестных значений (regression)', () => {
+    const allInputs = [1, 2, 3, 4, 5, 6, 7, 8, 0, -1];
+    for (const seed of allInputs) {
+      for (const pollen of allInputs) {
+        const expected =
+          isSupportedParentSpeciesV2(seed) && isSupportedParentSpeciesV2(pollen)
+            ? { ok: true }
+            : { ok: false, reason: 'unsupported_species' as const };
+        expect(validateSupportedParentsV2(seed, pollen)).toEqual(expected);
+      }
+    }
   });
 });
 
