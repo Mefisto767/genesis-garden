@@ -64,8 +64,8 @@ export const MUTATION_TIER_BY_ID: Record<MutationIdV2, MutationTierV2> = {
  * и в phenotypeV2.ts, применённый к rarity points вместо dominance rank.
  */
 const STEM_FORM_POINTS = { stem_standard: 0, stem_branching: 2, stem_climbing: 5 } as const;
-const LEAF_FORM_POINTS = { leaf_standard: 0, leaf_broad: 1, leaf_narrow: 2, leaf_frilled: 4 } as const;
-const FLOWER_FORM_POINTS = { flower_standard: 0, flower_fan: 1, flower_cap: 2, flower_star: 4 } as const;
+const LEAF_FORM_POINTS = { leaf_standard: 0, leaf_broad: 1, leaf_narrow: 3, leaf_frilled: 4 } as const;
+const FLOWER_FORM_POINTS = { flower_standard: 0, flower_fan: 1, flower_cap: 3, flower_star: 4 } as const;
 const PRIMARY_COLOR_POINTS = {
   primary_honey: 0,
   primary_amber: 0,
@@ -73,7 +73,7 @@ const PRIMARY_COLOR_POINTS = {
   primary_coral: 0,
   primary_lilac: 1,
   primary_violet: 1,
-  primary_leaf: 2,
+  primary_leaf: 3,
   primary_frost: 4,
 } as const;
 const SECONDARY_COLOR_POINTS = {
@@ -82,19 +82,19 @@ const SECONDARY_COLOR_POINTS = {
   secondary_amber: 0,
   secondary_crimson: 1,
   secondary_purple: 1,
-  secondary_sky: 2,
+  secondary_sky: 3,
   secondary_ochre: 4,
 } as const;
-const LEAF_COLOR_POINTS = { leaf_color_meadow: 0, leaf_color_fresh: 1, leaf_color_forest: 2 } as const;
+const LEAF_COLOR_POINTS = { leaf_color_meadow: 0, leaf_color_fresh: 1, leaf_color_forest: 3 } as const;
 const PATTERN_POINTS = {
   pattern_solid: 0,
   pattern_duotone: 1,
-  pattern_spots: 2,
-  pattern_stripes: 3,
+  pattern_spots: 3,
+  pattern_stripes: 4,
   pattern_veins: 5,
 } as const;
 const SIZE_POINTS = { size_normal: 0, size_large: 1, size_small: 1, size_giant: 3 } as const;
-const AURA_POINTS = { aura_none: 0, aura_faint: 1, aura_glow: 2, aura_radiant: 5 } as const;
+const AURA_POINTS = { aura_none: 0, aura_faint: 1, aura_glow: 3, aura_radiant: 5 } as const;
 
 /**
  * `naturalScore` (contract §4.5.1) — целочисленная сумма rarity points
@@ -151,7 +151,7 @@ function tierFromNaturalScore(score: number): Exclude<RarityTierV2, 'Mythic'> {
   if (score < 3) return 'Common';
   if (score < 6) return 'Uncommon';
   if (score < 8) return 'Rare';
-  if (score < 10) return 'Epic';
+  if (score < 11) return 'Epic';
   return 'Legendary';
 }
 
@@ -165,7 +165,7 @@ const MUTATION_FLOOR: Record<MutationTierV2, RarityTierV2> = {
 
 /** Порог для отдельного условия Mythic (contract §4.5.4) — не эвристика, два
  * явных предиката: `mutationTier==='Signature'` И `naturalScore>=5`. */
-const MYTHIC_CO_THRESHOLD = 5;
+const MYTHIC_CO_THRESHOLD = 6;
 
 function higherOf(a: RarityTierV2, b: RarityTierV2): RarityTierV2 {
   return RARITY_TIER_ORDER.indexOf(a) >= RARITY_TIER_ORDER.indexOf(b) ? a : b;

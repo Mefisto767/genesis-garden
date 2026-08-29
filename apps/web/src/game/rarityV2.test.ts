@@ -62,6 +62,17 @@ describe('naturalScoreOfV2 — сумма rarity points выраженных а�
   });
 });
 
+// Genetics V2 — Slice 13 calibration (contract §4.5.7/§4.5.8): rank-3/rank-4
+// rarity points and the Epic/Legendary boundary were recalibrated (Common<3,
+// Uncommon<6 and Rare<8 are UNCHANGED — the tutorial guarantees, contract
+// §4.6.3/§4.6.4, pin those three exactly; only the Epic/Legendary boundary
+// moved from 10 to 11, and `leaf_narrow`/`flower_cap`/`primary_leaf`/
+// `secondary_sky`/`leaf_color_forest`/`pattern_spots`/`aura_glow` moved from
+// 2 to 3 rarity points, `pattern_stripes` from 3 to 4). The boundary cases
+// below use combinations of the RECALIBRATED point values — see
+// docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md §4.5.8 for the exact deltas
+// and why each one was safe to change (none of them touch the five allele
+// point values the two guaranteed tutorial breeds depend on).
 describe('rarityOfV2 — границы редкости по naturalScore (без мутации)', () => {
   const cases: Array<{ overrides: Partial<GenomeV2>; expectedScore: number; expectedTier: RarityTierV2 }> = [
     { overrides: {}, expectedScore: 0, expectedTier: 'Common' },
@@ -69,15 +80,15 @@ describe('rarityOfV2 — границы редкости по naturalScore (бе
     { overrides: { size: homo('size_giant') }, expectedScore: 3, expectedTier: 'Uncommon' }, // нижняя граница Uncommon
     { overrides: { stemForm: homo('stem_climbing') }, expectedScore: 5, expectedTier: 'Uncommon' }, // верхняя граница Uncommon
     {
-      overrides: { pattern: homo('pattern_veins'), aura: homo('aura_faint') },
+      overrides: { stemForm: homo('stem_branching'), leafForm: homo('leaf_narrow'), aura: homo('aura_faint') },
       expectedScore: 6,
       expectedTier: 'Rare',
-    }, // нижняя граница Rare
+    }, // нижняя граница Rare (2 + 3 + 1)
     {
-      overrides: { pattern: homo('pattern_veins'), aura: homo('aura_glow') },
+      overrides: { primaryColor: homo('primary_frost'), size: homo('size_giant') },
       expectedScore: 7,
       expectedTier: 'Rare',
-    }, // верхняя граница Rare
+    }, // верхняя граница Rare (4 + 3)
     {
       overrides: { primaryColor: homo('primary_frost'), secondaryColor: homo('secondary_ochre') },
       expectedScore: 8,
@@ -91,16 +102,25 @@ describe('rarityOfV2 — границы редкости по naturalScore (бе
       },
       expectedScore: 9,
       expectedTier: 'Epic',
-    }, // верхняя граница Epic
+    },
+    {
+      overrides: {
+        stemForm: homo('stem_climbing'),
+        primaryColor: homo('primary_frost'),
+        aura: homo('aura_faint'),
+      },
+      expectedScore: 10,
+      expectedTier: 'Epic',
+    }, // верхняя граница Epic (расширена калибровкой Slice 13, была 9)
     {
       overrides: {
         primaryColor: homo('primary_frost'),
         secondaryColor: homo('secondary_ochre'),
         aura: homo('aura_glow'),
       },
-      expectedScore: 10,
+      expectedScore: 11,
       expectedTier: 'Legendary',
-    }, // нижняя граница Legendary
+    }, // нижняя граница Legendary (сдвинута калибровкой Slice 13, была 10)
   ];
 
   for (const { overrides, expectedScore, expectedTier } of cases) {
@@ -179,15 +199,17 @@ describe('rarityOfV2 — mutation floors (contract §4.5.3)', () => {
 });
 
 describe('rarityOfV2 — Mythic (contract §4.5.4, отдельное явное условие)', () => {
-  it('Signature mutation + naturalScore >= 5 (ровно на границе) -> Mythic', () => {
-    const genome = fixtureGenomeV2({ stemForm: homo('stem_climbing') }); // score=5, ровно порог
-    expect(naturalScoreOfV2(genome)).toBe(5);
+  // Genetics V2 — Slice 13 calibration: MYTHIC_CO_THRESHOLD moved from 5 to 6
+  // (contract §4.5.8) — the boundary fixtures below use score 6/5, not 5/4.
+  it('Signature mutation + naturalScore >= 6 (ровно на новом пороге) -> Mythic', () => {
+    const genome = fixtureGenomeV2({ primaryColor: homo('primary_leaf'), secondaryColor: homo('secondary_sky') }); // score=6, ровно порог
+    expect(naturalScoreOfV2(genome)).toBe(6);
     expect(rarityOfV2(genome, 'phoenix')).toBe('Mythic');
   });
 
-  it('Signature mutation + naturalScore = 4 (на единицу ниже порога) -> Legendary, НЕ Mythic', () => {
-    const genome = fixtureGenomeV2({ primaryColor: homo('primary_frost') }); // score=4
-    expect(naturalScoreOfV2(genome)).toBe(4);
+  it('Signature mutation + naturalScore = 5 (на единицу ниже нового порога) -> Legendary, НЕ Mythic', () => {
+    const genome = fixtureGenomeV2({ stemForm: homo('stem_climbing') }); // score=5
+    expect(naturalScoreOfV2(genome)).toBe(5);
     expect(rarityOfV2(genome, 'phoenix')).toBe('Legendary');
   });
 

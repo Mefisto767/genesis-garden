@@ -66,7 +66,7 @@ describe('RARITY_RECYCLE_DUST / grownRecycleDustV2 — полный тариф (
   });
 
   it('Mythic-геном (mutationId=phoenix + naturalScore>=5) -> grownRecycleDustV2 = 80 (через rarityOfV2, не mutationId напрямую)', () => {
-    const genome = fixtureGenomeV2(1, { mutationId: 'phoenix', pattern: homo('pattern_veins') });
+    const genome = fixtureGenomeV2(1, { mutationId: 'phoenix', pattern: homo('pattern_veins'), aura: homo('aura_faint') }); // Slice 13: MYTHIC_CO_THRESHOLD moved 5->6, score must be >=6 (5+1=6)
     expect(grownRecycleDustV2(genome)).toBe(80);
   });
 });
@@ -109,7 +109,7 @@ describe('nurseryRecycleDustV2 — половинный тариф (Nursery Tray
   });
 
   it('Mythic (full=80) -> floor(80/2)=40', () => {
-    const genome = fixtureGenomeV2(1, { mutationId: 'phoenix', pattern: homo('pattern_veins') });
+    const genome = fixtureGenomeV2(1, { mutationId: 'phoenix', pattern: homo('pattern_veins'), aura: homo('aura_faint') }); // Slice 13: MYTHIC_CO_THRESHOLD moved 5->6, score must be >=6 (5+1=6)
     expect(nurseryRecycleDustV2(genome)).toBe(expected.Mythic);
   });
 });

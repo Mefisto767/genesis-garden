@@ -3,7 +3,7 @@ import { GameStore } from './store';
 import type { GameState, Plot, Specimen } from './types';
 import type { AllelePair, GenomeV2, HybridSeedV2 } from './geneticsV2';
 import { projectGenomeV2ToLegacy } from './legacyProjectionV2';
-import { findPendingHybridRevealV2 } from './revealV2';
+import { findPendingHybridRevealV2, traitOriginLabelsV2 } from './revealV2';
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { mulberry32 } from './rng';
 import type { RngFn } from './rng';
@@ -307,5 +307,119 @@ describe('Reveal lifecycle — breed -> planted/growing -> mature pending Reveal
     const countAfterFirst = store.getState().specimens.length;
     store.harvestHybridV2(0, FIRST_GROW_MS); // same instant — mature branch, regrow not elapsed
     expect(store.getState().specimens.length).toBe(countAfterFirst);
+  });
+});
+
+// ============================================================================
+// Final Gate 1 package — carryover fix: `HybridSeedV2.parentSpeciesIds`
+// (geneticsV2.ts) captured at real `breedNurseryV2` time from the two ACTUAL
+// parents, so a parent recycled before maturity can no longer make Reveal
+// mislabel an interspecies pair as same-species. Found by the final Slice 12
+// audit (owner spec, carryover fix section 1) — this is the store-level
+// regression the owner explicitly required: interspecies breed 1x2, species2
+// parent recycled before maturity, child still matures with
+// `revealParentSpecies === [1, 2]` and correct "← Солнечник"/"← Колокольник"
+// origin labels, no raw species IDs, natural reveal safely skips the missing
+// side. Uses the REAL `breedNurseryV2` -> `plantHybridSeedV2` ->
+// `recycleSpecimenV2` -> `harvestHybridV2` pipeline end to end, not a hand-
+// built fixture, so it also exercises the field's round trip through the
+// Nursery Tray and planted `Plot.hybridV2`.
+// ============================================================================
+describe('carryover fix — parentSpeciesIds survives a parent recycled before maturity', () => {
+  const SPECIES_2_GENOME = fixtureGenomeV2(2);
+  const FIRST_GROW_MS_SPECIES_1 = 5 * 60 * 1000; // child species = Seed Parent species = 1 (contract §4.12)
+
+  function interspeciesState(): GameState {
+    return baseState({
+      pollen: 100,
+      labLevel: 2, // Lab L2 — required to unlock Колокольник (species 2) as a parent at all.
+      firstBreedFreeClaimed: true, // so the breed below pays the normal 12-pollen interspecies cost, nothing tutorial-specific.
+      specimens: [
+        fixtureSpecimen('seed-parent', fixtureGenomeV2(1)),
+        fixtureSpecimen('pollen-parent', SPECIES_2_GENOME),
+      ],
+    });
+  }
+
+  it('breedNurseryV2 captures parentSpeciesIds from the two real parents at breed time', () => {
+    const store = storeWith(interspeciesState());
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.hybridSeed.parentSpeciesIds).toEqual([1, 2]);
+  });
+
+  it('interspecies pollen parent (species2) recycled before maturity -> Reveal still gets [1, 2], correct species-arrow labels, no raw IDs, natural reveal safely skips the missing side', () => {
+    const store = storeWith(interspeciesState());
+
+    const bred = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(bred.ok).toBe(true);
+    if (!bred.ok) return;
+    const hybridId = bred.hybridSeed.id;
+
+    const planted = store.plantHybridSeedV2(hybridId, 0);
+    expect(planted.ok).toBe(true);
+
+    // The pollen parent (species 2, "Колокольник") is recycled BEFORE the
+    // hybrid ever matures — the defect scenario, verbatim.
+    const recycled = store.recycleSpecimenV2('pollen-parent');
+    expect(recycled.ok).toBe(true);
+    expect(store.getState().specimens.find((s) => s.id === 'pollen-parent')).toBeUndefined();
+
+    // `plantHybridSeedV2` stamps `plantedAt` with the real wall clock
+    // (`Date.now()`), so maturity must be checked against `Date.now()` plus
+    // the grow duration, not an epoch-relative offset.
+    const harvested = store.harvestHybridV2(0, Date.now() + FIRST_GROW_MS_SPECIES_1);
+    expect(harvested).toBe(true);
+
+    const state = store.getState();
+    const child = state.specimens.find((s) => s.revealAcknowledged === false)!;
+    expect(child).toBeDefined();
+
+    // The core regression: species pair is [1, 2] — NOT collapsed to [1, 1]
+    // by a live-parent lookup that can no longer find the recycled side.
+    expect(child.revealParentSpecies).toEqual([1, 2]);
+
+    // Labels render as an actual interspecies pair, not "От первого/второго
+    // растения" (which is what a same-species fallback would have produced).
+    const seedLabels = traitOriginLabelsV2('seed', child.revealParentSpecies![0], child.revealParentSpecies![1]);
+    const pollenLabels = traitOriginLabelsV2('pollen', child.revealParentSpecies![0], child.revealParentSpecies![1]);
+    expect(seedLabels).toEqual(['← Солнечник']);
+    expect(pollenLabels).toEqual(['← Колокольник']);
+    expect(seedLabels.join(' ')).not.toContain('От первого');
+    expect(pollenLabels.join(' ')).not.toContain('От второго');
+
+    // No raw numeric/string species ID ever leaks into the rendered labels.
+    expect(seedLabels.join('')).not.toMatch(/\b[12]\b/);
+    expect(pollenLabels.join('')).not.toMatch(/\b[12]\b/);
+
+    // Natural reveal for the missing (recycled) pollen side is safely
+    // skipped, not a crash — the still-present seed parent can still be
+    // revealed to normally (mirrors the pre-existing single-parent-missing
+    // test above, restated here for this specific interspecies scenario).
+    expect(child.revealNaturalReveal?.pollenLoci).toEqual([]);
+    expect(state.specimens.find((s) => s.id === 'seed-parent')).toBeDefined();
+  });
+
+  it('old HybridSeedV2 without parentSpeciesIds (pre-fix serialized data) falls back to the live-parent lookup, unchanged', () => {
+    // Simulates a HybridSeedV2 that was created/serialized before this fix —
+    // additive field is simply absent, exactly like `JSON.parse` would give
+    // for a save written by the previous build.
+    const hybrid: HybridSeedV2 = {
+      id: 'legacy-hybrid',
+      genomeV2: fixtureGenomeV2(1, { size: homo('size_large') }),
+      parentIds: ['seed-parent', 'pollen-parent'],
+      createdAt: 0,
+      plantedAt: 0,
+      plotId: 0,
+      // parentSpeciesIds intentionally omitted.
+    };
+    const plots = fixturePlots().map((p) => (p.id === 0 ? { ...p, hybridV2: { phase: 'growing' as const, hybrid } } : p));
+    const store = storeWith(baseState({ plots }));
+    store.harvestHybridV2(0, FIRST_GROW_MS_SPECIES_1);
+    const child = store.getState().specimens.find((s) => s.revealAcknowledged === false)!;
+    // Both parents are still species 1 and both still present — safe
+    // fallback reproduces the pre-existing (pre-fix) behavior exactly.
+    expect(child.revealParentSpecies).toEqual([1, 1]);
   });
 });

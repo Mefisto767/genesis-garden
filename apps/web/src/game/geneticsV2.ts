@@ -181,6 +181,24 @@ export interface HybridSeedV2 {
    * фактически разблокирован (`tutorialV2.ts secondTutorialLessonAvailable`).
    */
   tutorialBreedStep?: 0 | 1;
+
+  /**
+   * Genetics V2 — final Gate 1 package, carryover fix (contract §4.15.1):
+   * `[seedSpeciesId, pollenSpeciesId]` captured DIRECTLY from the two real
+   * parents at the moment `breedNurseryV2` succeeds — before either parent
+   * can possibly be recycled. Fixes a defect the Slice 12 final audit found:
+   * `Specimen.revealParentSpecies` (below) used to be computed only at
+   * maturity by looking up the CURRENT `state.specimens` by `parentIds` — if
+   * one parent of an interspecies pair was recycled before the hybrid
+   * matured, that lookup silently fell back to the child's own species for
+   * the missing side, making an interspecies pair look same-species and
+   * showing "От первого/второго растения" instead of "← Солнечник"/
+   * "← Колокольник". Optional so any `HybridSeedV2` serialized before this
+   * fix (still a valid V4 save — `SAVE_VERSION` is not bumped for this
+   * additive field) safely falls back to the pre-existing live-parent
+   * lookup at maturity (`GameStore.harvestHybridV2`).
+   */
+  parentSpeciesIds?: [number, number];
 }
 
 /**

@@ -728,9 +728,14 @@ describe('breedV2 — mutation floors и Mythic работают на РЕАЛЬ
     expect(result.rarity).toBe('Epic');
   });
 
-  it('Signature mutation (реальный breedV2) с naturalScore>=5 -> Mythic', () => {
-    const seed = highScoreParent();
-    const pollen = highScoreParent();
+  it('Signature mutation (реальный breedV2) с naturalScore>=6 (новый порог Slice 13, contract §4.5.8) -> Mythic', () => {
+    // Genetics V2 — Slice 13 calibration: MYTHIC_CO_THRESHOLD moved 5 -> 6.
+    // `highScoreParent()` alone (stem_climbing only, score 5) no longer
+    // clears the new threshold, so this fixture stacks a second homozygous
+    // high-value locus (leaf_narrow, also unaffected by the 18 neutral
+    // inheritance draws for the same reason stemForm is) to reach score 8.
+    const seed = fixtureGenomeV2(1, { stemForm: homo('stem_climbing'), leafForm: homo('leaf_narrow') });
+    const pollen = fixtureGenomeV2(1, { stemForm: homo('stem_climbing'), leafForm: homo('leaf_narrow') });
     const result = breedV2(
       seed,
       pollen,
@@ -741,11 +746,11 @@ describe('breedV2 — mutation floors и Mythic работают на РЕАЛЬ
     expect(result.mutated).toBe(true);
     expect(result.mutationTier).toBe('Signature');
     expect(result.mutationId).toBe('phoenix');
-    expect(result.naturalScore).toBeGreaterThanOrEqual(5);
+    expect(result.naturalScore).toBeGreaterThanOrEqual(6);
     expect(result.rarity).toBe('Mythic');
   });
 
-  it('Signature mutation с naturalScore < 5 -> Legendary floor, НЕ Mythic', () => {
+  it('Signature mutation с naturalScore < 6 (новый порог Slice 13) -> Legendary floor, НЕ Mythic', () => {
     const seed = fixtureGenomeV2(1); // naturalScore = 0 без мутации
     const pollen = fixtureGenomeV2(1);
     const result = breedV2(
@@ -757,7 +762,7 @@ describe('breedV2 — mutation floors и Mythic работают на РЕАЛЬ
     expectSuccess(result);
     expect(result.mutated).toBe(true);
     expect(result.mutationTier).toBe('Signature');
-    expect(result.naturalScore).toBeLessThan(5);
+    expect(result.naturalScore).toBeLessThan(6);
     expect(result.rarity).toBe('Legendary');
   });
 });

@@ -838,6 +838,11 @@ export class GameStore {
       id: nextId(),
       genomeV2: result.genomeV2,
       parentIds: [seedParentId, pollenParentId],
+      // Carryover fix (contract §4.15.1): captured from the two REAL parents
+      // right now, while both are guaranteed to still exist — see
+      // `HybridSeedV2.parentSpeciesIds` for why this can no longer be
+      // reconstructed reliably at maturity if a parent is recycled first.
+      parentSpeciesIds: [seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId],
       createdAt: Date.now(),
       plantedAt: null,
       plotId: null,
@@ -1069,7 +1074,14 @@ export class GameStore {
         createdAt: now,
         parentIds: hybrid.parentIds,
         revealAcknowledged: false,
-        revealParentSpecies: [
+        // Carryover fix (contract §4.15.1): prefer the species pair captured
+        // directly from the real parents AT BREED TIME
+        // (`hybrid.parentSpeciesIds`) — correct even if a parent was
+        // recycled before this maturity. Falls back to the pre-existing
+        // live-parent lookup only for a `HybridSeedV2` serialized before
+        // this fix (no `parentSpeciesIds` on disk) — that lookup is still
+        // exactly as safe/lossy as it always was for such old seeds.
+        revealParentSpecies: hybrid.parentSpeciesIds ?? [
           seedParent?.genomeV2?.speciesId ?? hybrid.genomeV2.speciesId,
           pollenParent?.genomeV2?.speciesId ?? hybrid.genomeV2.speciesId,
         ],
