@@ -170,6 +170,31 @@ export interface HybridSeedV2 {
   plantedAt: number | null;
   /** Задаётся при посадке. */
   plotId: number | null;
+  /**
+   * Genetics V2 — Slice 12 fix-pass (contract §4.14.14): какое из двух
+   * гарантированных обучающих скрещиваний (§4.6.3/§4.6.4) породило это
+   * семя — `0` первый урок, `1` второй, `undefined` для любого не-tutorial
+   * скрещивания. Копируется на `Specimen.tutorialBreedStep` при первом
+   * сборе (`GameStore.harvestHybridV2`) — единственный способ надёжно
+   * найти «гибрид первого урока», даже если те же два tutorialStarter
+   * специмена впоследствии скрещены ещё раз до того, как второй урок
+   * фактически разблокирован (`tutorialV2.ts secondTutorialLessonAvailable`).
+   */
+  tutorialBreedStep?: 0 | 1;
+}
+
+/**
+ * Genetics V2 — Slice 12 fix-pass (contract §4.14.14): результат
+ * `computeNaturalRevealsV2` (revealV2.ts) — локусы, естественно раскрытые у
+ * seed/pollen родителя. Определён здесь (data-schema слой), а не в
+ * revealV2.ts, потому что `Specimen.revealNaturalReveal` (types.ts) ссылается
+ * на этот тип, а types.ts не должен зависеть от revealV2.ts (избежание
+ * циклического импорта) — revealV2.ts реэкспортирует тип для обратной
+ * совместимости существующих импортов.
+ */
+export interface NaturalRevealResultV2 {
+  readonly seedLoci: readonly GenomeV2LocusKey[];
+  readonly pollenLoci: readonly GenomeV2LocusKey[];
 }
 
 // ----------------------------------------------------------------------------

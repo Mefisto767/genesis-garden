@@ -110,23 +110,95 @@ describe('breedNurseryV2 — подмена RNG на детерминирова�
     expect(store.getState().geneticsTutorialBreedsCompleted).toBe(1);
   });
 
-  it('второе обучающее скрещивание тоже бесплатно (0 пыльцы), даже когда firstBreedFreeClaimed уже true и pollen=0', () => {
+  // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §3):
+  // the second tutorial breed is now a normal PAID breed (8 pollen) — it is
+  // never free, and it is only ever treated as "the" deterministic tutorial
+  // breed once `secondTutorialLessonAvailable` is actually true (owner
+  // review §4 — first hybrid matured AND its Reveal acknowledged).
+
+  it('второй tutorial-breed при выполненном условии (первый гибрид созрел и Reveal подтверждён) списывает ровно 8 пыльцы, не бесплатен', () => {
+    const store = storeWith(
+      baseState({
+        specimens: [
+          tutorialSpecimen('a', tutorialSunflowerSeedGenomeV2()),
+          tutorialSpecimen('b', tutorialSunflowerPollenGenomeV2()),
+          // "первый гибрид созрел и Reveal подтверждён" — единственное, что
+          // secondTutorialLessonAvailable реально проверяет по specimens.
+          fixtureSpecimen('child-1', tutorialSunflowerSeedGenomeV2(), {
+            tutorialBreedStep: 0,
+            revealAcknowledged: true,
+          }),
+        ],
+        geneticsTutorialBreedsCompleted: 1,
+        firstBreedFreeClaimed: true,
+        pollen: 8,
+      }),
+      mulberry32(6)
+    );
+    const result = store.breedNurseryV2('a', 'b');
+    expect(result.ok).toBe(true);
+    expect(store.getState().pollen).toBe(0); // ровно 8 списано, не 0
+    expect(store.getState().geneticsTutorialBreedsCompleted).toBe(2);
+  });
+
+  it('второй tutorial-breed при недостатке пыльцы (7 из 8) — полный no-op, 0 RNG, tutorial RNG не вызывается', () => {
+    const rngCalls: number[] = [];
+    const store = storeWith(
+      baseState({
+        specimens: [
+          tutorialSpecimen('a', tutorialSunflowerSeedGenomeV2()),
+          tutorialSpecimen('b', tutorialSunflowerPollenGenomeV2()),
+          fixtureSpecimen('child-1', tutorialSunflowerSeedGenomeV2(), {
+            tutorialBreedStep: 0,
+            revealAcknowledged: true,
+          }),
+        ],
+        geneticsTutorialBreedsCompleted: 1,
+        firstBreedFreeClaimed: true,
+        pollen: 7,
+      }),
+      () => {
+        rngCalls.push(1);
+        return 0.5;
+      }
+    );
+    const stateBefore = store.getState();
+    const result = store.breedNurseryV2('a', 'b');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.reason).toBe('insufficient_pollen');
+    if (result.reason === 'insufficient_pollen') {
+      expect(result.requiredPollen).toBe(8);
+      expect(result.availablePollen).toBe(7);
+    }
+    expect(rngCalls.length).toBe(0); // ни tutorial-seed, ни this.rng не вызывались
+    expect(store.getState()).toEqual(stateBefore); // полный no-op
+    expect(store.getState().geneticsTutorialBreedsCompleted).toBe(1); // не растёт при отказе
+  });
+
+  it('breeding the SAME tutorial pair a second time BEFORE the first child is revealed — normal paid breed, no tutorialBreedStep, does not increment the tutorial counter beyond what a normal breed would', () => {
     const store = storeWith(
       baseState({
         specimens: [
           tutorialSpecimen('a', tutorialSunflowerSeedGenomeV2()),
           tutorialSpecimen('b', tutorialSunflowerPollenGenomeV2()),
         ],
+        // First tutorial breed already happened (counter is 1), but the
+        // resulting hybrid was never planted/matured/revealed — no specimen
+        // with tutorialBreedStep:0 exists yet.
         geneticsTutorialBreedsCompleted: 1,
         firstBreedFreeClaimed: true,
-        pollen: 0,
+        pollen: 8,
       }),
-      mulberry32(6)
+      () => 0.999 // guaranteed no mutation event on this.rng
     );
     const result = store.breedNurseryV2('a', 'b');
-    expect(result.ok).toBe(true);
-    expect(store.getState().pollen).toBe(0); // не списано
-    expect(store.getState().geneticsTutorialBreedsCompleted).toBe(2);
+    if (!result.ok) throw new Error('expected success');
+    expect(store.getState().pollen).toBe(0); // paid at the normal price, same as any other breed
+    // Not treated as the guaranteed second lesson — counter stays at 1.
+    expect(store.getState().geneticsTutorialBreedsCompleted).toBe(1);
+    const seed = store.getState().nurseryTray.at(-1)!;
+    expect(seed.tutorialBreedStep).toBeUndefined();
   });
 
   it('счётчик достиг 2 — третье скрещивание той же пары использует обычный this.rng, не tutorial-seed', () => {
@@ -175,59 +247,23 @@ describe('breedNurseryV2 — подмена RNG на детерминирова�
   });
 });
 
-describe('breedNurseryV2 — естественное раскрытие атомарно, идемпотентно, не перезаписывает microscope', () => {
-  it('скрытый аллель родителя, выраженный в потомке, раскрывается с source natural', () => {
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1/§2):
+// natural reveal is no longer applied by `breedNurseryV2` at all — it is
+// deferred to first maturity (`harvestHybridV2`). The full natural-reveal
+// timing/idempotency/microscope-precedence/mutation-exclusion coverage that
+// used to live in this describe block now lives in
+// `store.revealLifecycleV2.test.ts`, alongside the rest of the persisted
+// Reveal lifecycle it belongs with. This block only asserts the new
+// invariant breed itself must uphold.
+describe('breedNurseryV2 — НЕ трогает revealedLoci родителей (natural reveal перенесён на harvestHybridV2)', () => {
+  it('успешное скрещивание не меняет revealedLoci ни одного из двух родителей', () => {
     const seed = fixtureSpecimen('a', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
     const pollen = fixtureSpecimen('b', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
-    // Форсируем size_large в потомке: используем детерминированный RNG,
-    // проверяя фактическое revealedLoci состояние после (не гадаем заранее).
     const store = storeWith(baseState({ specimens: [seed, pollen] }), mulberry32(6));
     store.breedNurseryV2('a', 'b');
     const state = store.getState();
-    const a = state.specimens.find((s) => s.id === 'a')!;
-    const b = state.specimens.find((s) => s.id === 'b')!;
-    // Либо оба, либо ни один — но если раскрылось, source обязан быть natural.
-    for (const specimen of [a, b]) {
-      const sizeEntry = specimen.revealedLoci?.find((e) => e.locus === 'size');
-      if (sizeEntry) expect(sizeEntry.source).toBe('natural');
-    }
-  });
-
-  it('не перезаписывает существующий source:"microscope" тем же locus', () => {
-    const seed = fixtureSpecimen('a', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }), {
-      revealedLoci: [{ locus: 'size', source: 'microscope' }],
-    });
-    const pollen = fixtureSpecimen('b', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
-    const store = storeWith(baseState({ specimens: [seed, pollen] }), mulberry32(6));
-    store.breedNurseryV2('a', 'b');
-    const a = store.getState().specimens.find((s) => s.id === 'a')!;
-    const sizeEntries = a.revealedLoci?.filter((e) => e.locus === 'size') ?? [];
-    expect(sizeEntries).toHaveLength(1);
-    expect(sizeEntries[0].source).toBe('microscope');
-  });
-
-  it('не затрагивает другие уже раскрытые локусы родителя', () => {
-    const seed = fixtureSpecimen('a', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }), {
-      revealedLoci: [{ locus: 'stemForm', source: 'microscope' }],
-    });
-    const pollen = fixtureSpecimen('b', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
-    const store = storeWith(baseState({ specimens: [seed, pollen] }), mulberry32(6));
-    store.breedNurseryV2('a', 'b');
-    const a = store.getState().specimens.find((s) => s.id === 'a')!;
-    expect(a.revealedLoci?.find((e) => e.locus === 'stemForm')?.source).toBe('microscope');
-  });
-
-  it('повторное скрещивание тех же двух родителей второй раз не дублирует record (идемпотентность через существующий source-guard)', () => {
-    const seed = fixtureSpecimen('a', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
-    const pollen = fixtureSpecimen('b', fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } }));
-    const store = storeWith(baseState({ specimens: [seed, pollen], pollen: 1000 }), mulberry32(6));
-    store.breedNurseryV2('a', 'b');
-    const afterFirst = store.getState().specimens.find((s) => s.id === 'a')!;
-    const countAfterFirst = afterFirst.revealedLoci?.filter((e) => e.locus === 'size').length ?? 0;
-    store.breedNurseryV2('a', 'b');
-    const afterSecond = store.getState().specimens.find((s) => s.id === 'a')!;
-    const countAfterSecond = afterSecond.revealedLoci?.filter((e) => e.locus === 'size').length ?? 0;
-    expect(countAfterSecond).toBe(countAfterFirst);
+    expect(state.specimens.find((s) => s.id === 'a')!.revealedLoci).toBeUndefined();
+    expect(state.specimens.find((s) => s.id === 'b')!.revealedLoci).toBeUndefined();
   });
 });
 

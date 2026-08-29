@@ -1,6 +1,6 @@
 import type { PlantColorway } from './plantPalette';
 import type { Genome } from './genetics';
-import type { GenomeV2, HybridSeedV2, RevealedLocusEntry } from './geneticsV2';
+import type { GenomeV2, HybridSeedV2, NaturalRevealResultV2, RevealedLocusEntry } from './geneticsV2';
 import { GARDEN_CONFIG, type QuestGoalType } from './config';
 
 export interface SeedDef {
@@ -51,6 +51,53 @@ export interface Specimen {
    * потомков этих двух растений) — не наследуется.
    */
   tutorialStarter?: boolean;
+
+  // --- Genetics V2 — Slice 12 fix-pass (contract §4.14.14): Reveal is
+  // deferred to first maturity, not shown at breed time. Additive optional
+  // fields, no SAVE_VERSION bump — same discipline as `tutorialStarter`
+  // above. Persisted lifecycle these fields encode, exactly:
+  //   bred unknown seed (HybridSeedV2 in nurseryTray, no Specimen yet)
+  //     -> planted/growing (Plot.hybridV2.phase==='growing')
+  //     -> mature pending Reveal (Specimen exists, revealAcknowledged:false)
+  //     -> Reveal acknowledged (revealAcknowledged:true)
+
+  /**
+   * `false` from the moment `GameStore.harvestHybridV2` creates this Specimen
+   * (first maturity) until `GameStore.acknowledgeRevealV2` is called;
+   * `true` once the player has closed the Reveal screen once — permanently,
+   * repeat harvests/reloads never flip it back or re-show the Reveal;
+   * `undefined` for any specimen this mechanism does not apply to (legacy
+   * specimen, specimen created before this fix-pass, or any specimen that
+   * never went through `harvestHybridV2`'s first-maturity branch).
+   */
+  revealAcknowledged?: boolean;
+  /**
+   * `[seedSpeciesId, pollenSpeciesId]` captured at first maturity — lets the
+   * Reveal screen render correct "От первого/второго растения" / "← [вид]"
+   * origin labels even if a parent is later recycled before the player
+   * actually looks at the Reveal (parents remain in the collection after
+   * breeding, but nothing prevents the player from recycling one before
+   * planting/harvesting the resulting seed).
+   */
+  revealParentSpecies?: [number, number];
+  /**
+   * Which loci, if any, were naturally revealed on the seed/pollen parent by
+   * THIS specimen's first maturity (`computeNaturalRevealsV2`, revealV2.ts)
+   * — captured once at harvest time so the Reveal screen's "Этот признак был
+   * скрыт..." text reflects exactly this harvest's natural reveal, not a
+   * recomputation against whatever the parents' genomes/revealedLoci happen
+   * to look like whenever the player eventually opens the Reveal screen.
+   */
+  revealNaturalReveal?: NaturalRevealResultV2;
+  /**
+   * Which of the two guaranteed tutorial breeds (contract §4.6.3/§4.6.4)
+   * produced this specimen — `0` first lesson, `1` second lesson,
+   * `undefined` for any non-tutorial specimen. Copied from
+   * `HybridSeedV2.tutorialBreedStep` at first maturity; lets
+   * `tutorialV2.ts secondTutorialLessonAvailable` find "the first lesson's
+   * hybrid, actually revealed" unambiguously.
+   */
+  tutorialBreedStep?: 0 | 1;
 }
 
 /**

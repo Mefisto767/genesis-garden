@@ -115,3 +115,38 @@ export function shouldSeedTutorialStartersV2(state: Pick<
   if (!Array.isArray(state.specimens) || state.specimens.length !== 2) return false;
   return state.specimens.every((s) => !s.parentIds && !s.genomeV2?.mutationId);
 }
+
+/**
+ * Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §4/§7):
+ * single source of truth for "the second tutorial lesson is actually
+ * unlocked" — used by BOTH `GameStore.breedNurseryV2` (to decide whether to
+ * substitute the deterministic second-lesson RNG/`tutorialBreedStep`) and
+ * `LabPanelV2`/`LumiHintBubble` (to decide whether to show the "hidden
+ * trait" banner/hint). Deliberately NOT `firstBreedFreeClaimed` alone (owner
+ * review §4: "не активировать подсказку только по firstBreedFreeClaimed") —
+ * requires ALL of:
+ *
+ * 1. exactly one tutorial breed done so far (`geneticsTutorialBreedsCompleted
+ *    === 1` — the first succeeded, the second has not happened yet);
+ * 2. both original tutorial-starter specimens still exist (recycling either
+ *    one permanently forfeits the guaranteed second lesson, same as any
+ *    other specimen a player chooses to get rid of);
+ * 3. the first lesson's own hybrid has matured AND its Reveal has actually
+ *    been acknowledged by the player (`tutorialBreedStep===0` specimen with
+ *    `revealAcknowledged===true`) — not merely bred, not merely planted.
+ *
+ * Breeding the same two tutorial-starter specimens again BEFORE this is true
+ * is still allowed (nothing else blocks it) — it is simply treated as a
+ * perfectly ordinary paid breed (normal RNG, normal cost, no
+ * `tutorialBreedStep`), not "the" guaranteed second lesson. The guaranteed,
+ * deterministic second lesson only fires once this predicate is actually
+ * true.
+ */
+export function secondTutorialLessonAvailable(
+  state: Pick<GameState, 'geneticsTutorialBreedsCompleted' | 'specimens'>
+): boolean {
+  if ((state.geneticsTutorialBreedsCompleted ?? 0) !== 1) return false;
+  const startersStillPresent = state.specimens.filter((s) => s.tutorialStarter === true).length === 2;
+  if (!startersStillPresent) return false;
+  return state.specimens.some((s) => s.tutorialBreedStep === 0 && s.revealAcknowledged === true);
+}

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { GameState } from '../game/types';
-import { gameStore, type BreedNurseryV2RejectionReason, type BreedNurseryV2Success } from '../game/store';
+import { gameStore, type BreedNurseryV2RejectionReason } from '../game/store';
 import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel, nurseryTrayFullHint } from '../game/nurseryV2';
 import { breedCostV2 } from '../game/pollenV2';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { isSpeciesUnlockedV2, COLOKOLNIK_LOCKED_TEXT_V2 } from '../game/labV2';
 import { isSupportedParentSpeciesV2 } from '../game/inheritanceV2';
+import { secondTutorialLessonAvailable } from '../game/tutorialV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 import { GeneticsIntroPanelV2 } from './GeneticsIntroPanelV2';
-import { RevealPanelV2 } from './RevealPanelV2';
 import { overhaulEvents } from '../overhaul/events';
 
 /** Genetics V2 — Slice 12 (onboarding spec §4.2, точный текст §13.1) — banner
@@ -53,6 +53,15 @@ const SECOND_TUTORIAL_HINT_TEXT =
  * карточкой). Species 2 (Колокольник) до Lab L2 остаётся в списке —
  * заблокированной карточкой через уже существующий `isSpeciesUnlockedV2`
  * (Slice 8) — два независимых механизма, не путаются друг с другом.
+ *
+ * Genetics V2 — Slice 12 fix-pass (contract §4.14.14): this component no
+ * longer shows a Reveal screen at all after a successful breed — only the
+ * same safe "hybrid seed appeared" notice this file already showed AFTER
+ * closing Reveal in the previous (rejected) design. The Reveal screen for a
+ * hybrid now opens only at its first maturity, as a global overlay owned by
+ * `OverhaulApp.tsx` (`findPendingHybridRevealV2`), independent of whether
+ * this panel happens to be open. The second guaranteed tutorial breed is
+ * also no longer free — see `secondTutorialLessonAvailable` below.
  */
 
 interface LabPanelV2Props {
@@ -96,10 +105,6 @@ export function LabPanelV2({
 }: LabPanelV2Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
-  // Genetics V2 — Slice 12: данные последнего успешного скрещивания для
-  // Reveal-экрана (onboarding spec §3.3) — null, пока Reveal не открыт.
-  const [reveal, setReveal] = useState<BreedNurseryV2Success | null>(null);
-  const [revealParentSpecies, setRevealParentSpecies] = useState<[number, number] | null>(null);
   // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
   // результат переработки (`dustGained`), НЕ собранная строка — рендерится
   // как два отдельных DOM-элемента ниже, без объединяющей пунктуации.
@@ -167,36 +172,28 @@ export function LabPanelV2({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedIdSel, pollenIdSel]);
-  // Genetics V2 — Slice 12 (contract §4.14.9): выбранная пара — оба ещё
-  // непрошедших обучающих скрещивания tutorial-стартера — зеркалит
-  // store-level `isTutorialBreed` в `breedNurseryV2`, чтобы UI не отключал
-  // кнопку "Скрестить" нехваткой пыльцы для скрещивания, которое store всё
-  // равно проведёт бесплатно (иначе гарантия onboarding spec §4.2 "второй
-  // урок состоится сразу" не выполнялась бы визуально).
-  const isSelectedTutorialPair =
-    selectedSpecimens.length === 2 &&
-    selectedSpecimens[0]!.tutorialStarter === true &&
-    selectedSpecimens[1]!.tutorialStarter === true &&
-    geneticsTutorialBreedsCompleted < 2;
-  // Стоимость выбранной пары (contract §4.9.5/§4.12) — 0, пока бесплатная
-  // первая попытка ещё не использована ИЛИ это одно из двух обучающих
-  // скрещиваний; иначе `breedCostV2` по видам выбранной пары (8 одновидовое;
-  // 12 межвидовое — со Slice 9 достижимо и в проде, не только в unit-тестах
-  // самой функции).
+  // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §3):
+  // there is no more "tutorial pair is free" UI override — the second
+  // guaranteed tutorial breed is a normal paid breed (8 pollen, same-species
+  // price) once `firstBreedFreeClaimed`, exactly like any other post-first
+  // breed. Cost mirrors the store's real `breedNurseryV2` cost formula
+  // exactly: only the very first successful breed is ever free.
   const selectedCost =
-    !firstBreedFreeClaimed || isSelectedTutorialPair || selectedSpecimens.length !== 2
+    !firstBreedFreeClaimed || selectedSpecimens.length !== 2
       ? 0
       : breedCostV2(selectedSpecimens[0]!.genomeV2!.speciesId, selectedSpecimens[1]!.genomeV2!.speciesId);
   const insufficientForSelection = firstBreedFreeClaimed && selected.length === 2 && pollen < selectedCost;
+  // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §4):
+  // the "hidden trait" banner shows only once the second tutorial lesson is
+  // actually unlocked (first lesson's own hybrid matured AND its Reveal
+  // acknowledged) — never merely "firstBreedFreeClaimed" or "counter is 1"
+  // on their own (owner review §4: "не активировать подсказку только по
+  // firstBreedFreeClaimed").
+  const secondLessonAvailable = secondTutorialLessonAvailable({ geneticsTutorialBreedsCompleted, specimens });
 
   function doBreed() {
     if (selected.length !== 2) return;
     setRecycleNotice(null);
-    // Genetics V2 — Slice 12 (onboarding spec §3.3): capture parent species
-    // BEFORE clearing selection — needed by the Reveal screen to decide
-    // "От первого/второго растения" vs "← [вид]" labels.
-    const seedSpeciesId = selectedSpecimens[0]!.genomeV2!.speciesId;
-    const pollenSpeciesId = selectedSpecimens[1]!.genomeV2!.speciesId;
     const result = gameStore.breedNurseryV2(selected[0], selected[1]);
     if (!result.ok) {
       if (result.reason === 'insufficient_pollen') {
@@ -206,18 +203,11 @@ export function LabPanelV2({
       }
       return;
     }
-    // Genetics V2 — Slice 12 (onboarding spec §3.3): показываем полноэкранный
-    // Reveal вместо простого текстового уведомления. Геном ребёнка уже
-    // известен на этом шаге (breedV2 вычисляет его немедленно, HybridSeedV2
-    // хранит полный genomeV2) — растение ещё не посажено, это отдельно.
-    setReveal(result);
-    setRevealParentSpecies([seedSpeciesId, pollenSpeciesId]);
+    // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1):
+    // ONLY a safe "a hybrid seed exists" notice — no species/rarity/traits/
+    // mutation/origin. The Reveal screen for it opens only at first
+    // maturity (`OverhaulApp.tsx`, `findPendingHybridRevealV2`), not here.
     setSelected([]);
-  }
-
-  function closeReveal() {
-    setReveal(null);
-    setRevealParentSpecies(null);
     setNotice('Гибридное семя появилось в Питомнике! Посади его на грядку, чтобы увидеть, каким оно вырастет.');
   }
 
@@ -233,24 +223,6 @@ export function LabPanelV2({
   }
 
   const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection;
-
-  // Genetics V2 — Slice 12 (onboarding spec §3.3): полноэкранный Reveal
-  // рендерится вместо обычной лаборатории, пока не закрыт — «Отлично!»
-  // закрывает его и возвращает к списку кандидатов (не к оригинальному
-  // notice-баннеру старого поведения).
-  if (reveal && revealParentSpecies) {
-    return (
-      <RevealPanelV2
-        genomeV2={reveal.hybridSeed.genomeV2}
-        seedSpeciesId={revealParentSpecies[0]}
-        pollenSpeciesId={revealParentSpecies[1]}
-        mutated={reveal.mutated}
-        mutationTier={reveal.mutationTier}
-        naturalReveal={reveal.naturalReveal}
-        onClose={closeReveal}
-      />
-    );
-  }
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -274,11 +246,12 @@ export function LabPanelV2({
         <p className="sheet-empty lab-hint">
           Выбери двух особей с диплоидным геномом, чтобы скрестить их. Родители остаются в коллекции.
         </p>
-        {/* Genetics V2 — Slice 12 (onboarding spec §4.2, точный текст §13.1):
-            показывается только между первым и вторым обучающими
-            скрещиваниями — не условная угадайка, а прямой счётчик
-            `geneticsTutorialBreedsCompleted` (contract §4.14). */}
-        {geneticsTutorialBreedsCompleted === 1 && (
+        {/* Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review
+            §4): shows only once the second lesson is ACTUALLY unlocked —
+            first hybrid matured and its Reveal acknowledged — not merely
+            "counter is 1" (owner review §4: "не активировать подсказку
+            только по firstBreedFreeClaimed"). */}
+        {secondLessonAvailable && (
           <p className="sheet-empty lab-hint">{SECOND_TUTORIAL_HINT_TEXT}</p>
         )}
 

@@ -141,23 +141,31 @@ await cards.nth(1).click();
 await page.waitForTimeout(200);
 await page.locator('.sheet-buy-btn').click();
 await page.waitForTimeout(300);
-// Genetics V2 — Slice 12: a successful breedNurseryV2 now shows the
-// fullscreen Reveal screen first (species/rarity/all nine traits+origin)
-// before returning to the lab — this supersedes the older "no
-// phenotype/genome shown until harvest maturity" UI behavior this test used
-// to assert right here (that rule still holds for the Nursery Tray LIST
-// itself, checked below after closing Reveal — only the immediate breed
-// result is now revealed, not any *other* still-growing seed in the tray).
-const revealSpeciesVisible = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
-assert(revealSpeciesVisible, 'breedNurseryV2 success shows the Slice 12 Reveal screen (species/rarity/traits)');
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
-await page.waitForTimeout(300);
+// Genetics V2 — Slice 12 fix-pass (owner review §1/§5, contract §4.14.14):
+// the immediately-preceding revision of this test asserted that a successful
+// breedNurseryV2 opens a fullscreen Reveal screen right here (species/
+// rarity/all nine traits+origin) — the owner REJECTED that behavior as the
+// core Slice 12 defect (it leaked the hybrid's full genome/phenotype before
+// the seed was even planted, let alone matured). The fix-pass moves Reveal
+// to first maturity (harvestHybridV2, see Test D2 below) — a successful
+// breed now shows ONLY the safe "new seed" notice, no Reveal, no species
+// name, no rarity, no trait list, nowhere.
+const revealSpeciesVisibleRightAfterBreed = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+assert(!revealSpeciesVisibleRightAfterBreed, 'breedNurseryV2 success does NOT show the Reveal screen (deferred to maturity, Slice 12 fix-pass)');
 const bredNotice = await page.getByText(/Гибридное семя появилось/).first().isVisible().catch(() => false);
-assert(bredNotice, 'closing Reveal shows the "hybrid seed appeared" notice');
+assert(bredNotice, 'successful breed shows only the safe "hybrid seed appeared" notice');
 const nurseryAfterBreed = await page.getByText(/Питомник: 1\/8/).first().isVisible().catch(() => false);
 assert(nurseryAfterBreed, 'nursery tray counter updated to 1/8 after breeding');
-const genomeLeaked = await page.getByText(/Основной цвет|Доп\. цвет|Аура:|Узор:/).first().isVisible().catch(() => false);
-assert(!genomeLeaked, 'back in the lab, no phenotype/genome fields rendered for the still-growing Nursery Tray seed (not revealed before maturity)');
+// Restored Slice 5 regression guarantee (owner review §5) — no phenotype/
+// genome/rarity/species/mutation/origin field is rendered anywhere right
+// after breeding, not just "back in the lab": the hybrid seed is a fully
+// unknown seed until its plant matures.
+const genomeLeaked = await page
+  .getByText(/Основной цвет|Доп\. цвет|Аура:|Узор:|Редкость|Мутация|Обычн|Необычн|Редк|Эпическ|Легендарн|Мифическ/)
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(!genomeLeaked, 'no phenotype/genome/rarity field rendered anywhere right after breeding (unknown seed, not revealed before maturity)');
 await shot('02-hybrid-seed-bred');
 
 // 1/2: first breed was free at pollen=0, and 2: firstBreedFreeClaimed flipped
@@ -267,9 +275,31 @@ await page.reload({ waitUntil: 'networkidle' });
 await page.waitForTimeout(1000);
 await dismissOnboarding();
 
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): a growing hybrid
+// survives reload without leaking any phenotype — reasserted here, right
+// after the reload above and before the maturity-triggering click below.
+const genomeLeakedAfterGrowingReload = await page
+  .getByText(/Основной цвет|Доп\. цвет|Аура:|Узор:|Редкость|Мутация/)
+  .first()
+  .isVisible()
+  .catch(() => false);
+assert(!genomeLeakedAfterGrowingReload, 'growing hybrid reveals no phenotype/genome after reload, before maturity');
+
 const plot0ScreenAfterReload = await worldToScreen(plot0World.x, plot0World.y);
 await page.mouse.click(plot0ScreenAfterReload.x, plot0ScreenAfterReload.y);
 await page.waitForTimeout(500);
+
+// --- Test D1 (Slice 12 fix-pass, contract §4.14.14): this tile click is the
+// first-ever mature interaction with this hybrid — it now opens the Reveal
+// screen (moved here from breed time). Confirm it shows the full picture
+// (species/rarity/traits) exactly once, then close it before continuing. ---
+const revealSpeciesVisibleAtMaturity = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+assert(revealSpeciesVisibleAtMaturity, 'first mature interaction with the hybrid opens the Reveal screen (Slice 12 fix-pass)');
+await shot('04b-reveal-at-maturity');
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+await page.waitForTimeout(300);
+const revealClosedAfterAcknowledge = !(await page.locator('.reveal-species-name').first().isVisible().catch(() => false));
+assert(revealClosedAfterAcknowledge, 'acknowledging Reveal closes it (revealAcknowledged persisted)');
 
 // 3: maturity harvest grants formulaic pollen (speciesBasePollen(1)=2 +
 // rarityBonus in {0,1,2}) — real RNG breeding through the UI, so only the
@@ -370,10 +400,8 @@ await page.locator('.specimen-card').nth(1).click();
 await page.waitForTimeout(200);
 await page.locator('.sheet-buy-btn').click();
 await page.waitForTimeout(300);
-// Genetics V2 — Slice 12: close the Reveal screen this breed shows (same as
-// the first breed above) before inspecting the returned-to lab UI below.
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
-await page.waitForTimeout(300);
+// Genetics V2 — Slice 12 fix-pass: no Reveal screen to close — breeding
+// never shows one (deferred to maturity, see Test B above).
 const trayLenAfterSecondBreed = (
   await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))
 ).nurseryTray.length;

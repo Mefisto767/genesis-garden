@@ -17,10 +17,23 @@
 // совпадению фенотипа "постфактум" (задание владельца, дословно).
 // ============================================================================
 
-import { GENOME_V2_LOCUS_KEYS, type GenomeV2, type GenomeV2LocusKey } from './geneticsV2';
+import {
+  GENOME_V2_LOCUS_KEYS,
+  type GenomeV2,
+  type GenomeV2LocusKey,
+  type NaturalRevealResultV2,
+} from './geneticsV2';
 import { resolvePhenotypeV2 } from './phenotypeV2';
-import { notableTraitLociV2, type MutationTierV2 } from './rarityV2';
+import { notableTraitLociV2, MUTATION_TIER_BY_ID, type MutationTierV2 } from './rarityV2';
 import { LOCUS_CATEGORY_LABEL_V2, alleleLabelV2, speciesNameV2 } from './hybridCardViewModel';
+import type { Specimen } from './types';
+
+// `NaturalRevealResultV2` is defined in geneticsV2.ts (data-schema layer) so
+// that `Specimen.revealNaturalReveal` (types.ts) can reference it without
+// types.ts depending on this file — re-exported here so every existing
+// `import ... from './revealV2'` keeps working unchanged (Slice 12 fix-pass,
+// contract §4.14.14).
+export type { NaturalRevealResultV2 } from './geneticsV2';
 
 /** Происхождение выраженного значения одного локуса (delta doc §12 Slice 12,
  * onboarding spec §3.3/§11). `mutation` — только для локуса, реально
@@ -86,14 +99,6 @@ export function traitOriginLabelsV2(
   return [seedLabel, pollenLabel];
 }
 
-/** Один локус, наследуемый скрытым способом (естественное раскрытие) —
- * список пар {parent, locus} затрагиваемых родителей, contract-doc §12
- * Slice 12 "правило естественного раскрытия". */
-export interface NaturalRevealResultV2 {
-  readonly seedLoci: readonly GenomeV2LocusKey[];
-  readonly pollenLoci: readonly GenomeV2LocusKey[];
-}
-
 /**
  * Для каждого локуса: если у родителя пара гетерозиготна (есть скрытое
  * состояние) и его СКРЫТЫЙ (не выраженный у него самого) аллель равен
@@ -105,33 +110,56 @@ export interface NaturalRevealResultV2 {
  * скрещивание). Не читает/не пишет `revealedLoci` — идемпотентность и защита
  * от перезаписи microscope-источника реализованы в store.ts на месте
  * применения этого результата.
+ *
+ * `mutated` (Slice 12 fix-pass, contract §4.14.14, owner review §2): локус,
+ * реально изменённый mutation event ЭТОГО скрещивания (Gate 1 — всегда
+ * `aura`), никогда не считается естественно унаследованным у родителя, даже
+ * если у родителя случайно есть тот же скрытый аллель — проявившееся у
+ * потомка значение возникло через мутацию, не через наследование, поэтому
+ * этот locus безусловно пропускается для обоих родителей, когда `mutated`.
+ *
+ * `seedGenomeV2`/`pollenGenomeV2` каждый независимо может быть `null` (Slice
+ * 12 fix-pass, contract §4.14.14, owner review §6 — родитель мог быть
+ * переработан/удалён между breed и maturity): каждая сторона считается сама
+ * по себе, поэтому отсутствие одного родителя просто не даёт вклада в
+ * соответствующий список — без падения и без потери честно доступной другой
+ * стороны.
  */
 export function computeNaturalRevealsV2(
   childGenomeV2: GenomeV2,
-  seedGenomeV2: GenomeV2,
-  pollenGenomeV2: GenomeV2
+  seedGenomeV2: GenomeV2 | null,
+  pollenGenomeV2: GenomeV2 | null,
+  mutated: boolean
 ): NaturalRevealResultV2 {
   const childPhenotype = resolvePhenotypeV2(childGenomeV2);
-  const seedPhenotype = resolvePhenotypeV2(seedGenomeV2);
-  const pollenPhenotype = resolvePhenotypeV2(pollenGenomeV2);
+  const seedPhenotype = seedGenomeV2 ? resolvePhenotypeV2(seedGenomeV2) : null;
+  const pollenPhenotype = pollenGenomeV2 ? resolvePhenotypeV2(pollenGenomeV2) : null;
   const seedLoci: GenomeV2LocusKey[] = [];
   const pollenLoci: GenomeV2LocusKey[] = [];
 
   for (const locus of GENOME_V2_LOCUS_KEYS) {
+    // Gate 1: aura — единственный mutation-pool locus (contract §4.5.6) — a
+    // mutated aura is never natural-inherited provenance, regardless of what
+    // either parent happens to carry hidden.
+    if (mutated && locus === 'aura') continue;
     const childValue = childPhenotype[locus] as string;
 
-    const seedPair = seedGenomeV2[locus] as { a: string; b: string };
-    if (seedPair.a !== seedPair.b) {
-      const seedExpressed = seedPhenotype[locus] as string;
-      const seedHidden = seedPair.a === seedExpressed ? seedPair.b : seedPair.a;
-      if (seedHidden === childValue) seedLoci.push(locus);
+    if (seedGenomeV2 && seedPhenotype) {
+      const seedPair = seedGenomeV2[locus] as { a: string; b: string };
+      if (seedPair.a !== seedPair.b) {
+        const seedExpressed = seedPhenotype[locus] as string;
+        const seedHidden = seedPair.a === seedExpressed ? seedPair.b : seedPair.a;
+        if (seedHidden === childValue) seedLoci.push(locus);
+      }
     }
 
-    const pollenPair = pollenGenomeV2[locus] as { a: string; b: string };
-    if (pollenPair.a !== pollenPair.b) {
-      const pollenExpressed = pollenPhenotype[locus] as string;
-      const pollenHidden = pollenPair.a === pollenExpressed ? pollenPair.b : pollenPair.a;
-      if (pollenHidden === childValue) pollenLoci.push(locus);
+    if (pollenGenomeV2 && pollenPhenotype) {
+      const pollenPair = pollenGenomeV2[locus] as { a: string; b: string };
+      if (pollenPair.a !== pollenPair.b) {
+        const pollenExpressed = pollenPhenotype[locus] as string;
+        const pollenHidden = pollenPair.a === pollenExpressed ? pollenPair.b : pollenPair.a;
+        if (pollenHidden === childValue) pollenLoci.push(locus);
+      }
     }
   }
 
@@ -225,5 +253,53 @@ export function buildRevealWhyViewModel(
     mutationTierDescription: mutationTier ? MUTATION_TIER_DESCRIPTION_V2[mutationTier] : null,
     rarityFactors: notable.map((locus) => `${LOCUS_CATEGORY_LABEL_V2[locus]}: ${alleleLabelV2(locus, resolvePhenotypeV2(genomeV2)[locus] as string)}`),
     hasNaturalReveal: naturalReveal.seedLoci.length > 0 || naturalReveal.pollenLoci.length > 0,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1): Reveal
+// is deferred to first maturity — `GameStore.harvestHybridV2` stamps the
+// newly-created `Specimen` with `revealAcknowledged:false` plus the additive
+// metadata this module needs to render it (`revealParentSpecies`,
+// `revealNaturalReveal`); `mutated`/`mutationTier` are derived straight from
+// `genomeV2.mutationId` (pure, no need to persist them separately). A pure
+// selector, not a store method — the UI layer (OverhaulApp.tsx) calls it
+// directly against `state.specimens` every render, the same way it already
+// reads other derived state, so a reload with a pending Reveal picks it back
+// up with no extra wiring.
+// ----------------------------------------------------------------------------
+
+export interface PendingHybridRevealV2 {
+  readonly specimen: Specimen;
+  readonly seedSpeciesId: number;
+  readonly pollenSpeciesId: number;
+  readonly mutated: boolean;
+  readonly mutationTier: MutationTierV2 | null;
+  readonly naturalReveal: NaturalRevealResultV2;
+}
+
+/**
+ * The one specimen (if any) whose Reveal is mature-but-not-yet-acknowledged
+ * (`revealAcknowledged===false`, contract §4.14.14 persisted lifecycle) —
+ * `null` when nothing is pending, including for any specimen predating this
+ * fix-pass (`revealAcknowledged===undefined`, never shown, never leaked).
+ * `revealAcknowledged===true` (already shown and closed) is likewise never
+ * returned — reload after acknowledgment never re-opens the Reveal screen.
+ */
+export function findPendingHybridRevealV2(specimens: readonly Specimen[]): PendingHybridRevealV2 | null {
+  const specimen = specimens.find((s) => s.revealAcknowledged === false);
+  if (!specimen || !specimen.genomeV2) return null;
+  const mutationId = specimen.genomeV2.mutationId;
+  const [seedSpeciesId, pollenSpeciesId] = specimen.revealParentSpecies ?? [
+    specimen.genomeV2.speciesId,
+    specimen.genomeV2.speciesId,
+  ];
+  return {
+    specimen,
+    seedSpeciesId,
+    pollenSpeciesId,
+    mutated: mutationId !== null,
+    mutationTier: mutationId ? MUTATION_TIER_BY_ID[mutationId] : null,
+    naturalReveal: specimen.revealNaturalReveal ?? { seedLoci: [], pollenLoci: [] },
   };
 }

@@ -87,7 +87,7 @@ export function TutorialReplayPanelV2({ onClose }: TutorialReplayPanelV2Props) {
 
   if (step === 'reveal2') {
     const childGenome = tutorialReplayChildGenomeV2(1);
-    const naturalReveal = computeNaturalRevealsV2(childGenome, seedGenome, pollenGenome);
+    const naturalReveal = computeNaturalRevealsV2(childGenome, seedGenome, pollenGenome, false);
     return (
       <RevealPanelV2
         genomeV2={childGenome}

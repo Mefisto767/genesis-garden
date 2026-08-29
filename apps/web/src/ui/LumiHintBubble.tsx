@@ -3,6 +3,7 @@ import { gameStore } from '../game/store';
 import { useGameState } from '../game/useGameState';
 import { overhaulEvents } from '../overhaul/events';
 import { LUMI_HINT_TEXT_V2, nextLumiHintV2, type LumiHintKeyV2 } from '../game/lumiHintsV2';
+import { secondTutorialLessonAvailable } from '../game/tutorialV2';
 
 /**
  * Genetics V2 — Slice 12 (onboarding spec §7): минимальная система
@@ -46,7 +47,11 @@ export function LumiHintBubble() {
     if (state.firstHybridRewardClaimed) {
       list.push('hybrid_unlocked');
     }
-    if (state.firstBreedFreeClaimed && (state.geneticsTutorialBreedsCompleted ?? 0) < 2 && v2CandidateCount >= 2) {
+    // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §4):
+    // gated on the SAME predicate that gates the guaranteed second tutorial
+    // breed itself (first hybrid matured AND its Reveal acknowledged) — not
+    // merely `firstBreedFreeClaimed` (owner review §4, explicit).
+    if (secondTutorialLessonAvailable(state)) {
       list.push('second_breed_available');
     }
     if (interspeciesSelected) {

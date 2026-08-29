@@ -207,6 +207,15 @@ const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0], same consta
 const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
 await page.mouse.click(plot0Screen.x, plot0Screen.y);
 await page.waitForTimeout(500);
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): this is the first-ever
+// maturity of this hybrid, so it now opens the Reveal screen as a global
+// overlay (OverhaulApp.tsx) — close it before continuing, same as the rest
+// of the V2 e2e suite does at first maturity.
+const revealVisibleAtFirstHarvest = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+if (revealVisibleAtFirstHarvest) {
+  await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+  await page.waitForTimeout(300);
+}
 await shot('02-first-hybrid-collected');
 
 // --- Step 3: firstHybridRewardClaimed=true, labLevel>=2, normal pollen +
@@ -466,10 +475,8 @@ assert(breedBtnEnabledInterspecies, '"Скрестить" button enabled for the
 const stateBeforeInterspeciesBreed = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
 await page.waitForTimeout(300);
-// Genetics V2 — Slice 12: a successful breed now shows the fullscreen
-// Reveal screen first — close it ("Отлично!") to get back to the lab notice.
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
-await page.waitForTimeout(300);
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): breeding never shows
+// a Reveal screen (deferred to first maturity) — no close-click needed here.
 const interspeciesBredNoticeVisible = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(interspeciesBredNoticeVisible, 'inter-species Солнечник x Колокольник pair breeds successfully after Lab L2 (Slice 9)');
 const stateAfterInterspeciesBreed = await readSave();
@@ -495,8 +502,6 @@ const sameSpeciesCostVisible = await page.getByText('Стоимость: 8 пы�
 assert(sameSpeciesCostVisible, 'same-species Колокольник pair shows the exact "Стоимость: 8 пыльцы" text');
 const stateBeforeSameSpeciesBreed = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
-await page.waitForTimeout(300);
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
 await page.waitForTimeout(300);
 const bredNoticeVisible = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNoticeVisible, 'same-species Колокольник x Колокольник pair breeds successfully after Lab L2');

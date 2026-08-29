@@ -3,6 +3,7 @@ import {
   buildRevealCardViewModel,
   buildRevealWhyViewModel,
   computeNaturalRevealsV2,
+  findPendingHybridRevealV2,
   resolveTraitOriginV2,
   traitOriginLabelsV2,
 } from './revealV2';
@@ -122,7 +123,7 @@ describe('computeNaturalRevealsV2 — естественное раскрыти�
     const seed = fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } });
     const pollen = fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } });
     const child = fixtureGenomeV2(1, { size: homo('size_large') });
-    const result = computeNaturalRevealsV2(child, seed, pollen);
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
     expect(result.seedLoci).toEqual(['size']);
     expect(result.pollenLoci).toEqual(['size']);
   });
@@ -133,7 +134,7 @@ describe('computeNaturalRevealsV2 — естественное раскрыти�
     // Child гомозиготен size_large — единственный способ реально выразить
     // рецессивный size_large (size_normal доминантен, rank1<rank2).
     const child = fixtureGenomeV2(1, { size: homo('size_large') });
-    const result = computeNaturalRevealsV2(child, seed, pollen);
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
     expect(result.seedLoci).toEqual(['size']);
     expect(result.pollenLoci).toEqual([]);
   });
@@ -142,7 +143,7 @@ describe('computeNaturalRevealsV2 — естественное раскрыти�
     const seed = fixtureGenomeV2(1, { size: homo('size_normal') });
     const pollen = fixtureGenomeV2(1, { size: homo('size_normal') });
     const child = fixtureGenomeV2(1, { size: homo('size_normal') });
-    const result = computeNaturalRevealsV2(child, seed, pollen);
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
     expect(result.seedLoci).toEqual([]);
     expect(result.pollenLoci).toEqual([]);
   });
@@ -151,7 +152,7 @@ describe('computeNaturalRevealsV2 — естественное раскрыти�
     const seed = fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } });
     const pollen = fixtureGenomeV2(1, { size: homo('size_normal') });
     const child = fixtureGenomeV2(1, { size: homo('size_normal') }); // выражен size_normal, не скрытый size_large
-    const result = computeNaturalRevealsV2(child, seed, pollen);
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
     expect(result.seedLoci).toEqual([]);
   });
 
@@ -159,11 +160,104 @@ describe('computeNaturalRevealsV2 — естественное раскрыти�
     const seed = fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } });
     const pollen = fixtureGenomeV2(1, { size: { a: 'size_normal', b: 'size_large' } });
     const child = fixtureGenomeV2(1, { size: homo('size_large') });
-    const result = computeNaturalRevealsV2(child, seed, pollen);
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
     expect(result.seedLoci).toEqual(['size']);
     expect(result.pollenLoci).toEqual(['size']);
     expect(result.seedLoci).not.toContain('stemForm');
     expect(result.pollenLoci).not.toContain('leafForm');
+  });
+
+  // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §2):
+  // mutation-locus regression — a mutated locus is never natural-reveal
+  // provenance, even when a parent happens to carry the exact same hidden
+  // allele that the mutation produced.
+  it('мутировавший aura (mutated=true) — родитель скрыто несёт aura_radiant, потомок получает aura_radiant через mutation event — natural reveal НЕ происходит ни у одного родителя', () => {
+    const seed = fixtureGenomeV2(1, { aura: { a: 'aura_faint', b: 'aura_radiant' } });
+    const pollen = fixtureGenomeV2(1, { aura: { a: 'aura_faint', b: 'aura_radiant' } });
+    const child = fixtureGenomeV2(1, { aura: homo('aura_radiant') }); // проявилось через мутацию, не наследование
+    const result = computeNaturalRevealsV2(child, seed, pollen, true);
+    expect(result.seedLoci).not.toContain('aura');
+    expect(result.pollenLoci).not.toContain('aura');
+  });
+
+  it('НЕ мутировавший aura (mutated=false) — тот же скрытый aura_radiant у родителя, естественно выраженный у потомка, раскрывается как обычно', () => {
+    const seed = fixtureGenomeV2(1, { aura: { a: 'aura_faint', b: 'aura_radiant' } });
+    const pollen = fixtureGenomeV2(1, { aura: { a: 'aura_faint', b: 'aura_radiant' } });
+    const child = fixtureGenomeV2(1, { aura: homo('aura_radiant') });
+    const result = computeNaturalRevealsV2(child, seed, pollen, false);
+    expect(result.seedLoci).toContain('aura');
+    expect(result.pollenLoci).toContain('aura');
+  });
+
+  it('mutated=true не затрагивает раскрытие ДРУГИХ локусов (только aura исключается)', () => {
+    const seed = fixtureGenomeV2(1, {
+      size: { a: 'size_normal', b: 'size_large' },
+      aura: { a: 'aura_faint', b: 'aura_radiant' },
+    });
+    const pollen = fixtureGenomeV2(1, {
+      size: { a: 'size_normal', b: 'size_large' },
+      aura: { a: 'aura_faint', b: 'aura_radiant' },
+    });
+    const child = fixtureGenomeV2(1, { size: homo('size_large'), aura: homo('aura_radiant') });
+    const result = computeNaturalRevealsV2(child, seed, pollen, true);
+    expect(result.seedLoci).toEqual(['size']);
+    expect(result.pollenLoci).toEqual(['size']);
+  });
+});
+
+describe('findPendingHybridRevealV2 — pure selector over Specimen[] (Slice 12 fix-pass, contract §4.14.14)', () => {
+  function fixtureSpecimen(id: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id,
+      genome: {} as never,
+      createdAt: 0,
+      genomeV2: fixtureGenomeV2(1),
+      ...overrides,
+    } as never;
+  }
+
+  it('null when no specimen has a pending Reveal', () => {
+    const specimens = [fixtureSpecimen('a', { revealAcknowledged: true }), fixtureSpecimen('b')];
+    expect(findPendingHybridRevealV2(specimens)).toBeNull();
+  });
+
+  it('finds the specimen with revealAcknowledged===false — undefined (N/A) and true (already acknowledged) are both ignored', () => {
+    const pending = fixtureSpecimen('c', { revealAcknowledged: false });
+    const specimens = [fixtureSpecimen('a'), fixtureSpecimen('b', { revealAcknowledged: true }), pending];
+    const result = findPendingHybridRevealV2(specimens);
+    expect(result?.specimen.id).toBe('c');
+  });
+
+  it('mutated/mutationTier derived from genomeV2.mutationId, not stored separately', () => {
+    const specimens = [
+      fixtureSpecimen('m', {
+        revealAcknowledged: false,
+        genomeV2: fixtureGenomeV2(1, { mutationId: 'golden_vein' }),
+      }),
+    ];
+    const result = findPendingHybridRevealV2(specimens);
+    expect(result?.mutated).toBe(true);
+    expect(result?.mutationTier).toBe('Minor');
+  });
+
+  it('falls back to genomeV2.speciesId for both seed/pollen species when revealParentSpecies is missing', () => {
+    const specimens = [fixtureSpecimen('x', { revealAcknowledged: false })];
+    const result = findPendingHybridRevealV2(specimens);
+    expect(result?.seedSpeciesId).toBe(1);
+    expect(result?.pollenSpeciesId).toBe(1);
+  });
+
+  it('uses the captured revealParentSpecies when present', () => {
+    const specimens = [fixtureSpecimen('y', { revealAcknowledged: false, revealParentSpecies: [1, 2] })];
+    const result = findPendingHybridRevealV2(specimens);
+    expect(result?.seedSpeciesId).toBe(1);
+    expect(result?.pollenSpeciesId).toBe(2);
+  });
+
+  it('defaults naturalReveal to empty when revealNaturalReveal is missing', () => {
+    const specimens = [fixtureSpecimen('z', { revealAcknowledged: false })];
+    const result = findPendingHybridRevealV2(specimens);
+    expect(result?.naturalReveal).toEqual({ seedLoci: [], pollenLoci: [] });
   });
 });
 

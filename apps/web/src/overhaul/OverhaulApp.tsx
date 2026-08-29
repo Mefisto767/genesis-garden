@@ -23,6 +23,8 @@ import { Onboarding } from '../ui/Onboarding';
 import { hasSeenOnboarding } from '../onboarding/onboardingState';
 import { BotanicalBookPanel } from '../ui/BotanicalBookPanel';
 import { TutorialReplayPanelV2 } from '../ui/TutorialReplayPanelV2';
+import { RevealPanelV2 } from '../ui/RevealPanelV2';
+import { findPendingHybridRevealV2 } from '../game/revealV2';
 import { LumiHintBubble } from '../ui/LumiHintBubble';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import { Toast } from '../ui/Toast';
@@ -76,6 +78,16 @@ export function OverhaulApp() {
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [mode, setMode] = useState<WorldMode>('estate');
 
+  // Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1):
+  // Reveal is deferred to first maturity, not shown at breed time — this is
+  // a global overlay (not owned by LabPanelV2) because the harvest that
+  // creates the pending Reveal happens from a direct EstateScene tile click
+  // (`gameStore.harvestHybridV2`), not through any React panel. A pure
+  // selector over `state.specimens`, recomputed every render — a reload with
+  // a pending Reveal picks it back up automatically, with no extra wiring,
+  // and an acknowledged Reveal never reappears.
+  const pendingReveal = GENETICS_V2_ENABLED ? findPendingHybridRevealV2(state.specimens) : null;
+
   // Genetics V2 — Slice 12 (contract §4.14.2, refined this pass): одноразовый
   // детерминированный засев двух tutorial-Солнечников — вызывается только
   // здесь, только под GENETICS_V2_ENABLED (store сам не читает ни один
@@ -111,7 +123,12 @@ export function OverhaulApp() {
   // переключатель работает для обеих Phaser-сцен, т.к. активна всегда ровно
   // одна сцена в этом game-инстансе.
   const isOverlayOpen =
-    panel !== null || showOnboarding || plantPlotId !== null || hybridCardPlotId !== null || showTutorialReplay;
+    panel !== null ||
+    showOnboarding ||
+    plantPlotId !== null ||
+    hybridCardPlotId !== null ||
+    showTutorialReplay ||
+    pendingReveal !== null;
   useEffect(() => {
     const game = phaserGameRef.current;
     if (!game) return;
@@ -235,6 +252,23 @@ export function OverhaulApp() {
       />
 
       {isOffline && isCloudSyncEnabled && auth.status === 'signed_in' && <OfflineBanner />}
+
+      {/* Genetics V2 — Slice 12 fix-pass (contract §4.14.14): the Reveal
+          screen for a hybrid's first maturity — rendered above every other
+          panel/hotspot, regardless of Estate/Laboratory mode or which panel
+          (if any) happens to be open, because harvesting a ready plot is a
+          direct EstateScene click, not a React panel action. */}
+      {pendingReveal && (
+        <RevealPanelV2
+          genomeV2={pendingReveal.specimen.genomeV2!}
+          seedSpeciesId={pendingReveal.seedSpeciesId}
+          pollenSpeciesId={pendingReveal.pollenSpeciesId}
+          mutated={pendingReveal.mutated}
+          mutationTier={pendingReveal.mutationTier}
+          naturalReveal={pendingReveal.naturalReveal}
+          onClose={() => gameStore.acknowledgeRevealV2(pendingReveal.specimen.id)}
+        />
+      )}
 
       {panel === 'shop' &&
         (GENETICS_V2_ENABLED ? (

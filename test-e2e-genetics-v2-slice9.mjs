@@ -191,10 +191,8 @@ await shot('01-lab-1x2-selected');
 const stateBeforeBreed1x2 = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
 await page.waitForTimeout(300);
-// Genetics V2 — Slice 12: close the Reveal screen the successful breed now
-// shows first, to get back to the lab notice this step checks below.
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
-await page.waitForTimeout(300);
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): breeding never shows
+// a Reveal screen (deferred to first maturity) — no close-click needed here.
 const bredNotice1x2 = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNotice1x2, 'step 3: 1x2 (Солнечник x Колокольник) pair breeds successfully after Lab L2');
 const stateAfterBreed1x2 = await readSave();
@@ -256,6 +254,14 @@ await dismissOnboarding();
 const plot0ScreenMature = await worldToScreen(PLOT0_WORLD.x, PLOT0_WORLD.y);
 await page.mouse.click(plot0ScreenMature.x, plot0ScreenMature.y);
 await page.waitForTimeout(500);
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): first-ever maturity
+// of this hybrid now opens the Reveal screen as a global overlay — close it
+// before continuing (same as the rest of the V2 e2e suite at first maturity).
+const revealVisible1x2 = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+if (revealVisible1x2) {
+  await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+  await page.waitForTimeout(300);
+}
 await shot('03-harvested-1x2-mature');
 const stateAfterHarvest1x2 = await readSave();
 const harvestedSpecimen1x2 = stateAfterHarvest1x2.specimens.find((s) => s.id !== 'sun-1' && s.id !== 'kolo-1');
@@ -290,8 +296,6 @@ await shot('04-lab-2x1-selected');
 
 const stateBeforeBreed2x1 = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
-await page.waitForTimeout(300);
-await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
 await page.waitForTimeout(300);
 const bredNotice2x1 = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNotice2x1, 'step 5: reversed 2x1 (Колокольник x Солнечник) pair breeds successfully');
@@ -358,6 +362,14 @@ await dismissOnboarding();
 const plot1ScreenMature = await worldToScreen(PLOT1_WORLD.x, PLOT1_WORLD.y);
 await page.mouse.click(plot1ScreenMature.x, plot1ScreenMature.y);
 await page.waitForTimeout(500);
+// Genetics V2 — Slice 12 fix-pass (contract §4.14.14): first-ever maturity
+// of THIS hybrid also opens its own Reveal overlay — close it before
+// continuing.
+const revealVisible2x1 = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+if (revealVisible2x1) {
+  await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+  await page.waitForTimeout(300);
+}
 await shot('06-harvested-2x1-mature');
 const stateAfterHarvest2x1 = await readSave();
 const harvestedSpecimen2x1 = stateAfterHarvest2x1.specimens.find(

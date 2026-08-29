@@ -2,7 +2,12 @@ import type { Entitlement, GameState, Plot, PlotHybridV2, Specimen } from './typ
 import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
-import { ensureGenomeV2Sidecars, type GenomeV2LocusKey, type HybridSeedV2 } from './geneticsV2';
+import {
+  ensureGenomeV2Sidecars,
+  type GenomeV2LocusKey,
+  type HybridSeedV2,
+  type NaturalRevealResultV2,
+} from './geneticsV2';
 import { validateSupportedParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
 import { breedV2 } from './mutationV2';
 import { breedCostV2, pollenRewardV2 } from './pollenV2';
@@ -17,8 +22,14 @@ import { availableLociForRevealV2, MICROSCOPE_REVEAL_COST } from './microscopeV2
 import { resolveExtendedCard } from './phenotypeV2';
 import type { RngFn } from './rng';
 import { defaultRng, mulberry32 } from './rng';
-import { shouldSeedTutorialStartersV2, tutorialBreedRngSeed, tutorialSunflowerPollenGenomeV2, tutorialSunflowerSeedGenomeV2 } from './tutorialV2';
-import { computeNaturalRevealsV2, type NaturalRevealResultV2 } from './revealV2';
+import {
+  secondTutorialLessonAvailable,
+  shouldSeedTutorialStartersV2,
+  tutorialBreedRngSeed,
+  tutorialSunflowerPollenGenomeV2,
+  tutorialSunflowerSeedGenomeV2,
+} from './tutorialV2';
+import { computeNaturalRevealsV2 } from './revealV2';
 import type { LumiHintKeyV2 } from './lumiHintsV2';
 import type { MutationTierV2 } from './rarityV2';
 
@@ -275,15 +286,6 @@ export interface BreedNurseryV2Success {
    * человеческим языком, без дублирования вызова `rarityOfV2`/`breedV2`. */
   mutationTier: MutationTierV2 | null;
   nextPityCounter: number;
-  /**
-   * Genetics V2 — Slice 12 (contract §4.14, delta doc §12 Slice 12): локусы,
-   * естественно раскрытые у seed/pollen родителей ЭТИМ скрещиванием — уже
-   * атомарно применено к `Specimen.revealedLoci` обоих родителей в том же
-   * обновлении состояния, что и создание `hybridSeed` (см. реализацию ниже).
-   * Возвращается отдельно, чтобы UI (`RevealPanelV2`) мог показать точный
-   * текст "Этот признак был скрыт у родителя..." без повторного вычисления.
-   */
-  naturalReveal: NaturalRevealResultV2;
 }
 
 /**
@@ -746,6 +748,20 @@ export class GameStore {
    * пыльцы; `breedV2` (Slice 3-4, без изменений) сам повторно проверяет то же
    * самое перед реальным наследованием/mutation RNG — не убирается, просто
    * становится избыточным defence-in-depth для этого пути.
+   *
+   * Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1/§2/
+   * §3/§4): this method no longer reveals ANYTHING about the resulting
+   * genome/phenotype/rarity/mutation to the caller beyond the safe fact "a
+   * hybrid seed exists" — the result's genome is still fully known
+   * internally (unavoidable, `breedV2` computes it immediately), but Reveal
+   * and natural-reveal-of-parents are both deferred to first maturity
+   * (`harvestHybridV2` below), not applied here. Economics are also
+   * corrected: only ever ONE free breed exists — the very first successful
+   * V2 breed (`!firstBreedFreeClaimed`) — a tutorial pair's SECOND
+   * (guaranteed) breed costs the normal `breedCostV2` same-species price
+   * (8 pollen), same as any other post-first breed. Only the deterministic
+   * RNG substitution (so the guaranteed outcome is reproducible) survives
+   * from the original Slice 12 tutorial design — never a cost override.
    */
   breedNurseryV2(seedParentId: string, pollenParentId: string): BreedNurseryV2Result {
     // 1. Разные parent IDs.
@@ -777,33 +793,39 @@ export class GameStore {
     );
     if (!speciesValidation.ok) return { ok: false, reason: speciesValidation.reason };
 
-    // 7. Genetics V2 — Slice 12 (contract §4.14): tutorial-seeded RNG для
-    //    первых ДВУХ обучающих скрещиваний ЭТИХ конкретных двух специменов
-    //    (оба помечены `tutorialStarter`, contract §4.6) — детерминированный
-    //    seed вместо this.rng, чтобы гарантировать контрактный результат
-    //    (§4.6.3/§4.6.4). Строго ограничено `geneticsTutorialBreedsCompleted
-    //    < 2` — третье и последующие скрещивания ТОЙ ЖЕ пары, любое
-    //    скрещивание с НЕ-tutorial-родителем и любой ветеранский save (у
-    //    которого `tutorialStarter` в принципе никогда не был выставлен)
-    //    используют обычный this.rng, без исключений. Вычисляется ДО
-    //    стоимости (шаг 8) — оба обучающих скрещивания бесплатны (см. шаг 8),
-    //    не только первое: onboarding spec §4.2 требует, чтобы второй урок
-    //    ГАРАНТИРОВАННО состоялся, а не блокировался нехваткой пыльцы, если
-    //    игрок ещё не успел накопить её достаточно естественным путём.
+    // 7. Genetics V2 — Slice 12 fix-pass (contract §4.14.14): tutorial-seeded
+    //    RNG for the two guaranteed tutorial breeds — deterministic
+    //    `mulberry32` instead of `this.rng`, purely so the outcome is
+    //    reproducible. The FIRST tutorial breed only needs both parents
+    //    marked `tutorialStarter` and the counter still at 0. The SECOND
+    //    tutorial breed additionally requires `secondTutorialLessonAvailable`
+    //    (tutorialV2.ts, owner review §4) — i.e. the first lesson's own
+    //    hybrid has matured AND its Reveal has been acknowledged — not just
+    //    "counter is 1". Breeding the same two tutorial-starter specimens
+    //    again before that gate is satisfied is still allowed, but is then a
+    //    perfectly ordinary paid breed (normal `this.rng`, normal cost, no
+    //    `tutorialBreedStep`) — never treated as "the" guaranteed lesson.
     const tutorialBreedsCompleted = this.state.geneticsTutorialBreedsCompleted ?? 0;
-    const isTutorialBreed =
-      seedParent.tutorialStarter === true && pollenParent.tutorialStarter === true && tutorialBreedsCompleted < 2;
-    const breedRng: RngFn = isTutorialBreed
-      ? mulberry32(tutorialBreedRngSeed(tutorialBreedsCompleted as 0 | 1))
-      : this.rng;
+    const bothTutorialStarters = seedParent.tutorialStarter === true && pollenParent.tutorialStarter === true;
+    const isFirstTutorialBreed = bothTutorialStarters && tutorialBreedsCompleted === 0;
+    const isSecondTutorialBreed = bothTutorialStarters && secondTutorialLessonAvailable(this.state);
+    const isTutorialBreed = isFirstTutorialBreed || isSecondTutorialBreed;
+    const tutorialStep: 0 | 1 | undefined = isFirstTutorialBreed ? 0 : isSecondTutorialBreed ? 1 : undefined;
+    const breedRng: RngFn = isTutorialBreed ? mulberry32(tutorialBreedRngSeed(tutorialStep as 0 | 1)) : this.rng;
 
-    // 8. Определение бесплатности/стоимости — оба обучающих скрещивания
-    //    (contract §4.14.9) безусловно бесплатны, как и обычное первое
-    //    бесплатное скрещивание для нетуториальных пар (delta doc §6.2).
-    const cost = isTutorialBreed || !this.state.firstBreedFreeClaimed
+    // 8. Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §3):
+    //    ONLY the very first successful V2 breed is free — the tutorial
+    //    pair's guaranteed second breed is a normal, paid breed at the usual
+    //    same-species price (both tutorial starters are always the same
+    //    species). `isTutorialBreed` no longer overrides cost at all — it
+    //    only ever selects which RNG function to use (step 7 above).
+    const cost = !this.state.firstBreedFreeClaimed
       ? 0
       : breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId);
-    // 9. Проверка баланса пыльцы.
+    // 9. Проверка баланса пыльцы — ДО вызова breedV2, поэтому недостаток
+    //    пыльцы (в т.ч. для гарантированного второго обучающего скрещивания)
+    //    не потребляет ни один RNG-вызов, включая tutorial-seeded RNG выше
+    //    (та переменная лишь ВЫБРАНА, ещё не использована ни разу).
     if (this.state.pollen < cost) {
       return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
     }
@@ -819,31 +841,17 @@ export class GameStore {
       createdAt: Date.now(),
       plantedAt: null,
       plotId: null,
+      tutorialBreedStep: tutorialStep,
     };
 
-    // 11. Genetics V2 — Slice 12 (contract §4.14, onboarding spec §6.2/§4.2):
-    //     естественное раскрытие — если аллель, выраженный у потомка, был
-    //     скрытым у seed/pollen родителя, раскрыть ТОЛЬКО этот locus у ЭТОГО
-    //     родителя, source:'natural', не списывая пыль. Идемпотентно: не
-    //     добавляет запись, если для этого locus у этого specimen уже есть
-    //     ЛЮБАЯ запись (microscope или natural) — существующий source
-    //     `microscope` никогда не перезаписывается.
-    const naturalReveal = computeNaturalRevealsV2(result.genomeV2, seedParent.genomeV2, pollenParent.genomeV2);
-    function withNaturalReveal(specimen: Specimen, loci: readonly GenomeV2LocusKey[]): Specimen {
-      if (loci.length === 0) return specimen;
-      const existing = specimen.revealedLoci ?? [];
-      const existingLoci = new Set(existing.map((e) => e.locus));
-      const additions = loci
-        .filter((locus) => !existingLoci.has(locus))
-        .map((locus) => ({ locus, source: 'natural' as const }));
-      if (additions.length === 0) return specimen;
-      return { ...specimen, revealedLoci: [...existing, ...additions] };
-    }
-
-    // 12. Одно атомарное обновление: HybridSeed, pity, pollen,
-    //     firstBreedFreeClaimed, обучающий счётчик, естественное раскрытие
-    //     обоих родителей — всё в одном присвоении `this.state`, ровно та
-    //     точка жизненного цикла, которую фиксирует docs-lock Slice 12.
+    // 11. Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review
+    //     §1/§2): ONE atomic update — HybridSeed, pity, pollen,
+    //     firstBreedFreeClaimed, tutorial counter. Deliberately does NOT
+    //     touch `specimens` (parents' `revealedLoci` are untouched by breed —
+    //     owner review §1: "breed не меняет revealedLoci родителей") and
+    //     does NOT compute/return genome/phenotype/rarity/mutation/natural-
+    //     reveal to the caller — that all happens at first maturity in
+    //     `harvestHybridV2` below, not here.
     this.state = {
       ...this.state,
       nurseryTray: [...this.state.nurseryTray, hybridSeed],
@@ -853,11 +861,6 @@ export class GameStore {
       geneticsTutorialBreedsCompleted: isTutorialBreed
         ? Math.min(2, tutorialBreedsCompleted + 1)
         : tutorialBreedsCompleted,
-      specimens: this.state.specimens.map((s) => {
-        if (s.id === seedParentId) return withNaturalReveal(s, naturalReveal.seedLoci);
-        if (s.id === pollenParentId) return withNaturalReveal(s, naturalReveal.pollenLoci);
-        return s;
-      }),
     };
     this.emit();
     return {
@@ -866,7 +869,6 @@ export class GameStore {
       mutated: result.mutated,
       mutationTier: result.mutationTier,
       nextPityCounter: result.nextPityCounter,
-      naturalReveal,
     };
   }
 
@@ -1008,6 +1010,20 @@ export class GameStore {
    * каждой ветке) и потому тоже не выдают грант. Legacy `harvest()` этот
    * метод не переиспользует и не читает `firstHybridRewardClaimed`/`labLevel`
    * вообще — legacy-сбор ничего не открывает.
+   *
+   * Genetics V2 — Slice 12 fix-pass (contract §4.14.14, owner review §1/§2):
+   * the `growing`→`mature` transition below (first-ever harvest of this
+   * hybrid, exactly once per plot thanks to the same `specimenId`
+   * presence-guard that already made `Specimen` creation idempotent) is now
+   * ALSO the single point where natural reveal is computed/applied and the
+   * new Specimen's Reveal lifecycle is stamped `revealAcknowledged:false`
+   * ("mature pending Reveal") — not `breedNurseryV2` above. Parent genomes
+   * are looked up by `hybrid.parentIds` against the CURRENT `this.state.
+   * specimens` (a parent's `genomeV2` never changes after breeding, so this
+   * is exactly equivalent to using a snapshot taken at breed time); if a
+   * parent was recycled before this maturity, natural reveal simply does not
+   * apply to that missing side (nothing to reveal on a specimen that no
+   * longer exists) — a safe, honest degradation, not a crash.
    */
   harvestHybridV2(plotId: number, now: number = Date.now()): boolean {
     const plot = this.state.plots.find((p) => p.id === plotId);
@@ -1024,17 +1040,53 @@ export class GameStore {
       const status = hybridGrowthStatusV2(hybrid, now);
       if (!status || !status.ready) return false;
 
+      const [seedParentId, pollenParentId] = hybrid.parentIds;
+      const seedParent = this.state.specimens.find((s) => s.id === seedParentId);
+      const pollenParent = this.state.specimens.find((s) => s.id === pollenParentId);
+      const mutated = hybrid.genomeV2.mutationId !== null;
+      const naturalReveal: NaturalRevealResultV2 = computeNaturalRevealsV2(
+        hybrid.genomeV2,
+        seedParent?.genomeV2 ?? null,
+        pollenParent?.genomeV2 ?? null,
+        mutated
+      );
+
+      function withNaturalReveal(specimen: Specimen, loci: readonly GenomeV2LocusKey[]): Specimen {
+        if (loci.length === 0) return specimen;
+        const existing = specimen.revealedLoci ?? [];
+        const existingLoci = new Set(existing.map((e) => e.locus));
+        const additions = loci
+          .filter((locus) => !existingLoci.has(locus))
+          .map((locus) => ({ locus, source: 'natural' as const }));
+        if (additions.length === 0) return specimen;
+        return { ...specimen, revealedLoci: [...existing, ...additions] };
+      }
+
       const specimen: Specimen = {
         id: nextId(),
         genome: projectGenomeV2ToLegacy(hybrid.genomeV2),
         genomeV2: hybrid.genomeV2,
         createdAt: now,
         parentIds: hybrid.parentIds,
+        revealAcknowledged: false,
+        revealParentSpecies: [
+          seedParent?.genomeV2?.speciesId ?? hybrid.genomeV2.speciesId,
+          pollenParent?.genomeV2?.speciesId ?? hybrid.genomeV2.speciesId,
+        ],
+        revealNaturalReveal: naturalReveal,
+        tutorialBreedStep: hybrid.tutorialBreedStep,
       };
       const mature: PlotHybridV2 = { phase: 'mature', specimenId: specimen.id, lastHarvestAt: now };
       this.state = {
         ...this.state,
-        specimens: [...this.state.specimens, specimen],
+        specimens: [
+          ...this.state.specimens.map((s) => {
+            if (s.id === seedParentId) return withNaturalReveal(s, naturalReveal.seedLoci);
+            if (s.id === pollenParentId) return withNaturalReveal(s, naturalReveal.pollenLoci);
+            return s;
+          }),
+          specimen,
+        ],
         plots: this.state.plots.map((p) => (p.id === plotId ? { ...p, hybridV2: mature } : p)),
         pollen: this.state.pollen + pollenRewardV2(hybrid.genomeV2) + pollenBonus,
         ...firstHybridBonus,
@@ -1060,6 +1112,28 @@ export class GameStore {
     };
     this.emit();
     return true;
+  }
+
+  /**
+   * Genetics V2 — Slice 12 fix-pass (contract §4.14.14): closes the pending
+   * Reveal screen for a specimen — the persisted "Reveal acknowledged" step
+   * of the lifecycle `bred unknown seed -> planted/growing -> mature pending
+   * Reveal -> Reveal acknowledged`. Idempotent no-op (no state change, no
+   * `emit()`) unless the specimen exists AND is currently
+   * `revealAcknowledged===false` — calling it again after acknowledgment, on
+   * a specimen this mechanism never applied to (`undefined`), or on a
+   * nonexistent id, does nothing. There is no path back from `true` to
+   * `false` — once acknowledged, a repeat mature interaction or a reload
+   * never re-opens the Reveal screen for this specimen again.
+   */
+  acknowledgeRevealV2(specimenId: string): void {
+    const specimen = this.state.specimens.find((s) => s.id === specimenId);
+    if (!specimen || specimen.revealAcknowledged !== false) return;
+    this.state = {
+      ...this.state,
+      specimens: this.state.specimens.map((s) => (s.id === specimenId ? { ...s, revealAcknowledged: true } : s)),
+    };
+    this.emit();
   }
 
   // --------------------------------------------------------------------
