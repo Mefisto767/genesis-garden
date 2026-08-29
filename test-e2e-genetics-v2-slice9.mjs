@@ -191,6 +191,10 @@ await shot('01-lab-1x2-selected');
 const stateBeforeBreed1x2 = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
 await page.waitForTimeout(300);
+// Genetics V2 — Slice 12: close the Reveal screen the successful breed now
+// shows first, to get back to the lab notice this step checks below.
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+await page.waitForTimeout(300);
 const bredNotice1x2 = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNotice1x2, 'step 3: 1x2 (Солнечник x Колокольник) pair breeds successfully after Lab L2');
 const stateAfterBreed1x2 = await readSave();
@@ -286,6 +290,8 @@ await shot('04-lab-2x1-selected');
 
 const stateBeforeBreed2x1 = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
 await page.waitForTimeout(300);
 const bredNotice2x1 = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNotice2x1, 'step 5: reversed 2x1 (Колокольник x Солнечник) pair breeds successfully');

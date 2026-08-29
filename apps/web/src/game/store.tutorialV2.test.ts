@@ -110,6 +110,25 @@ describe('breedNurseryV2 — подмена RNG на детерминирова�
     expect(store.getState().geneticsTutorialBreedsCompleted).toBe(1);
   });
 
+  it('второе обучающее скрещивание тоже бесплатно (0 пыльцы), даже когда firstBreedFreeClaimed уже true и pollen=0', () => {
+    const store = storeWith(
+      baseState({
+        specimens: [
+          tutorialSpecimen('a', tutorialSunflowerSeedGenomeV2()),
+          tutorialSpecimen('b', tutorialSunflowerPollenGenomeV2()),
+        ],
+        geneticsTutorialBreedsCompleted: 1,
+        firstBreedFreeClaimed: true,
+        pollen: 0,
+      }),
+      mulberry32(6)
+    );
+    const result = store.breedNurseryV2('a', 'b');
+    expect(result.ok).toBe(true);
+    expect(store.getState().pollen).toBe(0); // не списано
+    expect(store.getState().geneticsTutorialBreedsCompleted).toBe(2);
+  });
+
   it('счётчик достиг 2 — третье скрещивание той же пары использует обычный this.rng, не tutorial-seed', () => {
     const rngCalls: number[] = [];
     const store = storeWith(
@@ -248,6 +267,18 @@ describe('seedGeneticsTutorialV2 — одноразовый, ограничен 
     const store = storeWith({ ...freshTwoSpecimenState(), firstBreedFreeClaimed: true });
     expect(store.seedGeneticsTutorialV2()).toBe(false);
     expect(store.getState().geneticsTutorialStartersSeeded ?? false).toBe(false);
+  });
+});
+
+describe('isBrandNewGameV2 — distinguishes an actually-empty save from one merely shaped like a fresh game', () => {
+  it('constructed with initialState (any test harness scenario) — never brand-new', () => {
+    const store = storeWith(baseState());
+    expect(store.isBrandNewGameV2()).toBe(false);
+  });
+
+  it('no save present in storage at all — brand-new (real GameStore, no initialState override)', () => {
+    const store = new GameStore({ rng: mulberry32(1), disablePersistence: true });
+    expect(store.isBrandNewGameV2()).toBe(true);
   });
 });
 

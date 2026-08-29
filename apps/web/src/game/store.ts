@@ -131,13 +131,13 @@ function createInitialState(rng: RngFn): GameState {
 function loadState(
   rng: RngFn,
   storage: StorageLike | null
-): { state: GameState; needsPersist: boolean } {
+): { state: GameState; needsPersist: boolean; isBrandNewSave: boolean } {
   try {
     const raw = storage?.getItem(SAVE_KEY);
-    if (!raw) return { state: createInitialState(rng), needsPersist: false };
+    if (!raw) return { state: createInitialState(rng), needsPersist: false, isBrandNewSave: true };
     const parsed = JSON.parse(raw) as GameState & { version?: number };
     if (!parsed.plots || !Array.isArray(parsed.plots) || typeof parsed.coins !== 'number') {
-      return { state: createInitialState(rng), needsPersist: false };
+      return { state: createInitialState(rng), needsPersist: false, isBrandNewSave: false };
     }
     // Миграции без потери прогресса игрока — каждая версия добавляет только
     // недостающие поля, никогда не удаляет и не обнуляет существующие.
@@ -211,9 +211,9 @@ function loadState(
     // запись решает только needsPersist выше.
     parsed.version = SAVE_VERSION;
 
-    return { state: parsed, needsPersist };
+    return { state: parsed, needsPersist, isBrandNewSave: false };
   } catch {
-    return { state: createInitialState(rng), needsPersist: false };
+    return { state: createInitialState(rng), needsPersist: false, isBrandNewSave: false };
   }
 }
 
@@ -407,6 +407,23 @@ export class GameStore {
   private listeners = new Set<Listener>();
   private rng: RngFn;
   private storage: StorageLike | null;
+  /**
+   * Genetics V2 — Slice 12 (contract §4.14.2, refinement of this
+   * implementation pass): true ONLY when this GameStore was constructed with
+   * literally no save present in storage at all (a genuinely brand-new
+   * browser/game) — NOT merely "shape happens to look untouched" (2
+   * specimens, no history), which `shouldSeedTutorialStartersV2` alone
+   * cannot distinguish from an older fixture/test save that intentionally
+   * mimics a fresh state to test unrelated mechanics (e.g.
+   * test-e2e-genetics-v2.mjs's version:3 two-specimen fixture). `false` for
+   * a corrupted/unparseable save too (conservative — it existed, it just
+   * couldn't be read). `initialState` (test harness, direct construction)
+   * counts as brand-new only in the sense that it bypassed storage entirely;
+   * UI code (`OverhaulApp.tsx`) is the only reader of this flag, deciding
+   * whether to call `seedGeneticsTutorialV2()` on mount — the store method
+   * itself is NOT gated by this (store tests call it directly, unaffected).
+   */
+  private readonly brandNewSave: boolean;
 
   constructor(options: GameStoreOptions = {}) {
     this.rng = options.rng ?? defaultRng;
@@ -415,10 +432,12 @@ export class GameStore {
       // Тесты передают готовый сценарий напрямую — loadState()/persist() не
       // участвуют, это не проход через storage вообще.
       this.state = options.initialState;
+      this.brandNewSave = false;
       return;
     }
     const loaded = loadState(this.rng, this.storage);
     this.state = loaded.state;
+    this.brandNewSave = loaded.isBrandNewSave;
     // Fix-pass (defect report): V3→V4-миграция и/или backfill отсутствовавших
     // genomeV2 sidecars, случившиеся при загрузке, должны сразу лечь на диск
     // — не ждать первого игрового действия, вызывающего emit(). persist()
@@ -434,6 +453,11 @@ export class GameStore {
 
   getState(): GameState {
     return this.state;
+  }
+
+  /** Genetics V2 — Slice 12: see `brandNewSave` field doc comment above. */
+  isBrandNewGameV2(): boolean {
+    return this.brandNewSave;
   }
 
   subscribe(listener: Listener): () => void {
@@ -752,16 +776,8 @@ export class GameStore {
       pollenParent.genomeV2.speciesId
     );
     if (!speciesValidation.ok) return { ok: false, reason: speciesValidation.reason };
-    // 7. Определение бесплатности/стоимости.
-    const cost = this.state.firstBreedFreeClaimed
-      ? breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId)
-      : 0;
-    // 8. Проверка баланса пыльцы.
-    if (this.state.pollen < cost) {
-      return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
-    }
 
-    // 9. Genetics V2 — Slice 12 (contract §4.14): tutorial-seeded RNG для
+    // 7. Genetics V2 — Slice 12 (contract §4.14): tutorial-seeded RNG для
     //    первых ДВУХ обучающих скрещиваний ЭТИХ конкретных двух специменов
     //    (оба помечены `tutorialStarter`, contract §4.6) — детерминированный
     //    seed вместо this.rng, чтобы гарантировать контрактный результат
@@ -769,13 +785,28 @@ export class GameStore {
     //    < 2` — третье и последующие скрещивания ТОЙ ЖЕ пары, любое
     //    скрещивание с НЕ-tutorial-родителем и любой ветеранский save (у
     //    которого `tutorialStarter` в принципе никогда не был выставлен)
-    //    используют обычный this.rng, без исключений.
+    //    используют обычный this.rng, без исключений. Вычисляется ДО
+    //    стоимости (шаг 8) — оба обучающих скрещивания бесплатны (см. шаг 8),
+    //    не только первое: onboarding spec §4.2 требует, чтобы второй урок
+    //    ГАРАНТИРОВАННО состоялся, а не блокировался нехваткой пыльцы, если
+    //    игрок ещё не успел накопить её достаточно естественным путём.
     const tutorialBreedsCompleted = this.state.geneticsTutorialBreedsCompleted ?? 0;
     const isTutorialBreed =
       seedParent.tutorialStarter === true && pollenParent.tutorialStarter === true && tutorialBreedsCompleted < 2;
     const breedRng: RngFn = isTutorialBreed
       ? mulberry32(tutorialBreedRngSeed(tutorialBreedsCompleted as 0 | 1))
       : this.rng;
+
+    // 8. Определение бесплатности/стоимости — оба обучающих скрещивания
+    //    (contract §4.14.9) безусловно бесплатны, как и обычное первое
+    //    бесплатное скрещивание для нетуториальных пар (delta doc §6.2).
+    const cost = isTutorialBreed || !this.state.firstBreedFreeClaimed
+      ? 0
+      : breedCostV2(seedParent.genomeV2.speciesId, pollenParent.genomeV2.speciesId);
+    // 9. Проверка баланса пыльцы.
+    if (this.state.pollen < cost) {
+      return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
+    }
 
     // 10. Вызов breedV2 — единственное место реального наследования/mutation RNG.
     const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, breedRng);

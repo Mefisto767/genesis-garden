@@ -466,6 +466,10 @@ assert(breedBtnEnabledInterspecies, '"Скрестить" button enabled for the
 const stateBeforeInterspeciesBreed = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
 await page.waitForTimeout(300);
+// Genetics V2 — Slice 12: a successful breed now shows the fullscreen
+// Reveal screen first — close it ("Отлично!") to get back to the lab notice.
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+await page.waitForTimeout(300);
 const interspeciesBredNoticeVisible = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(interspeciesBredNoticeVisible, 'inter-species Солнечник x Колокольник pair breeds successfully after Lab L2 (Slice 9)');
 const stateAfterInterspeciesBreed = await readSave();
@@ -491,6 +495,8 @@ const sameSpeciesCostVisible = await page.getByText('Стоимость: 8 пы�
 assert(sameSpeciesCostVisible, 'same-species Колокольник pair shows the exact "Стоимость: 8 пыльцы" text');
 const stateBeforeSameSpeciesBreed = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
+await page.waitForTimeout(300);
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
 await page.waitForTimeout(300);
 const bredNoticeVisible = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
 assert(bredNoticeVisible, 'same-species Колокольник x Колокольник pair breeds successfully after Lab L2');

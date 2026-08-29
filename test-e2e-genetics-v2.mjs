@@ -113,6 +113,16 @@ const startX = w / 2 - spacing * 2;
 const hotspotY = h * 0.68;
 await page.mouse.click(canvasBox2.x + startX, canvasBox2.y + hotspotY);
 await page.waitForTimeout(400);
+// Genetics V2 — Slice 12: this fixture-save has no breeding history
+// (firstBreedFreeClaimed:false, implicit), so it is treated as a genuinely
+// untouched genetics save and the new contextual intro screen gates the lab
+// once — dismiss it the same way the rest of the V2 e2e suite dismisses the
+// old 4-slide onboarding.
+const introButton = page.getByRole('button', { name: 'Понятно, начать', exact: true });
+if (await introButton.isVisible().catch(() => false)) {
+  await introButton.click();
+  await page.waitForTimeout(300);
+}
 const nurseryCounterVisible = await page.getByText(/Питомник: 0\/8/).first().isVisible().catch(() => false);
 assert(nurseryCounterVisible, 'workbench hotspot opens LabPanelV2 showing "Питомник: 0/8"');
 await shot('01-labpanel-v2');
@@ -131,12 +141,23 @@ await cards.nth(1).click();
 await page.waitForTimeout(200);
 await page.locator('.sheet-buy-btn').click();
 await page.waitForTimeout(300);
+// Genetics V2 — Slice 12: a successful breedNurseryV2 now shows the
+// fullscreen Reveal screen first (species/rarity/all nine traits+origin)
+// before returning to the lab — this supersedes the older "no
+// phenotype/genome shown until harvest maturity" UI behavior this test used
+// to assert right here (that rule still holds for the Nursery Tray LIST
+// itself, checked below after closing Reveal — only the immediate breed
+// result is now revealed, not any *other* still-growing seed in the tray).
+const revealSpeciesVisible = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+assert(revealSpeciesVisible, 'breedNurseryV2 success shows the Slice 12 Reveal screen (species/rarity/traits)');
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
+await page.waitForTimeout(300);
 const bredNotice = await page.getByText(/Гибридное семя появилось/).first().isVisible().catch(() => false);
-assert(bredNotice, 'breedNurseryV2 success shows only "hybrid seed appeared" notice');
+assert(bredNotice, 'closing Reveal shows the "hybrid seed appeared" notice');
 const nurseryAfterBreed = await page.getByText(/Питомник: 1\/8/).first().isVisible().catch(() => false);
 assert(nurseryAfterBreed, 'nursery tray counter updated to 1/8 after breeding');
 const genomeLeaked = await page.getByText(/Основной цвет|Доп\. цвет|Аура:|Узор:/).first().isVisible().catch(() => false);
-assert(!genomeLeaked, 'no phenotype/genome fields rendered anywhere after breeding (not revealed before maturity)');
+assert(!genomeLeaked, 'back in the lab, no phenotype/genome fields rendered for the still-growing Nursery Tray seed (not revealed before maturity)');
 await shot('02-hybrid-seed-bred');
 
 // 1/2: first breed was free at pollen=0, and 2: firstBreedFreeClaimed flipped
@@ -348,6 +369,10 @@ await page.locator('.specimen-card').nth(0).click();
 await page.locator('.specimen-card').nth(1).click();
 await page.waitForTimeout(200);
 await page.locator('.sheet-buy-btn').click();
+await page.waitForTimeout(300);
+// Genetics V2 — Slice 12: close the Reveal screen this breed shows (same as
+// the first breed above) before inspecting the returned-to lab UI below.
+await page.getByRole('button', { name: 'Отлично!', exact: true }).first().click();
 await page.waitForTimeout(300);
 const trayLenAfterSecondBreed = (
   await page.evaluate(() => JSON.parse(localStorage.getItem('genesis-garden-save-v1')))

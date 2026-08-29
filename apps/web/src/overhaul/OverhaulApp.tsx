@@ -76,12 +76,22 @@ export function OverhaulApp() {
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [mode, setMode] = useState<WorldMode>('estate');
 
-  // Genetics V2 — Slice 12 (contract §4.14): одноразовый детерминированный
-  // засев двух tutorial-Солнечников — вызывается только здесь, только под
-  // GENETICS_V2_ENABLED (store сам не читает ни один feature-флаг). No-op на
-  // ветеранских/уже засеянных save (`shouldSeedTutorialStartersV2`).
+  // Genetics V2 — Slice 12 (contract §4.14.2, refined this pass): одноразовый
+  // детерминированный засев двух tutorial-Солнечников — вызывается только
+  // здесь, только под GENETICS_V2_ENABLED (store сам не читает ни один
+  // feature-флаг), и только когда `gameStore.isBrandNewGameV2()` — то есть
+  // save буквально отсутствовал в storage до этого запуска, а не просто
+  // "выглядит нетронутым" (2 специмена, нет истории). Отличие важно: старый
+  // fixture-save в других e2e-сценариях (например
+  // test-e2e-genetics-v2.mjs — version:3, 2 специмена того же вида) по форме
+  // удовлетворяет `shouldSeedTutorialStartersV2`, но НЕ должен получить
+  // tutorial-геном/детерминированный RNG — он тестирует другую механику на
+  // собственных данных. `shouldSeedTutorialStartersV2` внутри
+  // `seedGeneticsTutorialV2()` остаётся обязательной второй защитой
+  // (ветеранские save/уже засеянные), эта проверка — дополнительная, более
+  // узкая по контексту вызова.
   useEffect(() => {
-    if (GENETICS_V2_ENABLED) gameStore.seedGeneticsTutorialV2();
+    if (GENETICS_V2_ENABLED && gameStore.isBrandNewGameV2()) gameStore.seedGeneticsTutorialV2();
   }, []);
 
   useEffect(() => {
@@ -241,7 +251,14 @@ export function OverhaulApp() {
             pollen={state.pollen}
             firstBreedFreeClaimed={state.firstBreedFreeClaimed}
             labLevel={state.labLevel}
-            geneticsIntroSeen={!!state.geneticsIntroSeen}
+            // Genetics V2 — Slice 12 (contract §4.14.1): additive field, no
+            // SAVE_VERSION bump — an existing V4 save that already has
+            // breeding history (firstBreedFreeClaimed) predates this screen
+            // entirely and must not suddenly gate its lab behind it; only a
+            // genuinely untouched save (no history, field truly unset) sees
+            // the intro. Explicit `??`, not `!!`, so `geneticsIntroSeen:false`
+            // (a fresh game that dismissed nothing yet) is never overridden.
+            geneticsIntroSeen={state.geneticsIntroSeen ?? state.firstBreedFreeClaimed}
             geneticsTutorialBreedsCompleted={state.geneticsTutorialBreedsCompleted ?? 0}
             onClose={() => setPanel(null)}
           />

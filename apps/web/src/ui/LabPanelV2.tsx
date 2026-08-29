@@ -167,12 +167,24 @@ export function LabPanelV2({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedIdSel, pollenIdSel]);
+  // Genetics V2 — Slice 12 (contract §4.14.9): выбранная пара — оба ещё
+  // непрошедших обучающих скрещивания tutorial-стартера — зеркалит
+  // store-level `isTutorialBreed` в `breedNurseryV2`, чтобы UI не отключал
+  // кнопку "Скрестить" нехваткой пыльцы для скрещивания, которое store всё
+  // равно проведёт бесплатно (иначе гарантия onboarding spec §4.2 "второй
+  // урок состоится сразу" не выполнялась бы визуально).
+  const isSelectedTutorialPair =
+    selectedSpecimens.length === 2 &&
+    selectedSpecimens[0]!.tutorialStarter === true &&
+    selectedSpecimens[1]!.tutorialStarter === true &&
+    geneticsTutorialBreedsCompleted < 2;
   // Стоимость выбранной пары (contract §4.9.5/§4.12) — 0, пока бесплатная
-  // первая попытка ещё не использована; иначе `breedCostV2` по видам
-  // выбранной пары (8 одновидовое; 12 межвидовое — со Slice 9 достижимо и в
-  // проде, не только в unit-тестах самой функции).
+  // первая попытка ещё не использована ИЛИ это одно из двух обучающих
+  // скрещиваний; иначе `breedCostV2` по видам выбранной пары (8 одновидовое;
+  // 12 межвидовое — со Slice 9 достижимо и в проде, не только в unit-тестах
+  // самой функции).
   const selectedCost =
-    !firstBreedFreeClaimed || selectedSpecimens.length !== 2
+    !firstBreedFreeClaimed || isSelectedTutorialPair || selectedSpecimens.length !== 2
       ? 0
       : breedCostV2(selectedSpecimens[0]!.genomeV2!.speciesId, selectedSpecimens[1]!.genomeV2!.speciesId);
   const insufficientForSelection = firstBreedFreeClaimed && selected.length === 2 && pollen < selectedCost;
