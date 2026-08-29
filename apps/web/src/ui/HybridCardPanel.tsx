@@ -1,6 +1,7 @@
 import { gameStore } from '../game/store';
 import { useGameState } from '../game/useGameState';
 import { buildHybridCardViewModel } from '../game/hybridCardViewModel';
+import { buildParentageViewModel } from '../game/parentageV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
 
 /**
@@ -17,8 +18,14 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
  * только рендерит уже готовую view-model, сам не знает про сырые ID геномов.
  * Показывает название вида (не `#1`/`#2`), все девять выраженных локусов,
  * редкость (`rarityOfV2`) и mutation, если она есть. Скрытые пары аллелей/
- * parentIds/микроскоп/Reveal по-прежнему вне области — view-model физически
- * не предоставляет ничего из этого.
+ * микроскоп/Reveal по-прежнему вне области — view-model физически не
+ * предоставляет ничего из этого.
+ *
+ * Slice 10 (contract §4.13.3): дополнительно показывает блок «Родители» —
+ * чистая `buildParentageViewModel` (game/parentageV2.ts) над `specimen.
+ * parentIds`, отображается только когда у specimen есть `parentIds`
+ * (специмены до Slice 5 — без блока). Только прямые родители, одно
+ * поколение, без раскрытия генома/скрытых аллелей найденных родителей.
  */
 
 interface HybridCardPanelProps {
@@ -42,6 +49,7 @@ export function HybridCardPanel({ plotId, onClose }: HybridCardPanelProps) {
   if (!specimen || !specimen.genomeV2) return null;
 
   const card = buildHybridCardViewModel(specimen.genomeV2);
+  const parentage = buildParentageViewModel(specimen.parentIds, state.specimens);
   const status = gameStore.hybridPlotStatusV2(plot!);
 
   function collect() {
@@ -84,6 +92,30 @@ export function HybridCardPanel({ plotId, onClose }: HybridCardPanelProps) {
             </div>
           )}
         </div>
+
+        {/* Genetics V2 — Slice 10 (contract §4.13.3): блок «Родители» —
+            рендерится только когда у specimen есть parentIds. Только прямые
+            родители, одно поколение, никакого экрана родословной. */}
+        {parentage.visible && (
+          <div className="sheet-list">
+            <p className="sheet-empty lab-hint">Родители</p>
+            {parentage.rows.map((row) => (
+              <div className="sheet-row" key={row.roleLabel}>
+                <div className="sheet-row-title">{row.roleLabel}</div>
+                <div className="sheet-row-count">
+                  {row.available ? (
+                    <>
+                      <SpecimenThumbnail genome={row.genome!} size={40} showFrame={false} />
+                      {row.speciesName}
+                    </>
+                  ) : (
+                    'Родитель недоступен'
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="lab-footer">
           <div className="lab-footer-cost">

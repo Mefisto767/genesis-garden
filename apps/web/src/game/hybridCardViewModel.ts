@@ -149,7 +149,12 @@ const SPECIES_NAME_BY_ID: Record<1 | 2, string> = {
   2: 'Колокольник',
 };
 
-function speciesNameV2(speciesId: number): string {
+/**
+ * Slice 10 (contract §4.13.2): экспортируется этим пакетом — единственный
+ * источник истины для перевода `speciesId → русское название`, переиспользуется
+ * `parentageV2.ts` (блок «Родители» простой карточки), не копируется туда.
+ */
+export function speciesNameV2(speciesId: number): string {
   return SPECIES_NAME_BY_ID[speciesId as 1 | 2] ?? `Вид #${speciesId}`;
 }
 

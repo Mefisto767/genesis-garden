@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GameState } from '../game/types';
 import { gameStore } from '../game/store';
 import { buildHybridCardViewModel } from '../game/hybridCardViewModel';
+import { buildParentageViewModel } from '../game/parentageV2';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { LAB_LEVEL_2 } from '../game/labV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
@@ -23,6 +24,10 @@ import { MicroscopePanel } from './MicroscopePanel';
  * Overhaul + Legacy Genetics продолжает использовать старый `AlbumPanel`
  * (recycleSpecimen(), фиксированная награда) — этот компонент его не
  * заменяет и не меняет.
+ *
+ * Slice 10 (contract §4.13.3): каждая карточка дополнительно показывает
+ * компактный блок «Родители» (`buildParentageViewModel`), когда у specimen
+ * есть `parentIds` — только прямые родители, без раскрытия генома.
  */
 
 interface AlbumPanelV2Props {
@@ -103,6 +108,7 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, labLevel, onClose 
               const rarityClass = card.rarity.toLowerCase();
               const linkedToPlot = isLinkedToMaturePlot(s.id);
               const isPending = pendingRecycleId === s.id;
+              const parentage = buildParentageViewModel(s.parentIds, specimens);
               return (
                 <div className="album-card" key={s.id}>
                   <button
@@ -117,6 +123,20 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, labLevel, onClose 
                   <SpecimenThumbnail genome={s.genome} size={88} />
                   <div className={`album-card-rarity rarity-${rarityClass}`}>{card.rarityLabel}</div>
                   {card.mutationLabel && <div className="album-card-mutation">✦ {card.mutationLabel}</div>}
+                  {/* Genetics V2 — Slice 10 (contract §4.13.3): блок «Родители»
+                      — рендерится только когда у specimen есть parentIds.
+                      Только текст + русское имя вида найденного родителя,
+                      без раскрытия генома (компактный формат карточки). */}
+                  {parentage.visible && (
+                    <div className="album-card-parentage">
+                      <p className="sheet-empty lab-hint">Родители</p>
+                      {parentage.rows.map((row) => (
+                        <p className="sheet-empty lab-hint" key={row.roleLabel}>
+                          {row.roleLabel}: {row.available ? row.speciesName : 'Родитель недоступен'}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   <div className="album-card-actions">
                     {/* Fix-pass (bug 2): переработка блокируется favorite-ом
                         (recycleSpecimenV2 сам отказывает с reason:'favorite'
