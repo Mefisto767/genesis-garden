@@ -1206,9 +1206,153 @@ Species 3-8 полностью исчезают из `specimen-grid` лабор�
 
 ---
 
+## 4.14. Slice 12 — Reveal, естественное раскрытие, контекстный onboarding, Люми-подсказки, Ботаническая книга, демо-повтор (проход 14, docs-lock перед Slice 12)
+
+Технический контракт реализации Slice 12 (`GENETICS_TARGET_DELTA.md` §12 Slice 12, `GENETICS_ONBOARDING_SPEC.md` §3-§14). `SAVE_VERSION` остаётся `4` — все новые персистентные поля этого slice аддитивные и опциональные (тот же приём, что `Plot.hybridV2`, Slice 5) — читаются с честным `?? default` там, где нужен дефолт, миграционный блок `store.ts` (`version<4`) не трогается.
+
+### 4.14.1. Персистентное tutorial/Lumi-состояние и безопасные дефолты для старых V4-save
+
+Новые ОПЦИОНАЛЬНЫЕ поля `GameState` (`types.ts`):
+
+| Поле | Тип | Дефолт у старого V4-save (`undefined`) | Пишет |
+|---|---|---|---|
+| `geneticsTutorialStartersSeeded` | `boolean?` | `false` (ещё не засеяно) | `GameStore.seedGeneticsTutorialV2()` |
+| `geneticsTutorialBreedsCompleted` | `number?` | `0` | `GameStore.breedNurseryV2()` |
+| `geneticsIntroSeen` | `boolean?` | `false` | `GameStore.markGeneticsIntroSeenV2()` |
+| `lumiHintsShown` | `string[]?` | `[]` | `GameStore.markLumiHintShownV2()` |
+
+Новое ОПЦИОНАЛЬНОЕ поле `Specimen.tutorialStarter?: boolean` — `true` только на двух специменах, засеянных `seedGeneticsTutorialV2()`; не наследуется потомками (не копируется нигде в `inheritGenomeV2`/`breedV2`/`harvestHybridV2`); отсутствует (`undefined`) на любом specimen старого save, включая ветеранские. Ветеранский/уже игравший в генетику save (`hasBreedingHistory`-подобный критерий, см. §4.14.2 ниже) НИКОГДА не получает `tutorialStarter` ни у одного specimen — засев в принципе не запускается.
+
+### 4.14.2. Засев tutorial-фикстур — `shouldSeedTutorialStartersV2` + `GameStore.seedGeneticsTutorialV2()`
+
+`apps/web/src/game/tutorialV2.ts` — чистый предикат `shouldSeedTutorialStartersV2(state)`, `true` только если ВСЕ условия разом:
+
+1. `!state.geneticsTutorialStartersSeeded` (строго одноразово);
+2. `!state.firstBreedFreeClaimed` (ещё ни одного V2-скрещивания);
+3. `(state.pityCounter ?? 0) === 0` и `(state.geneticDust ?? 0) === 0`;
+4. `state.specimens.length === 2` и ни один specimen не имеет `parentIds`/унаследованного `mutationId`.
+
+`GameStore.seedGeneticsTutorialV2()` — вызывается ОДИН РАЗ V2 UI-слоем (`OverhaulApp.tsx`, `useEffect` на монтировании, только под `GENETICS_V2_ENABLED`) — если предикат `false`, no-op (не эмитит, не меняет state). Если `true` — атомарно заменяет `genomeV2` (и legacy `genome` через `projectGenomeV2ToLegacy`, для визуальной согласованности миниатюры) первых двух specimens на §4.6.1/§4.6.2, ставит `tutorialStarter:true` обоим и `geneticsTutorialStartersSeeded:true`. Store-метод не читает ни один feature-флаг сам — изоляция по флагу целиком на стороне вызывающего UI (тот же приём, что `buySeedV2`/`plantSeedV2`, Slice 8).
+
+### 4.14.3. Конечный автомат контекстного обучения
+
+Не единый enum-стейт-машина, а комбинация независимых персистентных флагов/счётчиков (тот же стиль, что уже принят для §6.2 delta-документа — `firstBreedFreeClaimed`/`firstHybridRewardClaimed`/`firstRecycleTopUpClaimed`) — каждый шаг детектируется своим условием, без риска рассинхронизации центрального enum с реальным состоянием save:
+
+| Шаг | Условие показа | Что показывает | Персистентный переход |
+|---|---|---|---|
+| 0. Первый контекстный экран | `!geneticsIntroSeen`, при открытии `LabPanelV2` | `GeneticsIntroPanelV2` (блокирует остальной UI лаборатории) | Кнопка «Понятно, начать» → `markGeneticsIntroSeenV2()` |
+| 1. Первое обучающее скрещивание | оба выбранных родителя `tutorialStarter:true`, `geneticsTutorialBreedsCompleted===0` | обычный `LabPanelV2` + Reveal после `breedNurseryV2` | `breedNurseryV2` инкрементит `geneticsTutorialBreedsCompleted` 0→1 |
+| 2. Banner перед вторым обучающим скрещиванием | `geneticsTutorialBreedsCompleted===1` | точный текст §13.1 над сеткой родителей | нет (чисто визуальный, не отдельный флаг) |
+| 3. Второе обучающее скрещивание | те же родители, `geneticsTutorialBreedsCompleted===1` | Reveal с гарантированным естественным раскрытием `size` | `breedNurseryV2` инкрементит 1→2 (потолок 2 — `Math.min(2, ...)`, дальнейшие скрещивания той же пары уже не tutorial) |
+| 4. Открытие Колокольника/Lab L2 | `harvestHybridV2` первого выращенного гибрида (Slice 8, без изменений в Slice 12) | Люми-подсказка `hybrid_unlocked` | без изменений (Slice 8) |
+| 5. Ботаническая книга/повтор обучения | доступны всегда (Overhaul+V2), не часть последовательности выше | `BotanicalBookPanel`/`TutorialReplayPanelV2` | не меняет ни один из флагов выше |
+
+### 4.14.4. Каталог Lumi-подсказок и события-триггеры
+
+`apps/web/src/game/lumiHintsV2.ts` — `LumiHintKeyV2` (8 ключей, ровно каталог onboarding spec §7.3 без последней строки про Nursery Tray — та отображается инлайн на самом экране лаборатории, не как подсказка Люми), `LUMI_HINT_TEXT_V2` (точные фразы, дословно), `nextLumiHintV2(candidates, alreadyShown)` — первый ключ из уже упорядоченного вызывающей стороной списка, которого нет в `alreadyShown`.
+
+Условия-триггеры (вычисляются `LumiHintBubble.tsx` из `useGameState()`, порядок — порядок таблицы §7.3):
+
+| Ключ | Условие |
+|---|---|
+| `first_plant_ready` | есть legacy-грядка с `plotStatus(plot).ready===true`, `pollen===0`, `!firstBreedFreeClaimed` |
+| `first_pollen_collected` | `pollen>0`, `!firstBreedFreeClaimed` |
+| `first_reveal_seed_wait` | `firstBreedFreeClaimed`, `nurseryTray.length>0` |
+| `hybrid_unlocked` | `firstHybridRewardClaimed===true` |
+| `second_breed_available` | `firstBreedFreeClaimed`, `geneticsTutorialBreedsCompleted<2`, ≥2 specimens с `genomeV2` |
+| `first_interspecies_pair` | событие `overhaulEvents.emit('firstInterspeciesPairSelected')` из `LabPanelV2` (игрок выбрал двух родителей разных `speciesId`) |
+| `surplus_specimen` | ≥5 specimens с `genomeV2`, `geneticDust===0` |
+| `first_dust_earned` | `geneticDust>0` |
+
+Показ подсказки помечает её в `lumiHintsShown` СРАЗУ в момент решения показать (не в момент закрытия пузыря) — гарантирует «не более одного раза» независимо от того, закрыл ли игрок явно или просто продолжил играть (спека §17: подсказки не настаивают). Максимум одна активная — компонент держит ровно один `useState<LumiHintKeyV2|null>` и не выбирает новую, пока текущая не сброшена явным закрытием.
+
+### 4.14.5. Reveal view model — точная структура
+
+`apps/web/src/game/revealV2.ts`:
+
+- `RevealTraitRow`/`resolveTraitOriginV2(genomeV2, mutated): RevealTraitRow[]` — по одной строке на каждый из девяти локусов, `{ locus, label, valueLabel, origin }`, `origin ∈ {'seed','pollen','both','mutation'}`.
+- `RevealCardViewModel` (Reveal-экран, onboarding spec §3.3): `{ speciesName, rarityLabel, mutationLabel, traits: RevealTraitViewRow[] }`, где `RevealTraitViewRow = { locus, label, valueLabel, originLabels: string[] }` — `originLabels` содержит ОДИН элемент для `seed`/`pollen`/`mutation`, ДВА для `both` (никогда не выбирает случайный).
+- `RevealWhyViewModel` (экран «Почему получилось так?», onboarding spec §11): `{ traits, mutated, mutationTierDescription, rarityFactors, hasNaturalReveal }` — `traits` то же самое множество, что на Reveal-экране (только фактически проявившиеся признаки — все девять, других не бывает), `rarityFactors` — человекочитаемые метки локусов с ненулевым `naturalScore`-вкладом (`rarityV2.ts` `notableTraitLociV2`), без чисел/формулы.
+- `buildRevealCardViewModel`/`buildRevealWhyViewModel` — чистые функции, принимают уже готовый `genomeV2`+species родителей+`mutated`+`mutationTier`+`naturalReveal`, ничего не читают из `GameState`/store.
+
+### 4.14.6. Алгоритм происхождения каждого проявившегося признака
+
+Строго структурный — из фактической `AllelePair` потомка (`a` всегда от Seed Parent, `b` всегда от Pollen Parent, `inheritanceV2.ts inheritGenomeV2`), НЕ угадывание по совпадению фенотипа постфактум:
+
+```
+expressed = resolvePhenotypeV2(genomeV2)[locus]
+if mutated && locus === 'aura': origin = 'mutation'   // Gate 1: единственный mutation-pool локус
+elif pair.a === expressed && pair.b === expressed: origin = 'both'
+elif pair.a === expressed: origin = 'seed'
+else: origin = 'pollen'
+```
+
+Текст (onboarding spec §3.3/§13.1, `traitOriginLabelsV2`):
+
+- родители одного вида (`seedSpeciesId===pollenSpeciesId`): `seed→«От первого растения»`, `pollen→«От второго растения»`;
+- родители разных видов: `seed→«← [имя вида Seed Parent]»`, `pollen→«← [имя вида Pollen Parent]»`;
+- `mutation→«✦ Новый признак»` (без стрелки/миниатюры к конкретному родителю), независимо от того, одного вида родители или разных;
+- `both` → массив из обоих текстов выше (по правилу «одного вида»/«разных видов»), UI показывает оба.
+
+Никаких raw allele/species/specimen ID — все значения проходят через `alleleLabelV2`/`speciesNameV2` (`hybridCardViewModel.ts`, переиспользуются, не дублируются).
+
+### 4.14.7. Правило естественного раскрытия у родителей
+
+`computeNaturalRevealsV2(childGenomeV2, seedGenomeV2, pollenGenomeV2): { seedLoci: GenomeV2LocusKey[]; pollenLoci: GenomeV2LocusKey[] }` — для каждого локуса и каждого родителя: если пара родителя гетерозиготна (`pair.a !== pair.b`) и его СКРЫТЫЙ (не выраженный у него самого) аллель равен фактически выраженному аллелю потомка на этом локусе — locus добавляется в список этого родителя. Если оба родителя гетерозиготны по этому локусу и оба несут тот же скрытый аллель — locus попадает в списки ОБОИХ (contract §4.6.4 — именно так работает второе обучающее скрещивание на локусе `size`). Не читает и не пишет `revealedLoci` — только вычисляет список локусов, применение — в store.ts (§4.14.9).
+
+### 4.14.8. Идемпотентность повторного открытия Reveal
+
+Reveal в Slice 12 — не отдельно сохраняемая сущность, которую можно «переоткрыть» — он строится один раз, немедленно после `breedNurseryV2`, из данных, уже возвращённых этим вызовом (`hybridSeed.genomeV2`+`mutated`+`mutationTier`+`naturalReveal`), и живёт только в React-состоянии `LabPanelV2` (`useState`) до закрытия. Естественное раскрытие применяется к `Specimen.revealedLoci` РОВНО ОДИН РАЗ — синхронно, внутри того же атомарного обновления состояния, что создаёт `hybridSeed` (§4.14.9) — не существует пути вызвать этот побочный эффект дважды для одного и того же скрещивания, потому что `breedNurseryV2()` вызывается ровно один раз на одно нажатие «Скрестить», и её update — единственное место, где `revealedLoci` вообще меняется этим механизмом. Демонстрационный повтор обучения (§4.14.10) переиспользует тот же React-компонент `RevealPanelV2`, но НЕ вызывает `computeNaturalRevealsV2`-в-сторону-стора вообще (не мутирует `Specimen.revealedLoci` ни у одного реального specimen) — открытие/закрытие демо-Reveal сколько угодно раз идемпотентно тривиально (чистая функция от фиксированных данных, без записи).
+
+Идемпотентность самого добавления в `revealedLoci` (на случай будущего кода, который решит вызвать `computeNaturalRevealsV2`+apply повторно) обеспечена на месте применения: добавляется запись `{locus, source:'natural'}` только если для этого locus у этого specimen ЕЩЁ НЕТ ни одной записи (ни `microscope`, ни `natural`) — существующий `source:'microscope'` никогда не перезаписывается natural-раскрытием того же locus.
+
+### 4.14.9. Детерминированные fixtures/RNG для первых двух обучающих скрещиваний
+
+Ровно §4.6.1-§4.6.4 выше (уже зафиксированы Slice 3-4 docs-lock) — `apps/web/src/game/tutorialV2.ts` переиспользует эти генотипы литерально (`tutorialSunflowerSeedGenomeV2()`/`tutorialSunflowerPollenGenomeV2()`), `TUTORIAL_FIRST_BREED_SEED=20260828`/`TUTORIAL_SECOND_BREED_SEED=6` (`mulberry32`), проверено прямым тестом реального `breedV2` в `mutationV2.test.ts` (существующий тест Slice 4, не изменяется этим slice).
+
+`GameStore.breedNurseryV2()` определяет `isTutorialBreed = seedParent.tutorialStarter===true && pollenParent.tutorialStarter===true && geneticsTutorialBreedsCompleted<2` и передаёт в `breedV2` либо `mulberry32(tutorialBreedRngSeed(geneticsTutorialBreedsCompleted))`, либо обычный `this.rng` — ЕДИНСТВЕННОЕ различие в вызове, весь остальной pipeline (валидация видов, стоимость, атомарное обновление) идентичен для tutorial и обычного скрещивания. Третье и последующие скрещивания той же пары (`geneticsTutorialBreedsCompleted===2`), любое скрещивание с не-tutorial-родителем и любой ветеранский save (у которого `tutorialStarter` никогда не был выставлен) — всегда обычный `this.rng`, без исключений.
+
+### 4.14.10. Демонстрационный режим повтора обучения
+
+`apps/web/src/ui/TutorialReplayPanelV2.tsx` — физически НЕ импортирует `gameStore` ни в каком виде (гарантия «не может случайно мутировать состояние», не только «не мутирует по факту логики»). Использует:
+
+- `tutorialSunflowerSeedGenomeV2()`/`tutorialSunflowerPollenGenomeV2()` (те же геномы родителей, что и реальное обучение);
+- `tutorialReplayChildGenomeV2(step: 0|1)` — геном потомка каждого шага, записанный ЛИТЕРАЛЬНО (не вызовом `breedV2`) из уже подтверждённой контрактной таблицы §4.6.3/§4.6.4 — задание владельца прямо запрещает демо-повтору вызывать `breedV2`;
+- `computeNaturalRevealsV2` (чистая функция, не пишет ничего) — для текста «Этот признак был скрыт...» на демо-Reveal шага 2.
+
+Переиспользует `GeneticsIntroPanelV2`/`RevealPanelV2` как есть (те же компоненты, что реальный онбординг — задание: «использует те же UI-компоненты»). Не создаёт `HybridSeed`/`Specimen`, не читает/не пишет `nurseryTray`/`plots`/`pollen`/`geneticDust`/`coins`/`pityCounter`/`labLevel`/`firstBreedFreeClaimed`/`firstHybridRewardClaimed`/`firstRecycleTopUpClaimed`/реальные `geneticsTutorialBreedsCompleted`/`geneticsIntroSeen`/`lumiHintsShown` — компонент не содержит ни одного вызова любого `GameStore`-метода. Тест `store.tutorialReplayV2.test.ts` (§10) снимает полный сериализованный снапшот `GameState` до и после программного прогона всех шагов view-model'ов демо-повтора и проверяет byte-for-byte равенство.
+
+### 4.14.11. Границы feature-flag isolation
+
+Ничего из Slice 12 не рендерится и не достижимо в UI при `GENETICS_V2_ENABLED===false`:
+
+- `GeneticsIntroPanelV2`/`RevealPanelV2` — рендерятся только изнутри `LabPanelV2`, который сам рендерится в `OverhaulApp.tsx` только под флагом (без изменений с предыдущих slice);
+- `BotanicalBookPanel`/`TutorialReplayPanelV2` — панель `'book'` в `OverhaulApp.tsx` рендерится ТОЛЬКО под `GENETICS_V2_ENABLED` (двойная защита: `LaboratoryScene.ts` помечает hotspot `book` `implemented` только под тем же флагом — иначе честный toast «скоро» без изменений; и сам JSX-рендер в `OverhaulApp.tsx` тоже проверяет флаг явно, defense-in-depth, тот же принцип, что `hybridCardPlotId`);
+- `LumiHintBubble` — рендерится в `OverhaulApp.tsx` только под флагом; сам компонент не проверяет флаг (тот же принцип, что `LabPanelV2`/`HybridCardPanel`);
+- `GameStore.seedGeneticsTutorialV2()`/`markGeneticsIntroSeenV2()`/`markLumiHintShownV2()` — сам store НЕ читает ни один feature-флаг (продолжение принципа Slice 1-11: игровая модель флаг-агностична) — методы существуют и вызываемы напрямую в тестах/консоли, но НИКАКОЙ UI-путь Classic/Overhaul+Legacy их не вызывает; `seedGeneticsTutorialV2()` вызывается ровно в одном месте (`OverhaulApp.tsx useEffect`, за явной проверкой флага);
+- старый `Onboarding.tsx` — не показывается при `GENETICS_V2_ENABLED===true` (`OverhaulApp.tsx`: `showOnboarding = !GENETICS_V2_ENABLED && !hasSeenOnboarding()`), Classic/Overhaul+Legacy без изменений;
+- новые персистентные поля (`geneticsTutorialStartersSeeded`/`geneticsTutorialBreedsCompleted`/`geneticsIntroSeen`/`lumiHintsShown`/`Specimen.tutorialStarter`) физически МОГУТ существовать в save и при выключенном флаге (антизвон save между режимами), но ни один Classic/Legacy код-путь их не читает — та же дисциплина, что `Plot.hybridV2`/`GameState.pollen` в Slice 1/5.
+
+### 4.14.12. Точные русские строки (сводка, дословно — источник истины `GENETICS_ONBOARDING_SPEC.md` §13)
+
+Все строки этого slice уже зафиксированы дословно в `GENETICS_ONBOARDING_SPEC.md` §13.1/§13.2 — этот раздел не вводит новых, только подтверждает точки использования в коде: `GeneticsIntroPanelV2` (§3.1 текст+кнопка), `LabPanelV2` banner (§4.2 текст про скрытый признак), `RevealPanelV2` (кнопки «Отлично!»/«Почему получилось так?», подпись естественного раскрытия «Этот признак был скрыт у родителя — а у потомка стал видимым!», подписи происхождения «От первого/второго растения»/«← [вид]»/«✦ Новый признак»), `BotanicalBookPanel` («Показать обучение генетике заново», шестой раздел «Скоро»), каталог Люми §7.3 (`lumiHintsV2.ts LUMI_HINT_TEXT_V2`, дословно).
+
+### 4.14.13. Порядок store-операций и точки атомарного изменения состояния
+
+`GameStore.breedNurseryV2(seedParentId, pollenParentId)` — расширенный порядок поверх Slice 5-11 (шаги 1-8 без изменений: `same_parent`→`parent_not_found`→`parent_missing_genome_v2`→`species_locked`→`nursery_tray_full`→species-валидация→cost→`insufficient_pollen`):
+
+9. Определить `isTutorialBreed`/выбрать RNG (§4.14.9) — БЕЗ побочных эффектов, чистое чтение `this.state`.
+10. Вызов `breedV2(seedGenome, pollenGenome, pityCounter, breedRng)` — единственное место реального наследования/mutation RNG (без изменений).
+11. `computeNaturalRevealsV2(result.genomeV2, seedGenome, pollenGenome)` — чистое вычисление, без побочных эффектов.
+12. **Одно атомарное присвоение `this.state = {...}`** — ВСЕ следующие изменения одновременно, в одном объекте: `nurseryTray` (+hybridSeed), `pityCounter`, `pollen` (-cost), `firstBreedFreeClaimed:true`, `geneticsTutorialBreedsCompleted` (инкремент, если tutorial), `specimens` (map — естественное раскрытие обоих родителей). Это единственная точка жизненного цикла, где `Specimen.revealedLoci` меняется этим механизмом — атомарность гарантируется тем, что это один `this.state=` внутри одного синхронного вызова метода, до единственного `this.emit()`.
+
+`markGeneticsIntroSeenV2()`/`markLumiHintShownV2(key)` — отдельные простые идемпотентные методы (guard-если-уже-true/уже-в-массиве → no-op без `emit()`), не участвуют в pipeline `breedNurseryV2`.
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), в проходе 11 (статус заголовка + новый §4.11, Lab L2 «первый гибрид»/гейт Колокольника/минимальный микроскоп Slice 8), в проходе 12 (статус заголовка + новый §4.12, межвидовое V2-скрещивание Slice 9 — снятие `interspecies_locked` для поддерживаемых пар 1/2) и в проходе 13 (статус заголовка + новый §4.13, объединённый пакет Slice 10-11 — прямые родители + legacy-species filtering), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-13) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), в проходе 11 (статус заголовка + новый §4.11, Lab L2 «первый гибрид»/гейт Колокольника/минимальный микроскоп Slice 8), в проходе 12 (статус заголовка + новый §4.12, межвидовое V2-скрещивание Slice 9 — снятие `interspecies_locked` для поддерживаемых пар 1/2), в проходе 13 (статус заголовка + новый §4.13, объединённый пакет Slice 10-11 — прямые родители + legacy-species filtering) и в проходе 14 (статус заголовка + новый §4.14, Reveal/естественное раскрытие/контекстный onboarding/Люми-подсказки/Ботаническая книга/демо-повтор Slice 12), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-14) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
 - **Статус на момент прохода 13**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7), Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, §4.9, docs `55d55ae` + код `08e9206`), Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль, §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`), Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп, §4.11, docs `96c2af0` + код `2c935ed` + fix-pass `9c2badd`) и Slice 9 (межвидовое V2-скрещивание, §4.12, docs `abde98d` + код `8435dc5` + fix-pass `08948ea`) **завершены и приняты владельцем** (Slice 9 — 29.08.2026), каждый единым пакетом. Объединённый пакет Slice 10-11 (§4.13) начат этим проходом: сначала docs-only contract-lock коммит `docs(genetics): lock Slice 10-11 parentage and legacy filtering`, затем отдельные код-коммиты `feat(genetics): add V2 parentage display` (Slice 10) и `feat(genetics): filter legacy species from V2 parents` (Slice 11). Slice 12 и далее (Reveal/UI онбординга/Ботаническая книга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 10-11.
