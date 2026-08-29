@@ -1,7 +1,7 @@
 # Genesis Garden — Gate 1 implementation contract (Genetics V2, 9-locus model)
 
-Дата: 2026-08-29 (проход 12 — Slice 8 принят владельцем целиком (3 коммита), межвидовое V2-скрещивание (Slice 9) contract-lock, новый §4.12; проход 11 — Slice 7 принят владельцем целиком (3 коммита), Slice 8 contract-lock, новый §4.11; проход 10 — Slice 6 принят владельцем, Slice 7 contract-lock, §4.10; проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
-Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`), Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9, docs `55d55ae` + код `08e9206`), Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль — технический контракт §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`) и Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп — технический контракт §4.11, docs `96c2af0` + код `2c935ed` + fix-pass `9c2badd`) **завершены и приняты владельцем** 28.08.2026. Slice 9 (межвидовое V2-скрещивание — технический контракт §4.12) начат этим проходом (проход 12, 29.08.2026): сначала этот docs-only contract-lock коммит `docs(genetics): lock Slice 9 interspecies inheritance`, затем отдельный код-коммит `feat(genetics): add V2 interspecies inheritance`. Slice 10 и далее не начинаются без отдельного подтверждения владельца.
+Дата: 2026-08-29 (проход 13 — Slice 9 принят владельцем целиком (3 коммита), объединённый пакет Slice 10-11 contract-lock, новый §4.13; проход 12 — Slice 8 принят владельцем целиком (3 коммита), межвидовое V2-скрещивание (Slice 9) contract-lock, новый §4.12; проход 11 — Slice 7 принят владельцем целиком (3 коммита), Slice 8 contract-lock, новый §4.11; проход 10 — Slice 6 принят владельцем, Slice 7 contract-lock, §4.10; проход 9 — Slice 5 принят владельцем вместе с fix-pass, Slice 6 contract-lock, §4.9; проход 8 — pre-Slice-5 contract-lock pass принят владельцем, Slice 5 реализован, §4.8; проход 7 — Slice 1-4 приняты; проход 6 — Gate 0 принят, Slice 1 в реализации; см. правку §4.4 ниже)
+Статус: точный технический контракт для реализации Gate 1. **Gate 0 принят владельцем 28.08.2026.** Slice 1 (save/state/feature flags, `36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`expressPhenotype`/резолверы простой и расширенной карточки, `a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`breedV2` одновидовое наследование + рабочая `rarityOfV2`, `ee3024f`), Slice 4 (mutation roll/pity, точное правило mutation-аллеля — §4.7, `e483c94`), Slice 5 (Nursery Tray, рост, постоянные растения — технический контракт §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания — технический контракт §4.9, docs `55d55ae` + код `08e9206`), Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль — технический контракт §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`), Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп — технический контракт §4.11, docs `96c2af0` + код `2c935ed` + fix-pass `9c2badd`) и Slice 9 (межвидовое V2-скрещивание — технический контракт §4.12, docs `abde98d` + код `8435dc5` + fix-pass `08948ea`) **завершены и приняты владельцем** (Slice 9 — 29.08.2026). Объединённый пакет Slice 10-11 (прямые родители + legacy-species filtering — технический контракт §4.13) начат этим проходом (проход 13, 29.08.2026): сначала docs-only contract-lock коммит `docs(genetics): lock Slice 10-11 parentage and legacy filtering`, затем отдельные код-коммиты `feat(genetics): add V2 parentage display` (Slice 10) и `feat(genetics): filter legacy species from V2 parents` (Slice 11). Slice 12 и далее не начинаются без отдельного подтверждения владельца.
 Опирается на: `docs/GENETICS_TARGET_DELTA.md` (продуктовые решения, механика V2, миграция, feature flags, implementation slices, §0.7 — решения pre-Slice-5 contract-lock pass, §0.8 — пыльцевая экономика Slice 6, §0.9 — экономика переработки Slice 7, §0.10 — Lab L2/микроскоп Slice 8, §0.11 — межвидовое V2-скрещивание Slice 9), `docs/GENETICS_CURRENT_STATE_AUDIT.md` (факты о текущем legacy-коде), `docs/GENETICS_ONBOARDING_SPEC.md` (обучающий контур), `genesis-garden-core-game-gdd-v3.md` и `genesis-garden-balance-model-v3.xlsx` (целевой баланс, обновлены синхронно с этим документом — 9 локусов, см. §7).
 
 **Проход 12 — Slice 8 принят; contract-lock межвидового V2-скрещивания перед Slice 9**: владелец принял Slice 8 целиком 28.08.2026 (docs `96c2af0`, код `2c935ed`, fix-pass `9c2badd`, три коммита единым пакетом) и разрешил начать только Slice 9 — явно запретив начинать Slice 10 без отдельного подтверждения. Технический контракт снятия `interspecies_locked` для поддерживаемых пар 1/2 (переименование `validateSameSpeciesParentsV2`→`validateSupportedParentsV2` в `inheritanceV2.ts`, без изменений `inheritGenomeV2`/`inheritAlleleV2`, без изменений RNG-контракта §4.7, расширение species-шага `breedNurseryV2` — §4.9.3/§4.11.2 без изменения порядка, UI `LabPanelV2` — снятие блокировки межвидовой пары, подписанные слоты «Первый родитель»/«Второй родитель») зафиксирован новым §4.12 ниже, ДО начала кода Slice 9. Каталоги аллелей, dominance ranks, rarity points, пороги редкости, mutation floors (§4.5), RNG call order (§4.7), persisted nursery lifecycle (§4.8), пыльцевая экономика (§4.9), экономика переработки (§4.10) и Lab L2/микроскоп (§4.11) **не пересматривались**.
@@ -1086,9 +1086,129 @@ type BreedNurseryV2RejectionReason =
 
 ---
 
+## 4.13. Slice 10-11 — прямые родители + legacy-species filtering (проход 13, contract-lock объединённого пакета)
+
+Технический контракт решений владельца из `GENETICS_TARGET_DELTA.md` §0.12 — обязателен для реализации объединённого пакета Slice 10 (минимальное отображение прямых родителей) + Slice 11 (исключение legacy species 3-8 из списка родителей V2). `SAVE_VERSION` остаётся `4` — этот пакет не вводит новых персистентных полей и не меняет save-схему: `Specimen.parentIds`/`HybridSeedV2.parentIds` уже существуют с Slice 1/5 (§4.1), уже заполняются `store.ts` (`breedNurseryV2`/`harvestHybridV2`) в порядке `[seedParentId, pollenParentId]` без изменений.
+
+### 4.13.1. `apps/web/src/game/inheritanceV2.ts` — новый predicate `isSupportedParentSpeciesV2`
+
+```ts
+/** Единственный источник истины «поддерживается ли speciesId как родитель V2»
+ *  (Slice 11, delta doc §0.12 п.3) — `true` только для species 1/2, `false`
+ *  для 3-8, неизвестных чисел и любых повреждённых значений (NaN, отрицательные,
+ *  дробные — сравнение строгое `===`, не диапазоном). Используется и
+ *  `validateSupportedParentsV2` ниже (store-level защита, без изменений
+ *  поведения), и UI (`LabPanelV2`, §4.13.3) — чтобы список кандидатов в
+ *  лаборатории и store-level отказ никогда не разошлись. */
+export function isSupportedParentSpeciesV2(speciesId: number): boolean {
+  return speciesId === 1 || speciesId === 2;
+}
+
+/** Переписана на использование predicate выше — не дублирует список
+ *  поддерживаемых видов второй раз (задание владельца, п.3: «не дублировать
+ *  список»). Поведение не меняется: те же входы дают тот же результат, что и
+ *  до этого пакета (`SUPPORTED_PARENT_SPECIES_V2.includes(...)` было
+ *  буквально то же самое условие). */
+export function validateSupportedParentsV2(
+  seedSpeciesId: number,
+  pollenSpeciesId: number
+): { ok: true } | { ok: false; reason: 'unsupported_species' } {
+  if (!isSupportedParentSpeciesV2(seedSpeciesId) || !isSupportedParentSpeciesV2(pollenSpeciesId)) {
+    return { ok: false, reason: 'unsupported_species' };
+  }
+  return { ok: true };
+}
+```
+
+Модульная константа `SUPPORTED_PARENT_SPECIES_V2` (массив `[1, 2]`) удаляется — единственный источник истины теперь сам predicate, не список. `inheritGenomeV2`/`inheritAlleleV2`/`breedSupportedSpeciesV2`/весь остальной engine этого файла — без единого изменения (species-фильтрация всегда происходила только на уровне `validateSupportedParentsV2`, до вызова наследования). Store-level `unsupported_species` (`breedNurseryV2` шаг 6, §4.12.4) остаётся обязательной защитой независимо от UI-фильтрации ниже — тот же принцип defence-in-depth, что уже применён на каждом предыдущем slice.
+
+### 4.13.2. Новый `apps/web/src/game/parentageV2.ts` — чистая view-model прямых родителей
+
+Чистый typed-модуль, тот же принцип, что `hybridCardViewModel.ts` (Slice 5 fix-pass) — не React, не читает `GameState` целиком, только `parentIds` конкретного specimen + полный список `specimens` (для поиска по id) по значению. Никакой игровой логики, никакого RNG, ничего не пишет.
+
+```ts
+export interface ParentageRow {
+  readonly roleLabel: 'Первый родитель' | 'Второй родитель';
+  readonly available: boolean;
+  /** Присутствует только когда available === true. Русское имя вида
+   *  найденного родителя (переиспользует существующую `speciesNameV2`,
+   *  hybridCardViewModel.ts — экспортируется этим пакетом, не дублируется). */
+  readonly speciesName?: string;
+  /** Legacy `genome` найденного родителя — только для передачи в уже
+   *  существующий `SpecimenThumbnail`. Никогда не `genomeV2`/`AllelePair`. */
+  readonly genome?: Genome;
+}
+
+export interface ParentageViewModel {
+  /** false, если у specimen нет parentIds (undefined/null) — родительский
+   *  блок в UI не рендерится вообще. */
+  readonly visible: boolean;
+  /** Ровно 2 строки, когда visible === true: [Первый родитель, Второй родитель]. */
+  readonly rows: readonly ParentageRow[];
+}
+
+export function buildParentageViewModel(
+  parentIds: readonly [string, string] | null | undefined,
+  allSpecimens: readonly Specimen[]
+): ParentageViewModel;
+```
+
+Правила (delta doc §0.12 п.2, дословно):
+
+- `parentIds` — `undefined`/`null` → `{ visible: false, rows: [] }`.
+- Иначе — `visible: true`, ровно две строки: `roleLabel: 'Первый родитель'` для `parentIds[0]` (Seed Parent), `roleLabel: 'Второй родитель'` для `parentIds[1]` (Pollen Parent) — порядок фиксирован, не зависит от текущего состояния/сортировки `allSpecimens`.
+- Для каждой роли: `allSpecimens.find(s => s.id === parentId)`. Не найден (переработан/удалён) **или** найден, но `!parent.genomeV2` (повреждённый/домиграционный specimen) → `{ roleLabel, available: false }` — `speciesName`/`genome` физически отсутствуют в объекте (не `undefined`-поля, а не заданы вовсе — та же дисциплина типов, что `MicroscopeCardUnresearchedRow`, §4.8.4/hybridCardViewModel.ts).
+- Найден и есть `genomeV2` → `{ roleLabel, available: true, speciesName: speciesNameV2(parent.genomeV2.speciesId), genome: parent.genome }`.
+- Raw `parentId`/`specimen.id` **никогда** не попадает ни в одно поле результата — ни как значение, ни как ключ объекта верхнего уровня (компонент, если ему нужен React `key`, использует `roleLabel`, не id).
+- Функция не реконструирует `parentIds` для specimens, у которых их никогда не было (созданных до Slice 5) — для них `visible` всегда `false`, задним числом ничего не восстанавливается.
+- Функция не читает и не строит `revealedLoci`/`AllelePair`/mutation history — родительский блок целиком построен поверх `speciesNameV2` (уже существующий чистый lookup) и legacy `genome` (для миниатюры), никакого нового доступа к скрытым генетическим данным не вводится.
+
+`speciesNameV2` (`hybridCardViewModel.ts`) становится экспортируемой этим пакетом (была локальной с fix-pass Slice 5) — единственный источник истины для перевода `speciesId → русское название`, переиспользуется, не копируется в `parentageV2.ts`.
+
+### 4.13.3. UI — `AlbumPanelV2`, `HybridCardPanel`, `LabPanelV2` (Overhaul + V2 only)
+
+**`AlbumPanelV2`/`HybridCardPanel`** — обе поверхности уже получают полный `state.specimens`/`specimens` prop (без изменений), достаточный для `buildParentageViewModel(s.parentIds, specimens)`. Блок рендерится только когда `viewModel.visible === true`; заголовок блока — точный текст «Родители»; каждая строка — `roleLabel` + либо (русское имя вида + опциональная `SpecimenThumbnail` уже найденного родителя через `row.genome`), либо точный текст «Родитель недоступен». Ни `AlbumPanelV2`, ни `HybridCardPanel` не меняют существующую логику favorite/recycle/microscope/harvest — блок родословной добавляется аддитивно, ничего не убирает.
+
+**`LabPanelV2`** — список кандидатов в родители (`candidates`) дополнительно фильтруется через `isSupportedParentSpeciesV2(s.genomeV2.speciesId)` поверх уже существующего `!!s.genomeV2`:
+
+```ts
+const candidates = specimens.filter(
+  (s) => !!s.genomeV2 && isSupportedParentSpeciesV2(s.genomeV2.speciesId)
+);
+```
+
+Species 3-8 полностью исчезают из `specimen-grid` лаборатории — не рендерятся ни активной, ни `is-locked` карточкой, никакого отдельного пояснения/модалки (задание владельца: «полное исключение из списка», не «отдельные disabled-карточки»). Species 2 (Колокольник) до Lab L2 остаётся в `candidates` (уже поддерживаемый вид) и по-прежнему рендерится заблокированной карточкой через уже существующий `isCandidateLocked`/`isSpeciesUnlockedV2` (Slice 8, §4.11.2, без изменений) — filtering Slice 11 и Lab-гейт Slice 8 остаются двумя независимыми, не путаемыми механизмами. Текст пустого состояния меняется:
+
+```diff
+- <p className="sheet-empty">Нужно как минимум две особи с диплоидным геномом.</p>
++ <p className="sheet-empty">Нужно как минимум две особи поддерживаемых видов.</p>
+```
+
+Показывается при `candidates.length < 2` (без изменений условия — только текста, и только смысл условия меняется естественным образом, так как `candidates` теперь уже отфильтрован). `toggle()`/`selectedSpecimens`/стоимость/слоты «Первый родитель»/«Второй родитель» (Slice 9, без изменений) продолжают работать поверх уже отфильтрованного `candidates` — им не требуется знать о `isSupportedParentSpeciesV2` напрямую, они всегда получают только уже поддерживаемые specimens.
+
+Не меняются: `ClassicApp.tsx`, `GardenScene.ts`, legacy `ui/LabPanel.tsx`/`ui/PlantPicker.tsx`/`ui/AlbumPanel.tsx`, `ShopPanelV2`/`PlantPickerV2`/`MicroscopePanel`/`EstateScene.ts`, генетическое наследование/RNG/mutation/pity/пыльца/пыль/Nursery lifecycle, поведение Overhaul + Legacy Genetics (V2-компоненты не рендерятся вообще при выключенном `GENETICS_V2_ENABLED`, без изменений гейта).
+
+### 4.13.4. Обязательные тесты (расширение §10 — не замена)
+
+**`parentageV2.test.ts`**: правильный порядок Seed/Pollen (первый элемент `parentIds` → «Первый родитель»); русские названия видов (Солнечник/Колокольник); `parentIds` `undefined` и `parentIds` `null` → `visible: false`, `rows: []` (оба случая отдельно); один родитель не найден в `allSpecimens` → соответствующая строка `available: false`, вторая строка не затронута; оба родителя не найдены → обе строки `available: false`; raw ID (специально сконструированные длинные уникальные строки-специмены) отсутствуют в любом строковом значении построенной view-model (`JSON.stringify(viewModel)` не содержит подстроку id); JSON round-trip `parentIds` (`JSON.parse(JSON.stringify(parentIds))`) сохраняет порядок Seed/Pollen на выходе view-model; view-model не содержит `genomeV2`/`AllelePair`-подобных полей (`{a, b}`) ни в одном объекте строки — только `speciesName`/`genome` (legacy, плоский).
+
+**`inheritanceV2.test.ts` (расширение)**: `isSupportedParentSpeciesV2(1)`/`isSupportedParentSpeciesV2(2)` → `true`; все шесть `isSupportedParentSpeciesV2(3..8)` → `false`; неизвестные/повреждённые значения (0, 9, -1, NaN, 1.5) → `false`; `validateSupportedParentsV2` даёт тот же результат до/после рефакторинга на всех восьми species + паре неизвестных значений (regression, чтобы рефакторинг на predicate не изменил ни одного исхода).
+
+**Store/UI-уровень (`store.labV2.test.ts` или новый файл)**: прямой вызов `breedNurseryV2`/`breedV2` с species 3-8 остаётся `unsupported_species`, 0 RNG-вызовов, полный no-op (regression — рефакторинг §4.13.1 не должен был это изменить); список кандидатов лаборатории (через сам предикат, не рендер компонента — репозиторий не имеет React Testing Library, см. `hybridCardViewModel.ts`) содержит только species 1/2 при смешанном входном массиве specimens (1, 2, 3, 5, 7); species 2 остаётся в отфильтрованном списке при `labLevel < 2` (Lab-гейт — отдельная, не эта, проверка); favorite/`recycleSpecimenV2` для specimen species 5 продолжают работать без изменений (regression); Overhaul+Legacy поведение (V2 UI не рендерится) не меняется (regression, уже покрыто `test-e2e-genetics-v2-legacy-isolation.mjs`).
+
+### 4.13.5. E2E — один компактный focused-сценарий
+
+Новый `test-e2e-genetics-v2-slice10-11.mjs` — без повторного выращивания растений (в отличие от Slice 8/9 E2E), через готовый localStorage-fixture-save: два родительских specimen (species 1/2) + один зрелый потомок с `parentIds`, ссылающимися на них, plus один specimen species 5 без `parentIds` (для проверки Slice 11 и «блок отсутствует» одновременно). Шаги: открыть `AlbumPanelV2` → у потомка с `parentIds` виден блок «Родители» с правильным порядком (species 1 как «Первый родитель», species 2 как «Второй родитель»); у specimen без `parentIds` блок отсутствует; отдельный fixture-specimen с `parentIds`, ссылающимися на несуществующий id → «Родитель недоступен», raw id нигде в тексте страницы; specimen species 5 виден в `AlbumPanelV2`, favorite переключается; открыть `LabPanelV2` → species 5 отсутствует среди карточек-кандидатов, species 1/2 присутствуют; Overhaul+Legacy (`:4174`) по-прежнему не показывает V2 UI (regression, без изменений существующей проверки). Не копирует полный Slice 9 E2E (13 шагов реального breeding-цикла) — этот сценарий строится только вокруг уже готового save и проверяет исключительно Slice 10-11.
+
+### 4.13.6. Явно вне рамок Slice 10-11
+
+Ничего из перечисленного не реализуется и не отображается этим пакетом: отдельный экран/дерево/граф родословной, второе поколение прародителей (Slice 10 — только прямые родители, одно поколение, без изменений §0.12 п.1); собственные disabled-карточки/пояснения для species 3-8 в лаборатории (Slice 11 — полное исключение из списка, не отдельная UI-ветка); естественное раскрытие через потомство; экран «Reveal»/«Почему так вышло?»; подсказки Lumi; полный онбординг-контур; Ботаническая книга; калибровка редкости (Slice 13); финальный сквозной E2E (Slice 14); `GeneLock`; Lab L3/L4; новые здания/NPC/зоны/финальный арт; SQL/Supabase/Paddle/NFT; изменение `SAVE_VERSION` (остаётся 4).
+
+---
+
 ## 5. Подтверждение
 
-- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), в проходе 11 (статус заголовка + новый §4.11, Lab L2 «первый гибрид»/гейт Колокольника/минимальный микроскоп Slice 8) и в проходе 12 (статус заголовка + новый §4.12, межвидовое V2-скрещивание Slice 9 — снятие `interspecies_locked` для поддерживаемых пар 1/2), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-12) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
+- **Новый файл**: `docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md` (этот документ) — создан в проходе 5, точечно исправлен в проходе 6 (§4.4, миграция `mutationId`), в проходе 7 (статус заголовка + §4.7, точное правило mutation-аллеля/RNG call order), в проходе 8 (статус заголовка + новый §4.8, persisted nursery lifecycle Slice 5), в проходе 9 (статус заголовка + новый §4.9, pollen economy Slice 6), в проходе 10 (статус заголовка + новый §4.10, recycling economy Slice 7, включая защитный фикс `pollenRewardV2` для неподдерживаемого species), в проходе 11 (статус заголовка + новый §4.11, Lab L2 «первый гибрид»/гейт Колокольника/минимальный микроскоп Slice 8), в проходе 12 (статус заголовка + новый §4.12, межвидовое V2-скрещивание Slice 9 — снятие `interspecies_locked` для поддерживаемых пар 1/2) и в проходе 13 (статус заголовка + новый §4.13, объединённый пакет Slice 10-11 — прямые родители + legacy-species filtering), поверх `docs/GENETICS_TARGET_DELTA.md` (правки проходов 5-13) и без изменений `docs/GENETICS_ONBOARDING_SPEC.md`/`docs/GENETICS_CURRENT_STATE_AUDIT.md`.
 - Python-скрипт симуляции (§4.5.5) существует только как источник чисел этого документа и не входит ни в этот репозиторий, ни в игровой runtime.
 - **`main` не менялся.**
-- **Статус на момент прохода 12**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7), Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, §4.9, docs `55d55ae` + код `08e9206`), Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль, §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`) и Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп, §4.11, docs `96c2af0` + код `2c935ed` + fix-pass `9c2badd`) **завершены и приняты владельцем** 28.08.2026, каждый единым пакетом. Slice 9 (межвидовое V2-скрещивание, технический контракт §4.12) начат этим проходом: сначала этот docs-only contract-lock коммит (`docs(genetics): lock Slice 9 interspecies inheritance`), затем отдельный код-коммит `feat(genetics): add V2 interspecies inheritance` поверх Slice 8 fix-pass (`9c2badd`). Slice 10 и далее (родословная (отображение)/legacy-species UI/Reveal/UI онбординга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 9.
+- **Статус на момент прохода 13**: Gate 0 принят владельцем 28.08.2026. Slice 1 (`36c861d15acf4d53304b2cd162582e16290d549f` + fix-pass `76af2bd8d46de9e2f12f022547fbcb47f371ed15`), Slice 2 (`a779755c5d4496af427b3fe150682dbae63fe7de`), Slice 3 (`ee3024f`), Slice 4 (`e483c94`, §4.7), Slice 5 (Nursery Tray/рост/постоянные растения, §4.8, docs `0aa21475` + код `29d1314f` + fix-pass `d51d5c5`), Slice 6 (пыльца как ресурс + стоимость V2-скрещивания, §4.9, docs `55d55ae` + код `08e9206`), Slice 7 (переработка `HybridSeed`/`Specimen` в генетическую пыль, §4.10, docs `11ad2d1` + код `eb2a2fb` + UI fix-pass `96ee7dc`), Slice 8 (Lab L2 — обучающий грант «первый гибрид» + гейт Колокольника + минимальный микроскоп, §4.11, docs `96c2af0` + код `2c935ed` + fix-pass `9c2badd`) и Slice 9 (межвидовое V2-скрещивание, §4.12, docs `abde98d` + код `8435dc5` + fix-pass `08948ea`) **завершены и приняты владельцем** (Slice 9 — 29.08.2026), каждый единым пакетом. Объединённый пакет Slice 10-11 (§4.13) начат этим проходом: сначала docs-only contract-lock коммит `docs(genetics): lock Slice 10-11 parentage and legacy filtering`, затем отдельные код-коммиты `feat(genetics): add V2 parentage display` (Slice 10) и `feat(genetics): filter legacy species from V2 parents` (Slice 11). Slice 12 и далее (Reveal/UI онбординга/Ботаническая книга) не начинаются в рамках этого прохода и ждут отдельного подтверждения владельца после аудита Slice 10-11.
