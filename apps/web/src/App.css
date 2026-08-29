@@ -1262,3 +1262,163 @@
 .sheet-reveal-scene .lab-reveal-dust {
   color: #d8c8ea;
 }
+
+/* ===========================================================================
+   Genetics V2 — Slice 12: Reveal (происхождение признаков), первый контекстный
+   экран, Ботаническая книга, Люми-подсказки. Онбординг spec §18 — почти
+   полноэкранный слой на мобильном, никакого горизонтального скролла, все
+   новые интерактивные элементы минимум 44×44 CSS px.
+   =========================================================================== */
+
+/* Onboarding spec §18: "почти полноэкранный слой" для Reveal "Почему
+   получилось так?" и Ботанической книги — модификатор поверх уже
+   существующего .sheet (вертикальная прокрутка внутри, без горизонтального
+   скролла — .sheet уже overflow-y:auto/width:100%). */
+.sheet-fullscreen {
+  width: min(96vw, 520px);
+  max-height: 94vh;
+}
+
+.reveal-species-name {
+  text-align: center;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fdf3d9;
+}
+
+.reveal-trait-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  width: 100%;
+}
+
+.reveal-trait-row {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(253, 243, 217, 0.08);
+}
+
+.reveal-trait-value {
+  color: #fdf3d9;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.reveal-trait-origin {
+  color: #d8c8ea;
+  font-size: 12px;
+}
+
+.reveal-natural-hint {
+  text-align: center;
+  color: #fdf3d9;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.reveal-why-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #fdf3d9;
+  overflow-y: auto;
+}
+
+.reveal-why-title {
+  margin: 0 0 4px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 20px;
+  text-align: center;
+}
+
+.reveal-why-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.genetics-intro-v2 p.sheet-empty {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Ботаническая книга — навигация по 6 разделам, вертикальный перенос, без
+   горизонтального скролла (flex-wrap, не overflow-x). */
+.book-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.book-nav-btn {
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 2px solid #4a2e17;
+  background: #fdf3d9;
+  color: #4a2e17;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.book-nav-btn.is-selected {
+  background: #4a2e17;
+  color: #fdf3d9;
+}
+
+.book-soon-badge {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.book-section-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4a2e17;
+}
+
+/* Минимальный Люми-пузырь (onboarding spec §7) — не модален, не блокирует
+   игру: фиксированная позиция поверх канваса, но не sheet-backdrop, ничего
+   не перехватывает кликом мимо себя. */
+.lumi-hint-bubble {
+  position: absolute;
+  left: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 12;
+  max-width: min(86vw, 300px);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(74, 46, 23, 0.92);
+  border: 2px solid #fdf3d9;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.lumi-hint-text {
+  margin: 0;
+  color: #fdf3d9;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.lumi-hint-dismiss {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: none;
+  color: #fdf3d9;
+  font-size: 14px;
+}

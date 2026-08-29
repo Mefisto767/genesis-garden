@@ -14,7 +14,7 @@
 // ============================================================================
 
 import { DOMINANCE_TABLE, expressPhenotype } from './phenotypeV2';
-import type { GenomeV2, MutationIdV2 } from './geneticsV2';
+import type { GenomeV2, GenomeV2LocusKey, MutationIdV2 } from './geneticsV2';
 
 /** Шесть тиров Gate 1 (contract §4.5.2/§4.5.4) — порядок важен: используется
  * `higherOf` ниже как индекс «редкости» (больше индекс = более редкий тир).
@@ -119,6 +119,29 @@ export function naturalScoreOfV2(genomeV2: GenomeV2): number {
     SIZE_POINTS[expressPhenotype(genomeV2.size, DOMINANCE_TABLE.size)] +
     AURA_POINTS[expressPhenotype(genomeV2.aura, DOMINANCE_TABLE.aura)]
   );
+}
+
+/**
+ * Genetics V2 — Slice 12 (delta doc §12, экран «Почему получилось так?»,
+ * onboarding spec §11): список локусов, чей ВЫРАЖЕННЫЙ аллель внёс
+ * ненулевой вклад в `naturalScore`, с самим значением очков — для
+ * человекочитаемого объяснения факторов редкости («получил повышенную
+ * редкость благодаря: [Крупный размер], [Сияние]»), без раскрытия формулы
+ * числами. Аддитивная функция поверх уже существующих таблиц очков выше —
+ * не меняет ни одно значение и не влияет на `rarityOfV2`/`naturalScoreOfV2`.
+ */
+export function notableTraitLociV2(genomeV2: GenomeV2): GenomeV2LocusKey[] {
+  const result: GenomeV2LocusKey[] = [];
+  if (STEM_FORM_POINTS[expressPhenotype(genomeV2.stemForm, DOMINANCE_TABLE.stemForm)] > 0) result.push('stemForm');
+  if (LEAF_FORM_POINTS[expressPhenotype(genomeV2.leafForm, DOMINANCE_TABLE.leafForm)] > 0) result.push('leafForm');
+  if (FLOWER_FORM_POINTS[expressPhenotype(genomeV2.flowerForm, DOMINANCE_TABLE.flowerForm)] > 0) result.push('flowerForm');
+  if (PRIMARY_COLOR_POINTS[expressPhenotype(genomeV2.primaryColor, DOMINANCE_TABLE.primaryColor)] > 0) result.push('primaryColor');
+  if (SECONDARY_COLOR_POINTS[expressPhenotype(genomeV2.secondaryColor, DOMINANCE_TABLE.secondaryColor)] > 0) result.push('secondaryColor');
+  if (LEAF_COLOR_POINTS[expressPhenotype(genomeV2.leafColor, DOMINANCE_TABLE.leafColor)] > 0) result.push('leafColor');
+  if (PATTERN_POINTS[expressPhenotype(genomeV2.pattern, DOMINANCE_TABLE.pattern)] > 0) result.push('pattern');
+  if (SIZE_POINTS[expressPhenotype(genomeV2.size, DOMINANCE_TABLE.size)] > 0) result.push('size');
+  if (AURA_POINTS[expressPhenotype(genomeV2.aura, DOMINANCE_TABLE.aura)] > 0) result.push('aura');
+  return result;
 }
 
 /** Пороги natural score → tier, БЕЗ учёта мутации (contract §4.5.2). Mythic

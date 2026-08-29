@@ -1,12 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GameState } from '../game/types';
-import { gameStore, type BreedNurseryV2RejectionReason } from '../game/store';
+import { gameStore, type BreedNurseryV2RejectionReason, type BreedNurseryV2Success } from '../game/store';
 import { NURSERY_TRAY_CAPACITY, nurseryTrayLabel, nurseryTrayFullHint } from '../game/nurseryV2';
 import { breedCostV2 } from '../game/pollenV2';
 import { recycleNoticeLines, type RecycleNoticeLines } from '../game/recyclingV2';
 import { isSpeciesUnlockedV2, COLOKOLNIK_LOCKED_TEXT_V2 } from '../game/labV2';
 import { isSupportedParentSpeciesV2 } from '../game/inheritanceV2';
 import { SpecimenThumbnail } from './SpecimenThumbnail';
+import { GeneticsIntroPanelV2 } from './GeneticsIntroPanelV2';
+import { RevealPanelV2 } from './RevealPanelV2';
+import { overhaulEvents } from '../overhaul/events';
+
+/** Genetics V2 — Slice 12 (onboarding spec §4.2, точный текст §13.1) — banner
+ * над сеткой родителей, показывается только между первым и вторым
+ * обучающими скрещиваниями (contract §4.14). */
+const SECOND_TUTORIAL_HINT_TEXT =
+  'Один из признаков этого растения скрыт — потомок может унаследовать его, даже если у самого растения он не виден.';
 
 /**
  * Genetics V2 — Slice 5 minimal UI (contract §4.8, delta doc §0.7 п.11),
@@ -55,6 +64,13 @@ interface LabPanelV2Props {
    * Колокольник-специмены заблокированными до открытия Lab L2 (не только
    * store-level defence-in-depth, но и понятная визуальная причина). */
   labLevel: number;
+  /** Genetics V2 — Slice 12 (onboarding spec §3.1): первый контекстный экран
+   * ещё не показан — блокирует остальной UI лаборатории до «Понятно, начать». */
+  geneticsIntroSeen: boolean;
+  /** Genetics V2 — Slice 12 (onboarding spec §4.2): 0/1/2 — сколько обучающих
+   * скрещиваний уже прошло, используется только для показа второго
+   * обучающего banner'а (ровно между первым и вторым). */
+  geneticsTutorialBreedsCompleted: number;
   onClose: () => void;
 }
 
@@ -68,9 +84,22 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
   insufficient_pollen: '', // текст строится из requiredPollen/availablePollen на месте, см. doBreed/costLabel ниже.
 };
 
-export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaimed, labLevel, onClose }: LabPanelV2Props) {
+export function LabPanelV2({
+  specimens,
+  nurseryTray,
+  pollen,
+  firstBreedFreeClaimed,
+  labLevel,
+  geneticsIntroSeen,
+  geneticsTutorialBreedsCompleted,
+  onClose,
+}: LabPanelV2Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  // Genetics V2 — Slice 12: данные последнего успешного скрещивания для
+  // Reveal-экрана (onboarding spec §3.3) — null, пока Reveal не открыт.
+  const [reveal, setReveal] = useState<BreedNurseryV2Success | null>(null);
+  const [revealParentSpecies, setRevealParentSpecies] = useState<[number, number] | null>(null);
   // Genetics V2 — Slice 7 UI-фикс (defect report bug 2): структурированный
   // результат переработки (`dustGained`), НЕ собранная строка — рендерится
   // как два отдельных DOM-элемента ниже, без объединяющей пунктуации.
@@ -120,6 +149,24 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const selectedSpecimens = selected
     .map((id) => candidates.find((s) => s.id === id))
     .filter((s): s is NonNullable<typeof s> => !!s && !!s.genomeV2);
+
+  const seedIdSel = selectedSpecimens[0]?.id;
+  const pollenIdSel = selectedSpecimens[1]?.id;
+  // Genetics V2 — Slice 12 (onboarding spec §5/§7.3): игрок впервые выбрал
+  // двух родителей РАЗНЫХ видов — эмитим событие для `LumiHintBubble`. Чисто
+  // сигнал, ничего не мутирует и не решает "уже показывали ли" — это делает
+  // `LumiHintBubble` через персистентный `lumiHintsShown`. Эффект, не
+  // прямой вызов во время рендера — не спамит на каждый ре-рендер, только
+  // когда фактически меняется выбранная пара.
+  useEffect(() => {
+    if (
+      selectedSpecimens.length === 2 &&
+      selectedSpecimens[0]!.genomeV2!.speciesId !== selectedSpecimens[1]!.genomeV2!.speciesId
+    ) {
+      overhaulEvents.emit('firstInterspeciesPairSelected', {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedIdSel, pollenIdSel]);
   // Стоимость выбранной пары (contract §4.9.5/§4.12) — 0, пока бесплатная
   // первая попытка ещё не использована; иначе `breedCostV2` по видам
   // выбранной пары (8 одновидовое; 12 межвидовое — со Slice 9 достижимо и в
@@ -133,6 +180,11 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   function doBreed() {
     if (selected.length !== 2) return;
     setRecycleNotice(null);
+    // Genetics V2 — Slice 12 (onboarding spec §3.3): capture parent species
+    // BEFORE clearing selection — needed by the Reveal screen to decide
+    // "От первого/второго растения" vs "← [вид]" labels.
+    const seedSpeciesId = selectedSpecimens[0]!.genomeV2!.speciesId;
+    const pollenSpeciesId = selectedSpecimens[1]!.genomeV2!.speciesId;
     const result = gameStore.breedNurseryV2(selected[0], selected[1]);
     if (!result.ok) {
       if (result.reason === 'insufficient_pollen') {
@@ -142,9 +194,19 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
       }
       return;
     }
-    // Намеренно НЕ показываем result.hybridSeed.genomeV2 — только факт.
-    setNotice('Гибридное семя появилось в Питомнике! Посади его на грядку, чтобы увидеть, каким оно вырастет.');
+    // Genetics V2 — Slice 12 (onboarding spec §3.3): показываем полноэкранный
+    // Reveal вместо простого текстового уведомления. Геном ребёнка уже
+    // известен на этом шаге (breedV2 вычисляет его немедленно, HybridSeedV2
+    // хранит полный genomeV2) — растение ещё не посажено, это отдельно.
+    setReveal(result);
+    setRevealParentSpecies([seedSpeciesId, pollenSpeciesId]);
     setSelected([]);
+  }
+
+  function closeReveal() {
+    setReveal(null);
+    setRevealParentSpecies(null);
+    setNotice('Гибридное семя появилось в Питомнике! Посади его на грядку, чтобы увидеть, каким оно вырастет.');
   }
 
   function recycleSeed(id: string) {
@@ -160,6 +222,24 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
   const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection;
 
+  // Genetics V2 — Slice 12 (onboarding spec §3.3): полноэкранный Reveal
+  // рендерится вместо обычной лаборатории, пока не закрыт — «Отлично!»
+  // закрывает его и возвращает к списку кандидатов (не к оригинальному
+  // notice-баннеру старого поведения).
+  if (reveal && revealParentSpecies) {
+    return (
+      <RevealPanelV2
+        genomeV2={reveal.hybridSeed.genomeV2}
+        seedSpeciesId={revealParentSpecies[0]}
+        pollenSpeciesId={revealParentSpecies[1]}
+        mutated={reveal.mutated}
+        mutationTier={reveal.mutationTier}
+        naturalReveal={reveal.naturalReveal}
+        onClose={closeReveal}
+      />
+    );
+  }
+
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -170,9 +250,25 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
           </button>
         </div>
 
+        {/* Genetics V2 — Slice 12 (onboarding spec §3.1): первый контекстный
+            экран — показывается один раз, перед первым настоящим V2-
+            скрещиванием, заменяет остальную лабораторию до подтверждения. */}
+        {!geneticsIntroSeen && (
+          <GeneticsIntroPanelV2 onDismiss={() => gameStore.markGeneticsIntroSeenV2()} />
+        )}
+
+        {geneticsIntroSeen && (
+          <>
         <p className="sheet-empty lab-hint">
           Выбери двух особей с диплоидным геномом, чтобы скрестить их. Родители остаются в коллекции.
         </p>
+        {/* Genetics V2 — Slice 12 (onboarding spec §4.2, точный текст §13.1):
+            показывается только между первым и вторым обучающими
+            скрещиваниями — не условная угадайка, а прямой счётчик
+            `geneticsTutorialBreedsCompleted` (contract §4.14). */}
+        {geneticsTutorialBreedsCompleted === 1 && (
+          <p className="sheet-empty lab-hint">{SECOND_TUTORIAL_HINT_TEXT}</p>
+        )}
 
         <div className={trayFull ? 'lab-gene-lock-warning' : 'album-dust'}>
           {nurseryTrayLabel(nurseryTray.length, NURSERY_TRAY_CAPACITY)}
@@ -290,6 +386,8 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
               </div>
             ))}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

@@ -2,30 +2,42 @@ import Phaser from 'phaser';
 import { overhaulEvents } from '../../overhaul/events';
 import { gardenEvents } from '../events';
 import type { HotspotShape } from '../../overhaul/proceduralAssets';
+import { GENETICS_V2_ENABLED } from '../featureFlags';
 
 const FONT_HEAD = "'Baloo 2', 'Nunito', sans-serif";
 const FONT_BODY = "'Nunito', sans-serif";
 
-const HOTSPOTS: { shape: HotspotShape; label: string; implemented: boolean }[] = [
-  { shape: 'workbench', label: 'Рабочий стол', implemented: true },
-  { shape: 'showcase', label: 'Витрина', implemented: true },
-  { shape: 'book', label: 'Архивная книга', implemented: false },
-  { shape: 'microscope', label: 'Микроскоп', implemented: false },
-  { shape: 'dryer', label: 'Сушильный шкаф', implemented: false },
-];
+/**
+ * Genetics V2 — Slice 12 (delta doc §12 Slice 12): hotspot "Архивная книга"
+ * становится реально доступным (`implemented: true`) только под
+ * `GENETICS_V2_ENABLED` — Classic/Overhaul+Legacy продолжают видеть его
+ * честно помеченным "скоро" (toast, без изменений поведения). Функция, не
+ * модульная константа — вычисляется заново на каждый `create()` сцены.
+ */
+function buildHotspots(): { shape: HotspotShape; label: string; implemented: boolean }[] {
+  return [
+    { shape: 'workbench', label: 'Рабочий стол', implemented: true },
+    { shape: 'showcase', label: 'Витрина', implemented: true },
+    { shape: 'book', label: 'Архивная книга', implemented: GENETICS_V2_ENABLED },
+    { shape: 'microscope', label: 'Микроскоп', implemented: false },
+    { shape: 'dryer', label: 'Сушильный шкаф', implemented: false },
+  ];
+}
 
 /**
  * LaboratoryScene — отдельная полноэкранная сцена (не модалка поверх карты),
  * см. docs/FINAL_VISION.md 4.2 и техпромт этапа. Временный (честно помеченный)
  * фон + 5 hotspot'ов. "Рабочий стол" и "Витрина" открывают существующие,
  * протестированные LabPanel/AlbumPanel как React-оверлей поверх сцены —
- * генетика и коллекция не переписывались. "Книга"/"Микроскоп"/"Сушильный
- * шкаф" честно помечены "скоро" (см. GDD раздел 4.2 — это реальные будущие
- * зоны лаборатории, не выдумка).
+ * генетика и коллекция не переписывались. "Микроскоп"/"Сушильный шкаф"
+ * честно помечены "скоро" (см. GDD раздел 4.2 — это реальные будущие зоны
+ * лаборатории, не выдумка). "Книга" — "скоро" в Classic/Overhaul+Legacy,
+ * реально открывает `BotanicalBookPanel` в Overhaul+V2 (Genetics V2 Slice 12).
  */
 export class LaboratoryScene extends Phaser.Scene {
   private backdrop!: Phaser.GameObjects.Image;
   private backButton!: Phaser.GameObjects.Text;
+  private hotspots: { shape: HotspotShape; label: string; implemented: boolean }[] = [];
   private hotspotNodes: { shape: HotspotShape; icon: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text }[] = [];
   private escKey?: Phaser.Input.Keyboard.Key;
   private transitioning = false;
@@ -61,7 +73,8 @@ export class LaboratoryScene extends Phaser.Scene {
       .setDepth(1000)
       .on('pointerdown', () => this.exitToEstate());
 
-    this.hotspotNodes = HOTSPOTS.map(({ shape, label }) => {
+    this.hotspots = buildHotspots();
+    this.hotspotNodes = this.hotspots.map(({ shape, label }) => {
       const icon = this.add.image(0, 0, `hotspot_icon_${shape}`).setInteractive({ useHandCursor: true }).setDepth(500);
       const text = this.add
         .text(0, 0, label, { fontFamily: FONT_BODY, fontSize: '13px', color: '#FDF3D9', fontStyle: '700' })
@@ -87,7 +100,7 @@ export class LaboratoryScene extends Phaser.Scene {
       this.escKey = kb.addKey('ESC');
       // Цифры 1-5 — доступ к hotspot'ам с клавиатуры без указателя (см.
       // ограничения полноценной DOM-фокусировки внутри canvas в финальном отчёте).
-      HOTSPOTS.forEach((h, i) => {
+      this.hotspots.forEach((h, i) => {
         kb.addKey(`${i + 1}`).on('down', () => this.activateHotspot(h.shape));
       });
     }
@@ -122,8 +135,8 @@ export class LaboratoryScene extends Phaser.Scene {
         node.label.setPosition(x, y + 30);
       });
     } else {
-      const spacing = Math.min(150, w / (HOTSPOTS.length + 1));
-      const startX = w / 2 - spacing * ((HOTSPOTS.length - 1) / 2);
+      const spacing = Math.min(150, w / (this.hotspots.length + 1));
+      const startX = w / 2 - spacing * ((this.hotspots.length - 1) / 2);
       const y = h * 0.68;
       this.hotspotNodes.forEach((node, i) => {
         const x = startX + i * spacing;
@@ -138,7 +151,7 @@ export class LaboratoryScene extends Phaser.Scene {
   }
 
   private activateHotspot(shape: HotspotShape) {
-    const def = HOTSPOTS.find((h) => h.shape === shape);
+    const def = this.hotspots.find((h) => h.shape === shape);
     if (!def) return;
     if (!def.implemented) {
       gardenEvents.emit('toast', { text: `${def.label} — скоро` });

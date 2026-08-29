@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createOverhaulPhaserGame } from '../game/PhaserGameOverhaul';
 import { useGameState } from '../game/useGameState';
+import { gameStore } from '../game/store';
 import { gardenEvents } from '../game/events';
 import { overhaulEvents } from './events';
 import { HUD } from '../ui/HUD';
@@ -20,6 +21,9 @@ import { AdminPanel } from '../ui/AdminPanel';
 import { QuestPanel } from '../ui/QuestPanel';
 import { Onboarding } from '../ui/Onboarding';
 import { hasSeenOnboarding } from '../onboarding/onboardingState';
+import { BotanicalBookPanel } from '../ui/BotanicalBookPanel';
+import { TutorialReplayPanelV2 } from '../ui/TutorialReplayPanelV2';
+import { LumiHintBubble } from '../ui/LumiHintBubble';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import { Toast } from '../ui/Toast';
 import { useAuth } from '../auth/useAuth';
@@ -33,7 +37,7 @@ import { questStatuses } from '../game/quests';
 import { GENETICS_V2_ENABLED } from '../game/featureFlags';
 import '../App.css';
 
-type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | 'purchases' | 'admin' | 'quests' | null;
+type Panel = 'shop' | 'inventory' | 'lab' | 'album' | 'social' | 'purchases' | 'admin' | 'quests' | 'book' | null;
 type WorldMode = 'estate' | 'laboratory';
 
 /**
@@ -60,9 +64,25 @@ export function OverhaulApp() {
   const [hybridCardPlotId, setHybridCardPlotId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding());
+  // Genetics V2 — Slice 12 (onboarding spec §14/§17): при активной Genetics
+  // V2 старый 4-слайдовый общий тур не показывается вообще — новый
+  // контекстный онбординг (GeneticsIntroPanelV2, внутри LabPanelV2)
+  // полностью заменяет его для этого режима. Overhaul+Legacy не тронут.
+  const [showOnboarding, setShowOnboarding] = useState(() => !GENETICS_V2_ENABLED && !hasSeenOnboarding());
+  // Genetics V2 — Slice 12: демонстрационный повтор обучения открывается
+  // поверх Ботанической книги — отдельный кусок состояния, книга остаётся
+  // открытой под ним (закрытие повтора возвращает к книге, не к лаборатории).
+  const [showTutorialReplay, setShowTutorialReplay] = useState(false);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [mode, setMode] = useState<WorldMode>('estate');
+
+  // Genetics V2 — Slice 12 (contract §4.14): одноразовый детерминированный
+  // засев двух tutorial-Солнечников — вызывается только здесь, только под
+  // GENETICS_V2_ENABLED (store сам не читает ни один feature-флаг). No-op на
+  // ветеранских/уже засеянных save (`shouldSeedTutorialStartersV2`).
+  useEffect(() => {
+    if (GENETICS_V2_ENABLED) gameStore.seedGeneticsTutorialV2();
+  }, []);
 
   useEffect(() => {
     if (!gameContainerRef.current) return;
@@ -80,7 +100,8 @@ export function OverhaulApp() {
   // панели протекает и в EstateScene/LaboratoryScene тоже. Один и тот же
   // переключатель работает для обеих Phaser-сцен, т.к. активна всегда ровно
   // одна сцена в этом game-инстансе.
-  const isOverlayOpen = panel !== null || showOnboarding || plantPlotId !== null || hybridCardPlotId !== null;
+  const isOverlayOpen =
+    panel !== null || showOnboarding || plantPlotId !== null || hybridCardPlotId !== null || showTutorialReplay;
   useEffect(() => {
     const game = phaserGameRef.current;
     if (!game) return;
@@ -162,6 +183,12 @@ export function OverhaulApp() {
     const offHotspot = overhaulEvents.on('openHotspot', ({ hotspot }) => {
       if (hotspot === 'workbench') setPanel('lab');
       else if (hotspot === 'showcase') setPanel('album');
+      // Genetics V2 — Slice 12 (delta doc §12 Slice 12): hotspot "Архивная
+      // книга" становится реально доступным только под GENETICS_V2_ENABLED —
+      // LaboratoryScene.ts само решает, помечать ли hotspot "book"
+      // `implemented`, но эта ветка — второй, независимый слой защиты
+      // (defense-in-depth, тот же принцип, что hybridCardPlotId выше).
+      else if (hotspot === 'book' && GENETICS_V2_ENABLED) setPanel('book');
     });
     return () => {
       offEnter();
@@ -214,6 +241,8 @@ export function OverhaulApp() {
             pollen={state.pollen}
             firstBreedFreeClaimed={state.firstBreedFreeClaimed}
             labLevel={state.labLevel}
+            geneticsIntroSeen={!!state.geneticsIntroSeen}
+            geneticsTutorialBreedsCompleted={state.geneticsTutorialBreedsCompleted ?? 0}
             onClose={() => setPanel(null)}
           />
         ) : (
@@ -274,6 +303,19 @@ export function OverhaulApp() {
       {GENETICS_V2_ENABLED && hybridCardPlotId !== null && (
         <HybridCardPanel plotId={hybridCardPlotId} onClose={() => setHybridCardPlotId(null)} />
       )}
+      {/* Genetics V2 — Slice 12 (delta doc §12 Slice 12): Ботаническая книга —
+          доступна только под GENETICS_V2_ENABLED (hotspot и store-level flag
+          — оба слоя уже проверены выше). */}
+      {GENETICS_V2_ENABLED && panel === 'book' && (
+        <BotanicalBookPanel onClose={() => setPanel(null)} onOpenReplay={() => setShowTutorialReplay(true)} />
+      )}
+      {GENETICS_V2_ENABLED && showTutorialReplay && (
+        <TutorialReplayPanelV2 onClose={() => setShowTutorialReplay(false)} />
+      )}
+      {/* Genetics V2 — Slice 12 (onboarding spec §7): минимальная система
+          подсказок Люми — только Overhaul+V2, не модальна (рендерится вне
+          isOverlayOpen — не должна блокировать игру ни в каком виде). */}
+      {GENETICS_V2_ENABLED && <LumiHintBubble />}
       {toast && <Toast text={toast} />}
     </div>
   );

@@ -40,6 +40,17 @@ export interface Specimen {
   parentIds?: [string, string] | null;
   /** Раскрытые скрытые локусы (Slice 8, delta doc §6.1) — не заполняется в Slice 1. */
   revealedLoci?: RevealedLocusEntry[];
+  /**
+   * Genetics V2 — Slice 12 (delta doc §12, contract §4.14): помечает один из
+   * двух детерминированных tutorial-стартовых Солнечников
+   * (`game/tutorialV2.ts`), засеянных `GameStore.seedGeneticsTutorialV2()`.
+   * Единственная роль поля — позволить `breedNurseryV2` безопасно определить
+   * «это одно из первых двух обучающих скрещиваний» (оба родителя помечены и
+   * обучающий счётчик ещё не исчерпан) без обращения к нестабильным `id`.
+   * Никогда не устанавливается ни для одного другого specimen (включая
+   * потомков этих двух растений) — не наследуется.
+   */
+  tutorialStarter?: boolean;
 }
 
 /**
@@ -127,6 +138,34 @@ export interface GameState {
   firstHybridRewardClaimed: boolean;
   /** Компенсация пыли до 3 при первой переработке уже выдана (delta doc §6.2). */
   firstRecycleTopUpClaimed: boolean;
+
+  // --- Genetics V2 — Slice 12 (Reveal, контекстный onboarding, Люми-
+  // подсказки, Ботаническая книга), см. docs/GENETICS_GATE1_IMPLEMENTATION_CONTRACT.md
+  // §4.14 и docs/GENETICS_TARGET_DELTA.md §12 Slice 12. Аддитивные
+  // ОПЦИОНАЛЬНЫЕ поля (без бампа SAVE_VERSION, тот же приём, что
+  // `Plot.hybridV2`) — старый V4-save без них читает `undefined` как честный
+  // "ещё не видел"/"ещё не засеяно"/0/[] дефолт всюду, где эти поля
+  // читаются (store.ts) — миграция не нужна, `SAVE_VERSION` остаётся 4.
+
+  /** Одноразовый засев двух tutorial-Солнечников контрактным геномом
+   * (`tutorialV2.ts`) уже выполнен — `GameStore.seedGeneticsTutorialV2()`
+   * идемпотентен благодаря этому флагу. `undefined`/`false` — ещё нет
+   * (включая любой существующий V4-save до Slice 12 — ветеранский или нет). */
+  geneticsTutorialStartersSeeded?: boolean;
+  /** Сколько из двух обучающих V2-скрещиваний (contract §4.6.3/§4.6.4) уже
+   * реально прошли через `breedV2` с зафиксированным seed — 0, 1 или 2.
+   * `undefined` читается как 0. После 2 обычные последующие скрещивания той
+   * же пары (или любой другой) используют обычный `this.rng`, не seed. */
+  geneticsTutorialBreedsCompleted?: number;
+  /** Первый контекстный экран объяснения генетики (onboarding spec §3.1) уже
+   * показан и закрыт кнопкой «Понятно, начать». `undefined`/`false` — ещё
+   * нет. Не путать с legacy `hasSeenOnboarding()` (`onboardingState.ts`) —
+   * два независимых флага для двух разных обучающих потоков (onboarding
+   * spec §14). */
+  geneticsIntroSeen?: boolean;
+  /** Ключи уже показанных Люми-подсказок (onboarding spec §7) — once-per-
+   * event, `undefined` читается как []. */
+  lumiHintsShown?: string[];
 }
 
 export type { QuestGoalType };

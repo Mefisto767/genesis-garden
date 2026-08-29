@@ -16,7 +16,11 @@ import { FIRST_HYBRID_POLLEN_GRANT, LAB_LEVEL_2, isSpeciesUnlockedV2 } from './l
 import { availableLociForRevealV2, MICROSCOPE_REVEAL_COST } from './microscopeV2';
 import { resolveExtendedCard } from './phenotypeV2';
 import type { RngFn } from './rng';
-import { defaultRng } from './rng';
+import { defaultRng, mulberry32 } from './rng';
+import { shouldSeedTutorialStartersV2, tutorialBreedRngSeed, tutorialSunflowerPollenGenomeV2, tutorialSunflowerSeedGenomeV2 } from './tutorialV2';
+import { computeNaturalRevealsV2, type NaturalRevealResultV2 } from './revealV2';
+import type { LumiHintKeyV2 } from './lumiHintsV2';
+import type { MutationTierV2 } from './rarityV2';
 
 const SAVE_KEY = 'genesis-garden-save-v1';
 const SAVE_VERSION = 4;
@@ -101,6 +105,12 @@ function createInitialState(rng: RngFn): GameState {
     firstBreedFreeClaimed: false,
     firstHybridRewardClaimed: false,
     firstRecycleTopUpClaimed: false,
+    // Genetics V2 Slice 12 — честные дефолты нового игрока (аддитивные,
+    // без бампа SAVE_VERSION — см. types.ts).
+    geneticsTutorialStartersSeeded: false,
+    geneticsTutorialBreedsCompleted: 0,
+    geneticsIntroSeen: false,
+    lumiHintsShown: [],
   };
 }
 
@@ -260,7 +270,20 @@ export interface BreedNurseryV2Success {
   ok: true;
   hybridSeed: HybridSeedV2;
   mutated: boolean;
+  /** Genetics V2 — Slice 12 (contract §4.14): тир мутации, если она
+   * произошла — нужен UI ("Почему получилось так?") для описания тира
+   * человеческим языком, без дублирования вызова `rarityOfV2`/`breedV2`. */
+  mutationTier: MutationTierV2 | null;
   nextPityCounter: number;
+  /**
+   * Genetics V2 — Slice 12 (contract §4.14, delta doc §12 Slice 12): локусы,
+   * естественно раскрытые у seed/pollen родителей ЭТИМ скрещиванием — уже
+   * атомарно применено к `Specimen.revealedLoci` обоих родителей в том же
+   * обновлении состояния, что и создание `hybridSeed` (см. реализацию ниже).
+   * Возвращается отдельно, чтобы UI (`RevealPanelV2`) мог показать точный
+   * текст "Этот признак был скрыт у родителя..." без повторного вычисления.
+   */
+  naturalReveal: NaturalRevealResultV2;
 }
 
 /**
@@ -738,8 +761,24 @@ export class GameStore {
       return { ok: false, reason: 'insufficient_pollen', requiredPollen: cost, availablePollen: this.state.pollen };
     }
 
-    // 9. Вызов breedV2 — единственное место реального наследования/mutation RNG.
-    const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, this.rng);
+    // 9. Genetics V2 — Slice 12 (contract §4.14): tutorial-seeded RNG для
+    //    первых ДВУХ обучающих скрещиваний ЭТИХ конкретных двух специменов
+    //    (оба помечены `tutorialStarter`, contract §4.6) — детерминированный
+    //    seed вместо this.rng, чтобы гарантировать контрактный результат
+    //    (§4.6.3/§4.6.4). Строго ограничено `geneticsTutorialBreedsCompleted
+    //    < 2` — третье и последующие скрещивания ТОЙ ЖЕ пары, любое
+    //    скрещивание с НЕ-tutorial-родителем и любой ветеранский save (у
+    //    которого `tutorialStarter` в принципе никогда не был выставлен)
+    //    используют обычный this.rng, без исключений.
+    const tutorialBreedsCompleted = this.state.geneticsTutorialBreedsCompleted ?? 0;
+    const isTutorialBreed =
+      seedParent.tutorialStarter === true && pollenParent.tutorialStarter === true && tutorialBreedsCompleted < 2;
+    const breedRng: RngFn = isTutorialBreed
+      ? mulberry32(tutorialBreedRngSeed(tutorialBreedsCompleted as 0 | 1))
+      : this.rng;
+
+    // 10. Вызов breedV2 — единственное место реального наследования/mutation RNG.
+    const result = breedV2(seedParent.genomeV2, pollenParent.genomeV2, this.state.pityCounter, breedRng);
     if (!result.ok) return { ok: false, reason: result.reason };
 
     const hybridSeed: HybridSeedV2 = {
@@ -750,16 +789,114 @@ export class GameStore {
       plantedAt: null,
       plotId: null,
     };
-    // 10. Одно атомарное обновление: HybridSeed, pity, pollen, firstBreedFreeClaimed.
+
+    // 11. Genetics V2 — Slice 12 (contract §4.14, onboarding spec §6.2/§4.2):
+    //     естественное раскрытие — если аллель, выраженный у потомка, был
+    //     скрытым у seed/pollen родителя, раскрыть ТОЛЬКО этот locus у ЭТОГО
+    //     родителя, source:'natural', не списывая пыль. Идемпотентно: не
+    //     добавляет запись, если для этого locus у этого specimen уже есть
+    //     ЛЮБАЯ запись (microscope или natural) — существующий source
+    //     `microscope` никогда не перезаписывается.
+    const naturalReveal = computeNaturalRevealsV2(result.genomeV2, seedParent.genomeV2, pollenParent.genomeV2);
+    function withNaturalReveal(specimen: Specimen, loci: readonly GenomeV2LocusKey[]): Specimen {
+      if (loci.length === 0) return specimen;
+      const existing = specimen.revealedLoci ?? [];
+      const existingLoci = new Set(existing.map((e) => e.locus));
+      const additions = loci
+        .filter((locus) => !existingLoci.has(locus))
+        .map((locus) => ({ locus, source: 'natural' as const }));
+      if (additions.length === 0) return specimen;
+      return { ...specimen, revealedLoci: [...existing, ...additions] };
+    }
+
+    // 12. Одно атомарное обновление: HybridSeed, pity, pollen,
+    //     firstBreedFreeClaimed, обучающий счётчик, естественное раскрытие
+    //     обоих родителей — всё в одном присвоении `this.state`, ровно та
+    //     точка жизненного цикла, которую фиксирует docs-lock Slice 12.
     this.state = {
       ...this.state,
       nurseryTray: [...this.state.nurseryTray, hybridSeed],
       pityCounter: result.nextPityCounter,
       pollen: this.state.pollen - cost,
       firstBreedFreeClaimed: true,
+      geneticsTutorialBreedsCompleted: isTutorialBreed
+        ? Math.min(2, tutorialBreedsCompleted + 1)
+        : tutorialBreedsCompleted,
+      specimens: this.state.specimens.map((s) => {
+        if (s.id === seedParentId) return withNaturalReveal(s, naturalReveal.seedLoci);
+        if (s.id === pollenParentId) return withNaturalReveal(s, naturalReveal.pollenLoci);
+        return s;
+      }),
     };
     this.emit();
-    return { ok: true, hybridSeed, mutated: result.mutated, nextPityCounter: result.nextPityCounter };
+    return {
+      ok: true,
+      hybridSeed,
+      mutated: result.mutated,
+      mutationTier: result.mutationTier,
+      nextPityCounter: result.nextPityCounter,
+      naturalReveal,
+    };
+  }
+
+  /**
+   * Genetics V2 — Slice 12 (contract §4.14): одноразовый детерминированный
+   * засев двух стартовых Солнечников контрактным tutorial-геномом
+   * (`tutorialV2.ts` §4.6.1/§4.6.2) — заменяет их `genomeV2` (и
+   * соответствующим образом спроецированный legacy `genome`, чтобы миниатюра
+   * тоже совпадала) и помечает `tutorialStarter:true`. Строго одноразово —
+   * `shouldSeedTutorialStartersV2` отказывает, если засев уже был выполнен
+   * (`geneticsTutorialStartersSeeded`), если игрок уже успел скрестить/
+   * накопить пыль/pity (честная защита ветеранских и просто не совсем новых
+   * save — delta doc §12 Slice 12 "не применяй tutorial-fixtures... к
+   * ветеранским save"), или если стартовых specimens не ровно два без
+   * родословной. Вызывается один раз V2 UI-слоем (`OverhaulApp.tsx`) при
+   * монтировании — сам store не завязан ни на один feature-флаг.
+   */
+  seedGeneticsTutorialV2(): boolean {
+    if (!shouldSeedTutorialStartersV2(this.state)) return false;
+    const [first, second] = this.state.specimens;
+    if (!first || !second) return false;
+    const seedGenome = tutorialSunflowerSeedGenomeV2();
+    const pollenGenome = tutorialSunflowerPollenGenomeV2();
+    const updatedFirst: Specimen = {
+      ...first,
+      genome: projectGenomeV2ToLegacy(seedGenome),
+      genomeV2: seedGenome,
+      tutorialStarter: true,
+    };
+    const updatedSecond: Specimen = {
+      ...second,
+      genome: projectGenomeV2ToLegacy(pollenGenome),
+      genomeV2: pollenGenome,
+      tutorialStarter: true,
+    };
+    this.state = {
+      ...this.state,
+      specimens: [updatedFirst, updatedSecond],
+      geneticsTutorialStartersSeeded: true,
+    };
+    this.emit();
+    return true;
+  }
+
+  /** Genetics V2 — Slice 12 (onboarding spec §3.1): первый контекстный экран
+   * объяснения генетики закрыт кнопкой «Понятно, начать» — персистентно,
+   * идемпотентно (повторный вызов — no-op, не эмитит лишний раз). */
+  markGeneticsIntroSeenV2(): void {
+    if (this.state.geneticsIntroSeen) return;
+    this.state = { ...this.state, geneticsIntroSeen: true };
+    this.emit();
+  }
+
+  /** Genetics V2 — Slice 12 (onboarding spec §7): одна событийная Люми-
+   * подсказка показана и больше не должна повторяться — персистентно,
+   * идемпотентно (повторная запись того же ключа не дублируется). */
+  markLumiHintShownV2(key: LumiHintKeyV2): void {
+    const shown = this.state.lumiHintsShown ?? [];
+    if (shown.includes(key)) return;
+    this.state = { ...this.state, lumiHintsShown: [...shown, key] };
+    this.emit();
   }
 
   /**
