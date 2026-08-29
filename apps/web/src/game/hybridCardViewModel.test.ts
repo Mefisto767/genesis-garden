@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildHybridCardViewModel } from './hybridCardViewModel';
+import { alleleLabelV2, buildHybridCardViewModel, buildMicroscopeCardViewModel } from './hybridCardViewModel';
 import { rarityOfV2 } from './rarityV2';
-import type { AllelePair, GenomeV2, MutationIdV2 } from './geneticsV2';
+import type { AllelePair, GenomeV2, MutationIdV2, RevealedLocusEntry } from './geneticsV2';
 
 // ============================================================================
 // Genetics V2 — fix-pass (audit, bug 3): unit-тесты чистого view-model'а
@@ -175,6 +175,217 @@ describe('buildHybridCardViewModel — mutation present/null пути', () => {
       const vm = buildHybridCardViewModel(fixtureGenomeV2(1, { mutationId: id }));
       expect(vm.mutationLabel).toBeTruthy();
       expect(vm.mutationLabel).not.toBe(id);
+    }
+  });
+});
+
+// ============================================================================
+// Fix-pass (Slice 8 UI defect 3): alleleLabelV2() никогда не возвращает
+// неизвестный raw allele ID напрямую — безопасный русский fallback.
+// ============================================================================
+
+describe('alleleLabelV2 — безопасный fallback для неизвестного/повреждённого ID', () => {
+  it('известный аллель — настоящее русское название, не raw ID', () => {
+    expect(alleleLabelV2('stemForm', 'stem_climbing')).toBe('Вьющийся');
+  });
+
+  it('неизвестный/повреждённый allele ID — точный русский fallback "Неизвестный признак", не сам ID', () => {
+    const result = alleleLabelV2('stemForm', 'totally_bogus_id_123');
+    expect(result).toBe('Неизвестный признак');
+    expect(result).not.toBe('totally_bogus_id_123');
+    expect(result).not.toContain('totally_bogus_id_123');
+  });
+
+  it('пустая строка/повреждённые ID любого локуса тоже дают безопасный fallback, не краш', () => {
+    for (const locus of ['leafForm', 'flowerForm', 'primaryColor', 'secondaryColor', 'leafColor', 'pattern', 'size', 'aura'] as const) {
+      expect(alleleLabelV2(locus, '')).toBe('Неизвестный признак');
+      expect(alleleLabelV2(locus, 'not-a-real-id')).toBe('Неизвестный признак');
+    }
+  });
+});
+
+// ============================================================================
+// Fix-pass (Slice 8 UI defect 1): buildMicroscopeCardViewModel — единый
+// контракт видимости расширенной карточки. Задание владельца перечисляет
+// ровно эти проверки (дословно, п.1): выраженный аллель присутствует до
+// исследования; скрытый отсутствует до исследования; "Не исследован"
+// присутствует; доминирование до исследования отсутствует; после
+// исследования присутствуют оба аллеля; после исследования присутствует
+// точная строка доминирования; раскрытие одного локуса не меняет остальные;
+// все девять локусов выводятся в стабильном порядке.
+// ============================================================================
+
+const EXPECTED_MICROSCOPE_LOCUS_ORDER = [
+  'stemForm',
+  'leafForm',
+  'flowerForm',
+  'primaryColor',
+  'secondaryColor',
+  'leafColor',
+  'pattern',
+  'size',
+  'aura',
+] as const;
+
+/** Геном с ровно одним гетерозиготным локусом (stemForm: standard/climbing,
+ * dominance rank 1 < 3 -> "Обычный" выражен, "Вьющийся" скрыт) — все
+ * остальные восемь локусов гомозиготны, чтобы изолированно проверять
+ * "раскрытие одного локуса не меняет остальные". */
+function fixtureOneHeteroGenomeV2(): GenomeV2 {
+  return fixtureGenomeV2(1, {
+    stemForm: { a: 'stem_standard', b: 'stem_climbing' },
+  });
+}
+
+describe('buildMicroscopeCardViewModel — все девять локусов, стабильный порядок', () => {
+  it('ровно девять строк, ключи — все девять локусов в правильном порядке, без дублей', () => {
+    const rows = buildMicroscopeCardViewModel(fixtureOneHeteroGenomeV2());
+    expect(rows).toHaveLength(9);
+    expect(rows.map((r) => r.key)).toEqual([...EXPECTED_MICROSCOPE_LOCUS_ORDER]);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(9);
+  });
+
+  it('порядок не зависит от того, какой локус гетерозиготен', () => {
+    const rows = buildMicroscopeCardViewModel(
+      fixtureGenomeV2(1, { aura: { a: 'aura_none', b: 'aura_radiant' } })
+    );
+    expect(rows.map((r) => r.key)).toEqual([...EXPECTED_MICROSCOPE_LOCUS_ORDER]);
+  });
+});
+
+describe('buildMicroscopeCardViewModel — гомозиготный локус', () => {
+  it('единственное значение, без фиктивного скрытого признака и без кнопки раскрытия (нет полей hidden/statusLine/dominanceLine)', () => {
+    const rows = buildMicroscopeCardViewModel(fixtureGenomeV2(1)); // полностью гомозиготный
+    for (const row of rows) {
+      expect(row.state).toBe('homozygous');
+      if (row.state === 'homozygous') {
+        expect(typeof row.valueLabel).toBe('string');
+        expect(row.valueLabel.length).toBeGreaterThan(0);
+      }
+      // Гомозиготная строка физически не имеет ни statusLine, ни
+      // dominanceLine, ни sourceLabel — сериализация не содержит их вовсе.
+      const serialized = JSON.stringify(row);
+      expect(serialized).not.toContain('statusLine');
+      expect(serialized).not.toContain('dominanceLine');
+      expect(serialized).not.toContain('sourceLabel');
+    }
+  });
+
+  it('конкретное значение гомозиготного локуса — настоящее русское название', () => {
+    const rows = buildMicroscopeCardViewModel(fixtureGenomeV2(1, { stemForm: { a: 'stem_standard', b: 'stem_standard' } }));
+    const stemRow = rows.find((r) => r.key === 'stemForm');
+    expect(stemRow?.state).toBe('homozygous');
+    if (stemRow?.state === 'homozygous') {
+      expect(stemRow.valueLabel).toBe('Обычный');
+    }
+  });
+});
+
+describe('buildMicroscopeCardViewModel — гетерозиготный локус до исследования (unresearched)', () => {
+  it('выраженный аллель присутствует, "Не исследован" присутствует, скрытый аллель и доминирование отсутствуют', () => {
+    const rows = buildMicroscopeCardViewModel(fixtureOneHeteroGenomeV2());
+    const stemRow = rows.find((r) => r.key === 'stemForm');
+    expect(stemRow?.state).toBe('unresearched');
+    if (stemRow?.state === 'unresearched') {
+      expect(stemRow.statusLine).toBe('Стебель: видно — Обычный, скрыто — Не исследован');
+      expect(stemRow.statusLine).toContain('Обычный');
+      expect(stemRow.statusLine).toContain('Не исследован');
+      // Скрытое значение ("Вьющийся") физически не может появиться до
+      // раскрытия — resolveExtendedCard('unresearched') его не отдаёт.
+      expect(stemRow.statusLine).not.toContain('Вьющийся');
+    }
+    // Поля hidden/dominanceLine/sourceLabel физически отсутствуют в этом
+    // варианте типа — сериализация подтверждает, что скрытое значение и
+    // строка доминирования нигде не просочились.
+    const serialized = JSON.stringify(stemRow);
+    expect(serialized).not.toContain('Вьющийся');
+    expect(serialized).not.toContain('доминирует');
+  });
+
+  it('точный текст статусной строки для примера из задания ("Стебель: видно — Обычный, скрыто — Не исследован")', () => {
+    const rows = buildMicroscopeCardViewModel(fixtureOneHeteroGenomeV2());
+    const stemRow = rows.find((r) => r.key === 'stemForm');
+    if (stemRow?.state === 'unresearched') {
+      expect(stemRow.statusLine).toBe('Стебель: видно — Обычный, скрыто — Не исследован');
+    } else {
+      throw new Error('expected stemForm to be unresearched');
+    }
+  });
+});
+
+describe('buildMicroscopeCardViewModel — гетерозиготный локус после исследования (revealed)', () => {
+  it('оба аллеля присутствуют, точная строка доминирования присутствует, источник показан отдельно (microscope)', () => {
+    const revealedLoci: RevealedLocusEntry[] = [{ locus: 'stemForm', source: 'microscope' }];
+    const rows = buildMicroscopeCardViewModel(fixtureOneHeteroGenomeV2(), revealedLoci);
+    const stemRow = rows.find((r) => r.key === 'stemForm');
+    expect(stemRow?.state).toBe('revealed');
+    if (stemRow?.state === 'revealed') {
+      expect(stemRow.statusLine).toBe('Стебель: видно — Обычный, скрыто — Вьющийся');
+      expect(stemRow.statusLine).toContain('Обычный');
+      expect(stemRow.statusLine).toContain('Вьющийся');
+      expect(stemRow.dominanceLine).toBe('Обычный доминирует над Вьющийся');
+      expect(stemRow.sourceLabel).toBe('Раскрыт микроскопом');
+      // Источник — отдельное поле/строка, не склеен с statusLine или dominanceLine.
+      expect(stemRow.statusLine).not.toContain('Раскрыт');
+      expect(stemRow.dominanceLine).not.toContain('Раскрыт');
+    }
+  });
+
+  it('источник "natural" даёт точный текст "Раскрыт естественно"', () => {
+    const revealedLoci: RevealedLocusEntry[] = [{ locus: 'stemForm', source: 'natural' }];
+    const rows = buildMicroscopeCardViewModel(fixtureOneHeteroGenomeV2(), revealedLoci);
+    const stemRow = rows.find((r) => r.key === 'stemForm');
+    if (stemRow?.state === 'revealed') {
+      expect(stemRow.sourceLabel).toBe('Раскрыт естественно');
+    } else {
+      throw new Error('expected stemForm to be revealed');
+    }
+  });
+});
+
+describe('buildMicroscopeCardViewModel — раскрытие одного локуса не меняет остальные', () => {
+  it('геном с двумя гетерозиготными локусами, раскрыт только один — второй остаётся unresearched без изменений', () => {
+    const genome = fixtureGenomeV2(1, {
+      stemForm: { a: 'stem_standard', b: 'stem_climbing' },
+      leafForm: { a: 'leaf_standard', b: 'leaf_broad' },
+    });
+    const beforeRows = buildMicroscopeCardViewModel(genome);
+    const leafBefore = beforeRows.find((r) => r.key === 'leafForm');
+    expect(leafBefore?.state).toBe('unresearched');
+
+    const revealedLoci: RevealedLocusEntry[] = [{ locus: 'stemForm', source: 'microscope' }];
+    const afterRows = buildMicroscopeCardViewModel(genome, revealedLoci);
+    const stemAfter = afterRows.find((r) => r.key === 'stemForm');
+    const leafAfter = afterRows.find((r) => r.key === 'leafForm');
+
+    expect(stemAfter?.state).toBe('revealed');
+    // leafForm — byte-identical to its own pre-reveal row; only stemForm changed.
+    expect(leafAfter).toEqual(leafBefore);
+    expect(leafAfter?.state).toBe('unresearched');
+  });
+
+  it('раскрытие всех девяти локусов независимо друг от друга даёт всем "revealed" с правильными источниками', () => {
+    const genome: GenomeV2 = {
+      stemForm: { a: 'stem_standard', b: 'stem_climbing' },
+      leafForm: { a: 'leaf_standard', b: 'leaf_frilled' },
+      flowerForm: { a: 'flower_standard', b: 'flower_star' },
+      primaryColor: { a: 'primary_honey', b: 'primary_frost' },
+      secondaryColor: { a: 'secondary_forest', b: 'secondary_ochre' },
+      leafColor: { a: 'leaf_color_meadow', b: 'leaf_color_forest' },
+      pattern: { a: 'pattern_solid', b: 'pattern_veins' },
+      size: { a: 'size_normal', b: 'size_giant' },
+      aura: { a: 'aura_none', b: 'aura_radiant' },
+      speciesId: 1,
+      mutationId: null,
+    };
+    const revealedLoci: RevealedLocusEntry[] = EXPECTED_MICROSCOPE_LOCUS_ORDER.map((locus) => ({
+      locus,
+      source: 'natural' as const,
+    }));
+    const rows = buildMicroscopeCardViewModel(genome, revealedLoci);
+    expect(rows).toHaveLength(9);
+    for (const row of rows) {
+      expect(row.state).toBe('revealed');
     }
   });
 });

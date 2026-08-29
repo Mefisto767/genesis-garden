@@ -118,6 +118,14 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, labLevel, onClose 
                   <div className={`album-card-rarity rarity-${rarityClass}`}>{card.rarityLabel}</div>
                   {card.mutationLabel && <div className="album-card-mutation">✦ {card.mutationLabel}</div>}
                   <div className="album-card-actions">
+                    {/* Fix-pass (bug 2): переработка блокируется favorite-ом
+                        (recycleSpecimenV2 сам отказывает с reason:'favorite'
+                        — это UI-зеркало того же правила), но микроскоп — ОТ-
+                        ДЕЛЬНАЯ операция без своей store-level favorite-
+                        проверки (revealHiddenLocusV2 её не делает вообще), и
+                        кнопка ниже больше не скрывается веткой `s.favorite`:
+                        favorite-specimen можно открыть в микроскопе и
+                        раскрыть признак, favorite при этом не меняется. */}
                     {s.favorite ? (
                       <p className="sheet-empty lab-hint">В избранном — сними звезду, чтобы переработать</p>
                     ) : isPending ? (
@@ -133,19 +141,17 @@ export function AlbumPanelV2({ specimens, plots, geneticDust, labLevel, onClose 
                         </button>
                       </>
                     ) : (
-                      <>
-                        <button className="album-card-sell" onClick={() => setPendingRecycleId(s.id)}>
-                          Переработать
-                        </button>
-                        {/* Genetics V2 — Slice 8 (contract §4.11.3): доступ к
-                            микроскопу/расширенной карточке — только при
-                            открытом Lab L2. */}
-                        {labLevel >= LAB_LEVEL_2 && (
-                          <button className="album-card-share" onClick={() => setMicroscopeSpecimenId(s.id)}>
-                            Микроскоп
-                          </button>
-                        )}
-                      </>
+                      <button className="album-card-sell" onClick={() => setPendingRecycleId(s.id)}>
+                        Переработать
+                      </button>
+                    )}
+                    {/* Genetics V2 — Slice 8 (contract §4.11.3): доступ к
+                        микроскопу/расширенной карточке — только при открытом
+                        Lab L2, независимо от favorite/pending-recycle-состояния. */}
+                    {labLevel >= LAB_LEVEL_2 && (
+                      <button className="album-card-share" onClick={() => setMicroscopeSpecimenId(s.id)}>
+                        Микроскоп
+                      </button>
                     )}
                   </div>
                 </div>

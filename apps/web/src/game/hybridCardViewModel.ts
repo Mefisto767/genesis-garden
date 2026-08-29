@@ -29,11 +29,13 @@ import type {
   MutationIdV2,
   PatternAllele,
   PrimaryColorAllele,
+  RevealedLocusEntry,
   SecondaryColorAllele,
   SizeAllele,
   StemFormAllele,
 } from './geneticsV2';
-import { resolveSimpleCard } from './phenotypeV2';
+import { GENOME_V2_LOCUS_KEYS } from './geneticsV2';
+import { resolveExtendedCard, resolveSimpleCard } from './phenotypeV2';
 import { rarityOfV2, type RarityTierV2 } from './rarityV2';
 
 const STEM_FORM_LABEL: Record<StemFormAllele, string> = {
@@ -192,13 +194,14 @@ const LOCUS_ALLELE_LABELS: { readonly [K in GenomeV2LocusKey]: Record<string, st
 /**
  * Переводит raw ID аллеля произвольного локуса в русское название (Slice 8,
  * микроскоп — «показать точное русское название скрытого аллеля... Не
- * показывать raw ID»). Fallback на сам `alleleId` — защитный путь для
- * повреждённых/непредвиденных данных (тот же принцип, что `speciesNameV2`
- * выше), не ожидаемый для реальных данных: все каталожные аллели Gate 1
- * присутствуют в исчерпывающих таблицах выше.
+ * показывать raw ID»). Fix-pass (дефект 3): fallback НИКОГДА не возвращает
+ * сам `alleleId` — для повреждённого/непредвиденного значения используется
+ * безопасный русский текст `Неизвестный признак`, чтобы raw ID физически не
+ * мог попасть в DOM ни при каких данных (не ожидается для реальных данных:
+ * все каталожные аллели Gate 1 присутствуют в исчерпывающих таблицах выше).
  */
 export function alleleLabelV2(locus: GenomeV2LocusKey, alleleId: string): string {
-  return LOCUS_ALLELE_LABELS[locus][alleleId] ?? alleleId;
+  return LOCUS_ALLELE_LABELS[locus][alleleId] ?? 'Неизвестный признак';
 }
 
 /**
@@ -263,4 +266,116 @@ export function buildHybridCardViewModel(genomeV2: GenomeV2): HybridCardViewMode
       { key: 'aura', label: 'Аура', value: AURA_LABEL[card.aura] },
     ],
   };
+}
+
+// ============================================================================
+// Genetics V2 — Slice 8 UI fix-pass: view-model расширенной карточки
+// (микроскоп, `MicroscopePanel.tsx`). Единый контракт видимости (задание
+// владельца, дословно):
+//
+//   до раскрытия (гетерозигота): "[Категория]: видно — [выраженный аллель],
+//   скрыто — Не исследован" — значение скрытого аллеля НИКОГДА не попадает в
+//   этот объект (типом — см. `MicroscopeCardLocusRow` ниже, не проверкой в
+//   рантайме).
+//
+//   после раскрытия: "[Категория]: видно — [выраженный аллель], скрыто —
+//   [раскрытый аллель]" отдельной строкой "[Выраженный] доминирует над
+//   [скрытым]" и отдельно источник ("Раскрыт микроскопом"/"Раскрыт
+//   естественно").
+//
+//   гомозиготный локус: единственное значение, без фиктивного скрытого
+//   признака и без кнопки раскрытия.
+//
+// Строится исключительно поверх уже принятого `resolveExtendedCard` (Slice
+// 2) — не пересчитывает homozygous/unresearched/revealed никаким другим
+// способом. Компонент (`MicroscopePanel.tsx`) только рендерит готовые строки
+// этого view-model'а, ни одной строки не строит сам в JSX.
+// ============================================================================
+
+/** Один локус расширенной карточки — homozygous-ветка: единственное
+ * значение, без скрытого состояния (задание: "без фиктивного скрытого
+ * признака и без кнопки раскрытия"). */
+export interface MicroscopeCardHomozygousRow {
+  readonly key: GenomeV2LocusKey;
+  readonly label: string;
+  readonly state: 'homozygous';
+  readonly valueLabel: string;
+}
+
+/** Гетерозиготный локус до раскрытия — `hiddenLabel`/`dominanceLine`/
+ * `sourceLabel` физически ОТСУТСТВУЮТ в этом варианте типа (не `null`, а
+ * не существуют как поля вовсе): скрытое значение не может утечь в DOM
+ * через этот объект ни при каком рендере, потому что рендерить нечего. */
+export interface MicroscopeCardUnresearchedRow {
+  readonly key: GenomeV2LocusKey;
+  readonly label: string;
+  readonly state: 'unresearched';
+  /** Точный текст: "[Категория]: видно — [выраженный], скрыто — Не исследован". */
+  readonly statusLine: string;
+}
+
+/** Гетерозиготный локус после раскрытия — оба аллеля видны, плюс отдельная
+ * строка доминирования и отдельная строка источника (задание: "отдельной
+ * строкой"/"и отдельно источник" — не склеены с `statusLine`). */
+export interface MicroscopeCardRevealedRow {
+  readonly key: GenomeV2LocusKey;
+  readonly label: string;
+  readonly state: 'revealed';
+  /** Точный текст: "[Категория]: видно — [выраженный], скрыто — [раскрытый]". */
+  readonly statusLine: string;
+  /** Точный текст: "[Выраженный аллель] доминирует над [скрытым аллелем]". */
+  readonly dominanceLine: string;
+  /** "Раскрыт микроскопом" либо "Раскрыт естественно". */
+  readonly sourceLabel: string;
+}
+
+export type MicroscopeCardLocusRow =
+  | MicroscopeCardHomozygousRow
+  | MicroscopeCardUnresearchedRow
+  | MicroscopeCardRevealedRow;
+
+/**
+ * Строит все девять строк расширенной карточки в стабильном порядке
+ * `GENOME_V2_LOCUS_KEYS` (задание: "все девять локусов выводятся в
+ * стабильном порядке"). Чистая функция — без React, без чтения `GameState`/
+ * `Specimen` целиком, только `genomeV2`+`revealedLoci` по значению, как и
+ * `resolveExtendedCard`, поверх которого она построена. Раскрытие ОДНОГО
+ * локуса (через содержимое `revealedLoci`) не может изменить строки других
+ * локусов — каждая строка строится независимо из своего собственного
+ * `ExtendedLocusView`.
+ */
+export function buildMicroscopeCardViewModel(
+  genomeV2: GenomeV2,
+  revealedLoci: readonly RevealedLocusEntry[] = []
+): MicroscopeCardLocusRow[] {
+  const card = resolveExtendedCard(genomeV2, revealedLoci);
+  return GENOME_V2_LOCUS_KEYS.map((locus): MicroscopeCardLocusRow => {
+    const label = LOCUS_CATEGORY_LABEL_V2[locus];
+    const view = card[locus];
+
+    if (view.state === 'homozygous') {
+      return { key: locus, label, state: 'homozygous', valueLabel: alleleLabelV2(locus, view.allele) };
+    }
+
+    const expressedLabel = alleleLabelV2(locus, view.expressed);
+
+    if (view.state === 'unresearched') {
+      return {
+        key: locus,
+        label,
+        state: 'unresearched',
+        statusLine: `${label}: видно — ${expressedLabel}, скрыто — Не исследован`,
+      };
+    }
+
+    const hiddenLabel = alleleLabelV2(locus, view.hidden);
+    return {
+      key: locus,
+      label,
+      state: 'revealed',
+      statusLine: `${label}: видно — ${expressedLabel}, скрыто — ${hiddenLabel}`,
+      dominanceLine: `${expressedLabel} доминирует над ${hiddenLabel}`,
+      sourceLabel: view.source === 'microscope' ? 'Раскрыт микроскопом' : 'Раскрыт естественно',
+    };
+  });
 }

@@ -235,7 +235,10 @@ await page.waitForTimeout(300);
 const microscopeButtonsAfter = await page.getByRole('button', { name: 'Микроскоп' }).count();
 assert(microscopeButtonsAfter >= 1, 'at least one "Микроскоп" button available in the album after Lab L2');
 
-// --- Step 5: before any reveal, the hidden allele value appears nowhere. ---
+// --- Step 5: before any reveal, the hidden allele value appears nowhere,
+// and the extended-card status line matches the exact required format
+// (fix-pass, unified visibility contract): "[Категория]: видно —
+// [выраженный], скрыто — Не исследован". ---
 // Open the microscope on the freshly harvested specimen — it's the newest
 // card, sorted first (favorites-first, then newest-first).
 await page.locator('.album-card').first().getByRole('button', { name: 'Микроскоп' }).click();
@@ -246,8 +249,20 @@ const promptVisible = await page.getByText('Выбери скрытый приз
 assert(promptVisible, 'exact selection prompt "Выбери скрытый признак" shown');
 const hiddenValueLeakedBefore = await page.getByText('Вьющийся', { exact: true }).isVisible().catch(() => false);
 assert(!hiddenValueLeakedBefore, 'hidden allele value ("Вьющийся") is NOT shown anywhere before payment');
-const unresearchedCountBefore = await page.getByText('Не исследован', { exact: true }).count();
+const dominanceLeakedBefore = await page.getByText('доминирует', { exact: false }).isVisible().catch(() => false);
+assert(!dominanceLeakedBefore, 'no dominance line ("доминирует") is shown anywhere before any reveal');
+// "Не исследован" is now embedded inside the full status-line sentence
+// ("Категория: видно — X, скрыто — Не исследован"), not a standalone
+// element — count status lines containing it directly, rather than an
+// exact-text match that would no longer find anything.
+const statusLineTextsBefore = await page.locator('.sheet-row-count').allInnerTexts();
+const unresearchedCountBefore = statusLineTextsBefore.filter((t) => t.includes('Не исследован')).length;
 assert(unresearchedCountBefore === 2, `both heterozygous loci show "Не исследован" before any reveal (got ${unresearchedCountBefore})`);
+const stemStatusLineBefore = await page
+  .getByText('Стебель: видно — Обычный, скрыто — Не исследован', { exact: true })
+  .isVisible()
+  .catch(() => false);
+assert(stemStatusLineBefore, 'before payment, the status line contains the exact expressed allele + "Не исследован" ("Стебель: видно — Обычный, скрыто — Не исследован")');
 const revealButtonsBefore = await page.getByRole('button', { name: 'Раскрыть за 3 пыли' }).count();
 assert(revealButtonsBefore === 2, `exactly two reveal buttons before any reveal (got ${revealButtonsBefore})`);
 await shot('03-microscope-before-reveal');
@@ -282,13 +297,30 @@ assert(successNoticeVisible, 'exact success text "Признак раскрыт"
 const afterReveal = await readSave();
 assert(afterReveal.geneticDust === dustBeforeReveal - 3, `exactly 3 dust deducted (before=${dustBeforeReveal}, after=${afterReveal.geneticDust})`);
 
-// --- Step 9: exact revealed value shown, "Не исследован" for the rest. ---
-const revealedValueVisible = await stemRow.getByText('Вьющийся', { exact: false }).isVisible().catch(() => false);
+// --- Step 9: exact revealed value shown, "Не исследован" for the rest,
+// exact status/dominance/source lines (fix-pass, unified visibility
+// contract) — all three as SEPARATE elements, not one joined string. ---
+// "Вьющийся" now legitimately appears in TWO separate elements within this
+// row (the status line AND the dominance line) — .first() avoids a
+// strict-mode violation on the ambiguous locator (which .catch(() => false)
+// would otherwise silently swallow as "not visible").
+const revealedValueVisible = await stemRow.getByText('Вьющийся', { exact: false }).first().isVisible().catch(() => false);
 assert(revealedValueVisible, 'exact revealed hidden allele value ("Вьющийся") shown for the revealed locus');
-const revealedSourceVisible = await stemRow.getByText('раскрыт микроскопом', { exact: false }).isVisible().catch(() => false);
-assert(revealedSourceVisible, 'revealed row shows the microscope source');
+const revealedStatusLineVisible = await stemRow
+  .getByText('Стебель: видно — Обычный, скрыто — Вьющийся', { exact: true })
+  .isVisible()
+  .catch(() => false);
+assert(revealedStatusLineVisible, 'after payment, the status line contains both the expressed and hidden allele ("Стебель: видно — Обычный, скрыто — Вьющийся")');
+const dominanceLineVisible = await stemRow
+  .getByText('Обычный доминирует над Вьющийся', { exact: true })
+  .isVisible()
+  .catch(() => false);
+assert(dominanceLineVisible, 'exact dominance line shown ("Обычный доминирует над Вьющийся")');
+const revealedSourceVisible = await stemRow.getByText('Раскрыт микроскопом', { exact: true }).isVisible().catch(() => false);
+assert(revealedSourceVisible, 'revealed row shows the microscope source as a separate exact element ("Раскрыт микроскопом")');
 const leafRow = page.locator('.sheet-row', { has: page.getByText('Форма листвы', { exact: true }) });
-const leafStillUnresearched = await leafRow.getByText('Не исследован', { exact: true }).isVisible().catch(() => false);
+const leafStatusLineText = await leafRow.locator('.sheet-row-count').innerText();
+const leafStillUnresearched = leafStatusLineText.includes('Не исследован');
 assert(leafStillUnresearched, 'the other heterozygous locus ("Форма листвы") still shows "Не исследован"');
 const revealButtonsAfter = await page.getByRole('button', { name: 'Раскрыть за 3 пыли' }).count();
 assert(revealButtonsAfter === 1, `exactly one reveal button remains (the other locus) after revealing one (got ${revealButtonsAfter})`);
@@ -306,7 +338,7 @@ await page.waitForTimeout(300);
 await page.locator('.album-card').first().getByRole('button', { name: 'Микроскоп' }).click();
 await page.waitForTimeout(300);
 const stemRowAfterReload = page.locator('.sheet-row', { has: page.getByText('Стебель', { exact: true }) });
-const revealedSurvivedReload = await stemRowAfterReload.getByText('Вьющийся', { exact: false }).isVisible().catch(() => false);
+const revealedSurvivedReload = await stemRowAfterReload.getByText('Вьющийся', { exact: false }).first().isVisible().catch(() => false);
 assert(revealedSurvivedReload, 'the revealed locus survived a full page reload (persistent forever for this specimen)');
 
 // --- Step 11: re-revealing the same trait is impossible, dust not deducted
@@ -317,6 +349,51 @@ const dustAfterReload = (await readSave()).geneticDust;
 assert(dustAfterReload === afterReveal.geneticDust, 'dust unchanged by the reload/re-open (no repeated deduction)');
 await page.locator('.sheet-close').last().click(); // microscope first (DOM-last sibling)
 await page.locator('.sheet-close').first().click(); // then the album underneath
+await page.waitForTimeout(200);
+
+// --- Step 11.5 (fix-pass, bug 2): favorite does NOT block the microscope.
+// The harvested specimen still has one unrevealed locus (leafForm/"Форма
+// листвы") — favorite it, confirm the "Микроскоп" button is still there and
+// clickable, reveal the remaining locus successfully, then confirm favorite
+// survived the operation unchanged. The earlier stemForm reveal (step 7/8)
+// already spent the exact 3-dust first-recycle top-up down to 0 — top up
+// dust again here via the same established localStorage-injection technique
+// already used elsewhere in this file, purely as test setup for this one
+// additional reveal (not something the reveal operation itself grants).
+await page.evaluate((cost) => {
+  const state = JSON.parse(localStorage.getItem('genesis-garden-save-v1'));
+  state.geneticDust += cost;
+  localStorage.setItem('genesis-garden-save-v1', JSON.stringify(state));
+}, 3);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await dismissOnboarding();
+await page.getByRole('button', { name: 'Альбом' }).click();
+await page.waitForTimeout(300);
+const harvestedCard = page.locator('.album-card').first();
+await harvestedCard.locator('.album-card-favorite').click();
+await page.waitForTimeout(200);
+const favoriteAfterToggle = await readSave();
+const harvestedIdForFavorite = favoriteAfterToggle.specimens.find((s) => s.id !== 'spare-1' && s.id !== 'kolo-1' && s.id !== 'kolo-2')?.id;
+const favoriteFlagSet = favoriteAfterToggle.specimens.find((s) => s.id === harvestedIdForFavorite)?.favorite === true;
+assert(favoriteFlagSet, 'specimen is favorited (setup for the favorite/microscope isolation check)');
+const recycleHiddenForFavorite = await harvestedCard.getByText('В избранном — сними звезду, чтобы переработать', { exact: true }).isVisible().catch(() => false);
+assert(recycleHiddenForFavorite, 'favorited card blocks recycling with the expected message (unchanged behaviour)');
+const microscopeButtonOnFavorite = await harvestedCard.getByRole('button', { name: 'Микроскоп' }).isVisible().catch(() => false);
+assert(microscopeButtonOnFavorite, 'favorite-specimen keeps access to the "Микроскоп" button (fix-pass bug 2 — favorite no longer hides it)');
+await harvestedCard.getByRole('button', { name: 'Микроскоп' }).click();
+await page.waitForTimeout(300);
+const leafRowForFavorite = page.locator('.sheet-row', { has: page.getByText('Форма листвы', { exact: true }) });
+await leafRowForFavorite.getByRole('button', { name: 'Раскрыть за 3 пыли' }).click();
+await page.waitForTimeout(300);
+const favoriteRevealSucceeded = await page.getByText('Признак раскрыт', { exact: true }).isVisible().catch(() => false);
+assert(favoriteRevealSucceeded, 'reveal succeeds normally for a favorited specimen (labLevel>=2, enough dust, locus available)');
+await page.locator('.sheet-close').last().click(); // microscope first (DOM-last sibling)
+await page.waitForTimeout(200);
+const stateAfterFavoriteReveal = await readSave();
+const stillFavorite = stateAfterFavoriteReveal.specimens.find((s) => s.id === harvestedIdForFavorite)?.favorite === true;
+assert(stillFavorite, 'favorite remains true after a successful reveal (the microscope operation does not touch it)');
+await page.locator('.sheet-close').first().click(); // close the album
 await page.waitForTimeout(200);
 
 // --- Step 12: inter-species pair is still blocked (Slice 9, not Slice 8) —

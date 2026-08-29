@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { gameStore } from '../game/store';
 import { useGameState } from '../game/useGameState';
 import type { GenomeV2LocusKey } from '../game/geneticsV2';
-import { GENOME_V2_LOCUS_KEYS } from '../game/geneticsV2';
-import { resolveExtendedCard } from '../game/phenotypeV2';
-import { MICROSCOPE_REVEAL_COST, insufficientDustLabelV2 } from '../game/microscopeV2';
-import { LOCUS_CATEGORY_LABEL_V2, alleleLabelV2 } from '../game/hybridCardViewModel';
+import { availableLociForRevealV2, MICROSCOPE_REVEAL_COST, insufficientDustLabelV2 } from '../game/microscopeV2';
+import { buildMicroscopeCardViewModel } from '../game/hybridCardViewModel';
 
 /**
  * Genetics V2 — Slice 8 minimal UI (contract §4.11.3, delta doc §0.10):
@@ -18,10 +16,14 @@ import { LOCUS_CATEGORY_LABEL_V2, alleleLabelV2 } from '../game/hybridCardViewMo
  * независимо от этого, defense-in-depth).
  *
  * Это же представление удваивает роль «расширенной карточки» (delta doc
- * §6.1) — рендерит все девять локусов через уже принятый
- * `resolveExtendedCard` (Slice 2): гомозиготные — значением напрямую,
- * нераскрытые гетерозиготные — «Не исследован» + кнопка раскрытия,
- * раскрытые — точное значение + источник (микроскоп/естественно). Простая
+ * §6.1, fix-pass единый контракт видимости) — рендерит все девять локусов
+ * через готовый `buildMicroscopeCardViewModel` (hybridCardViewModel.ts),
+ * построенный поверх `resolveExtendedCard` (Slice 2): гомозиготные —
+ * единственным значением без кнопки, нераскрытые гетерозиготные — строка
+ * "Категория: видно — X, скрыто — Не исследован" + кнопка раскрытия,
+ * раскрытые — строка с обоими аллелями + отдельная строка доминирования +
+ * отдельная строка источника (микроскоп/естественно). Компонент не строит ни
+ * одной из этих строк сам — только рендерит уже готовый view-model. Простая
  * карточка (`HybridCardPanel`/`AlbumPanelV2`) не меняется и продолжает
  * показывать только выраженный фенотип.
  */
@@ -44,8 +46,8 @@ export function MicroscopePanel({ specimenId, onClose }: MicroscopePanelProps) {
 
   const genomeV2 = specimen.genomeV2;
   const revealedLoci = specimen.revealedLoci ?? [];
-  const card = resolveExtendedCard(genomeV2, revealedLoci);
-  const unresearchedCount = GENOME_V2_LOCUS_KEYS.filter((locus) => card[locus].state === 'unresearched').length;
+  const rows = buildMicroscopeCardViewModel(genomeV2, revealedLoci);
+  const unresearchedCount = availableLociForRevealV2(genomeV2, revealedLoci).length;
   const insufficientDust = state.geneticDust < MICROSCOPE_REVEAL_COST;
 
   function reveal(locus: GenomeV2LocusKey) {
@@ -83,34 +85,33 @@ export function MicroscopePanel({ specimenId, onClose }: MicroscopePanelProps) {
         )}
 
         <div className="sheet-list">
-          {GENOME_V2_LOCUS_KEYS.map((locus) => {
-            const view = card[locus];
-            const label = LOCUS_CATEGORY_LABEL_V2[locus];
-            if (view.state === 'homozygous') {
+          {rows.map((row) => {
+            if (row.state === 'homozygous') {
               return (
-                <div className="sheet-row" key={locus}>
-                  <div className="sheet-row-title">{label}</div>
-                  <div className="sheet-row-count">{alleleLabelV2(locus, view.allele)}</div>
+                <div className="sheet-row" key={row.key}>
+                  <div className="sheet-row-title">{row.label}</div>
+                  <div className="sheet-row-count">{row.valueLabel}</div>
                 </div>
               );
             }
-            if (view.state === 'revealed') {
+            if (row.state === 'revealed') {
               return (
-                <div className="sheet-row" key={locus}>
-                  <div className="sheet-row-title">{label}</div>
-                  <div className="sheet-row-count">
-                    {alleleLabelV2(locus, view.hidden)} ·{' '}
-                    {view.source === 'microscope' ? 'раскрыт микроскопом' : 'раскрыт естественно'}
-                  </div>
+                <div className="sheet-row" key={row.key}>
+                  <div className="sheet-row-title">{row.label}</div>
+                  <div className="sheet-row-count">{row.statusLine}</div>
+                  <div className="sheet-row-sub">{row.dominanceLine}</div>
+                  <div className="sheet-row-sub">{row.sourceLabel}</div>
                 </div>
               );
             }
-            // 'unresearched' — до оплаты видна только категория, не значение.
+            // 'unresearched' — statusLine уже содержит "Не исследован"; ни
+            // выраженный, ни (тем более) скрытый аллель раздельно здесь не
+            // строится — вся строка приходит готовой из view-model'а.
             return (
-              <div className="sheet-row" key={locus}>
-                <div className="sheet-row-title">{label}</div>
-                <div className="sheet-row-count">Не исследован</div>
-                <button className="sheet-buy-btn" disabled={insufficientDust} onClick={() => reveal(locus)}>
+              <div className="sheet-row" key={row.key}>
+                <div className="sheet-row-title">{row.label}</div>
+                <div className="sheet-row-count">{row.statusLine}</div>
+                <button className="sheet-buy-btn" disabled={insufficientDust} onClick={() => reveal(row.key)}>
                   Раскрыть за 3 пыли
                 </button>
               </div>
