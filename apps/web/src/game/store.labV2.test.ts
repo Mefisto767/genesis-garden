@@ -274,7 +274,7 @@ describe('Колокольник — гейт Lab L2 (Slice 8, contract §4.11.2
     expect(result.ok).toBe(true);
   });
 
-  it('breedNurseryV2: межвидовая пара (Солнечник×Колокольник) после L2 всё ещё interspecies_locked — это Slice 9, не Slice 8', () => {
+  it('breedNurseryV2: межвидовая пара (Солнечник×Колокольник) после L2 теперь разрешена (Slice 9, contract §4.12)', () => {
     const state = baseState({
       labLevel: 2,
       specimens: [
@@ -284,6 +284,22 @@ describe('Колокольник — гейт Lab L2 (Slice 8, contract §4.11.2
     });
     const store = storeWith(state);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.hybridSeed.genomeV2.speciesId).toBe(1); // Seed Parent
+    }
+  });
+
+  it('breedNurseryV2: межвидовая пара до открытия L2 всё ещё species_locked (Slice 8 гейт, не species-валидация Slice 3-4/9)', () => {
+    const state = baseState({
+      labLevel: 1,
+      specimens: [
+        fixtureSpecimen('seed-parent', fixtureGenomeV2(1)),
+        fixtureSpecimen('pollen-parent', fixtureGenomeV2(GATED_SPECIES_ID_V2)),
+      ],
+    });
+    const store = storeWith(state);
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result).toEqual({ ok: false, reason: 'species_locked' });
   });
 });

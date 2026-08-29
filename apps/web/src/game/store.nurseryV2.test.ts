@@ -163,23 +163,38 @@ describe('breedNurseryV2 — discriminated-отказы, атомарность 
     expect(store.getState()).toEqual(state);
   });
 
-  it('unsupported_species/interspecies_locked проходят прозрачно от breedV2 (Slice 3-4, без изменений)', () => {
+  it('unsupported_species проходит прозрачно от breedV2 (Slice 3-4, без изменений; interspecies_locked удалена Slice 9)', () => {
     // Genetics V2 — Slice 8: speciesId 2 (Колокольник) теперь дополнительно
     // гейтится Lab L2 (contract §4.11.2). labLevel:2 здесь снимает именно
-    // этот новый гейт, чтобы изолированно проверить более старую
-    // species-валидацию (`interspecies_locked`), которая всё ещё должна
-    // отклонять разные-но-поддерживаемые виды даже после открытия L2 —
-    // это Slice 9, не Slice 8.
+    // этот гейт, чтобы изолированно проверить более старую species-
+    // валидацию, которая по-прежнему отклоняет species 3-8 как
+    // unsupported_species даже после открытия L2 — Slice 9 (contract §4.12)
+    // сняло запрет только на 1×2/2×1 внутри поддерживаемого набора,
+    // species 3-8 остаются вне V2-родителей до Slice 11.
+    const state = baseState({
+      labLevel: 2,
+      specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(3))],
+    });
+    const store = storeWith(state);
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
+    // Species-валидация внутри breedV2 сама не потребляет RNG (Slice 3-4) —
+    // проверяем, что и после прохождения store-level проверок RNG не тратится.
+    expect(store.getState()).toEqual(state);
+  });
+
+  it('Slice 9 (contract §4.12): после Lab L2 межвидовая пара species1×species2 больше не отклоняется — успешно создаёт HybridSeedV2', () => {
     const state = baseState({
       labLevel: 2,
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
     const store = storeWith(state);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
-    // Species-валидация внутри breedV2 сама не потребляет RNG (Slice 3-4) —
-    // проверяем, что и после прохождения store-level проверок RNG не тратится.
-    expect(store.getState()).toEqual(state);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.hybridSeed.genomeV2.speciesId).toBe(1); // Seed Parent
+      expect(result.hybridSeed.parentIds).toEqual(['seed-parent', 'pollen-parent']);
+    }
   });
 
   it('nursery_tray_full — 8/8, 9-я попытка отклоняется целиком, 0 RNG, состояние не меняется', () => {

@@ -17,7 +17,10 @@ import type { RngFn } from './rng';
 // Genetics V2 — Slice 4 (mutation roll, pity, `breedV2`). Обязательные тесты
 // из задания владельца (2026-08-28, пакетный проход Slice 3-4), поверх
 // коммита Slice 3 (`feat(genetics): add V2 same-species inheritance`).
-// Nursery Tray, пыльца, переработка, микроскоп, межвидовое скрещивание,
+// Расширено Slice 9 (contract §4.12): межвидовые пары 1×2/2×1 больше не
+// отклоняются — обязательный speciesId-инвариант (никогда не отклоняется от
+// Seed Parent, включая гарантированную мутацию) протестирован здесь же, где
+// живёт mutation event. Nursery Tray, пыльца, переработка, микроскоп,
 // родословная, Reveal/onboarding, UI — здесь не тестируется и не
 // подразумевается.
 // ============================================================================
@@ -344,13 +347,106 @@ describe('breedV2 — точное число и порядок RNG-вызово
     expect(calls).toBe(22);
   });
 
-  it('отклонённое валидацией видов скрещивание — 0 draws (наследуется из Slice 3)', () => {
-    const seed = fixtureGenomeV2(1);
-    const pollen = fixtureGenomeV2(2);
+  it('отклонённое валидацией родителей скрещивание (unsupported_species) — 0 draws (наследуется из Slice 3)', () => {
+    // Species 3 не входит в поддерживаемый набор (1-2) — Slice 9 (contract
+    // §4.12) сняло запрет только на межвидовые пары ВНУТРИ поддерживаемого
+    // набора (1×2/2×1), species 3-8 по-прежнему unsupported_species.
+    const seed = fixtureGenomeV2(3);
+    const pollen = fixtureGenomeV2(3);
     const { rng, count } = countingRng(0.5);
     const result = breedV2(seed, pollen, 0, rng);
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
     expect(count()).toBe(0);
+  });
+
+  it('Slice 9 (contract §4.12): межвидовая пара 1×2 больше НЕ отклоняется — успешное mutation event на такой паре тоже потребляет ровно 22 draws', () => {
+    const seed = fixtureGenomeV2(1);
+    const pollen = fixtureGenomeV2(2);
+    let calls = 0;
+    const rng: RngFn = () => {
+      calls += 1;
+      return calls === 1 ? 0.001 : 0.4; // draw1 (event) всегда < любой ненулевой chance -> mutated
+    };
+    const result = breedV2(seed, pollen, 0, rng);
+    expectSuccess(result);
+    expect(result.mutated).toBe(true);
+    expect(result.genomeV2.speciesId).toBe(1); // Seed Parent, не Pollen
+    expect(calls).toBe(22);
+  });
+
+  it('Slice 9 (contract §4.12): межвидовая пара 2×1 без mutation event потребляет ровно 19 draws', () => {
+    const seed = fixtureGenomeV2(2);
+    const pollen = fixtureGenomeV2(1);
+    const { rng, count } = countingRng(0.99); // всегда >= chance < 1 -> событие не срабатывает
+    const result = breedV2(seed, pollen, 0, rng);
+    expectSuccess(result);
+    expect(result.mutated).toBe(false);
+    expect(result.genomeV2.speciesId).toBe(2); // Seed Parent
+    expect(count()).toBe(19);
+  });
+});
+
+describe('breedV2 — Slice 9 (contract §4.12): speciesId никогда не отклоняется от Seed Parent при межвидовом скрещивании', () => {
+  // Обязательный прямой инвариантный тест (delta doc §12 п.9): без mutation
+  // event, с гарантированной мутацией (pityCounter=9), на серии разных
+  // RNG-потоков/seed, в обоих направлениях (1×2 и 2×1). Mutation event
+  // (contract §4.1/§4.2) никогда не меняет speciesId и никогда не выбирает
+  // species 3-8 — genomeV2.speciesId присваивается в inheritGenomeV2 (Seed
+  // Parent) до применения mutation-аллеля, а mutation-шаг трогает только
+  // aura/mutationId.
+
+  it('без mutation event, направление 1×2: speciesId потомка всегда 1, на 50 разных RNG-потоках', () => {
+    const seed = fixtureGenomeV2(1);
+    const pollen = fixtureGenomeV2(2);
+    for (let seedValue = 1; seedValue <= 50; seedValue++) {
+      const result = breedV2(seed, pollen, 0, mulberry32(seedValue));
+      expectSuccess(result);
+      expect(result.genomeV2.speciesId).toBe(1);
+      expect([3, 4, 5, 6, 7, 8]).not.toContain(result.genomeV2.speciesId);
+    }
+  });
+
+  it('без mutation event, направление 2×1: speciesId потомка всегда 2, на 50 разных RNG-потоках', () => {
+    const seed = fixtureGenomeV2(2);
+    const pollen = fixtureGenomeV2(1);
+    for (let seedValue = 1; seedValue <= 50; seedValue++) {
+      const result = breedV2(seed, pollen, 0, mulberry32(seedValue));
+      expectSuccess(result);
+      expect(result.genomeV2.speciesId).toBe(2);
+    }
+  });
+
+  it('с ГАРАНТИРОВАННОЙ мутацией (pityCounter=9), направление 1×2: speciesId потомка всегда 1, на 50 разных RNG-потоках', () => {
+    const seed = fixtureGenomeV2(1);
+    const pollen = fixtureGenomeV2(2);
+    for (let seedValue = 1; seedValue <= 50; seedValue++) {
+      const result = breedV2(seed, pollen, 9, mulberry32(seedValue));
+      expectSuccess(result);
+      expect(result.mutated).toBe(true);
+      expect(result.genomeV2.speciesId).toBe(1);
+    }
+  });
+
+  it('с ГАРАНТИРОВАННОЙ мутацией (pityCounter=9), направление 2×1: speciesId потомка всегда 2, на 50 разных RNG-потоках', () => {
+    const seed = fixtureGenomeV2(2);
+    const pollen = fixtureGenomeV2(1);
+    for (let seedValue = 1; seedValue <= 50; seedValue++) {
+      const result = breedV2(seed, pollen, 9, mulberry32(seedValue));
+      expectSuccess(result);
+      expect(result.mutated).toBe(true);
+      expect(result.genomeV2.speciesId).toBe(2);
+    }
+  });
+
+  it('с гарантированной мутацией и различными родителями на всех 9 локусах (1×2): mutation-аллель применяется только к aura, speciesId не затронут', () => {
+    const seed = { ...distinctSeedGenome(), speciesId: 1 };
+    const pollen = { ...distinctPollenGenome(), speciesId: 2 };
+    for (let seedValue = 1; seedValue <= 20; seedValue++) {
+      const result = breedV2(seed, pollen, 9, mulberry32(seedValue));
+      expectSuccess(result);
+      expect(result.mutated).toBe(true);
+      expect(result.genomeV2.speciesId).toBe(1);
+    }
   });
 });
 

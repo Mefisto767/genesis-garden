@@ -6,19 +6,22 @@
 // (точное правило mutation-аллеля + обязательный RNG call order), в объёме
 // Slice 4 из delta-документа §12: интеграция mutation-события в `breedV2`
 // как дополнительный шаг ДО обычного наследования (по порядку RNG-вызовов),
-// но ПОСЛЕ валидации видов (Slice 3, `inheritanceV2.ts`) — эта функция не
-// переопределяет ни валидацию, ни само наследование, а оборачивает их.
+// но ПОСЛЕ валидации родителей (Slice 3, `inheritanceV2.ts`) — эта функция не
+// переопределяет ни валидацию, ни само наследование, а оборачивает их. Slice
+// 9 (contract §4.12) сняло запрет на межвидовые пары 1×2/2×1 внутри самой
+// валидации (`validateSupportedParentsV2`) — этот файл не изменился по
+// существу, только имя вызываемой функции.
 //
 // Никакого store/GameStore/коллекции/Nursery Tray/пыльцы/переработки/
-// микроскопа/межвидового скрещивания/родословной/Reveal/UI здесь нет и не
-// должно быть — только чистый engine-код.
+// микроскопа/родословной/Reveal/UI здесь нет и не должно быть — только
+// чистый engine-код.
 // ============================================================================
 
 import type { AllelePair, AuraAllele, GenomeV2, MutationIdV2 } from './geneticsV2';
 import type { RngFn } from './rng';
 import {
   inheritGenomeV2,
-  validateSameSpeciesParentsV2,
+  validateSupportedParentsV2,
   type BreedRejectionReasonV2,
 } from './inheritanceV2';
 import { resolvePhenotypeV2, type PhenotypeV2 } from './phenotypeV2';
@@ -182,7 +185,7 @@ export function breedV2(
   pityCounter: number,
   rng: RngFn
 ): BreedV2Result {
-  const validation = validateSameSpeciesParentsV2(seedGenome.speciesId, pollenGenome.speciesId);
+  const validation = validateSupportedParentsV2(seedGenome.speciesId, pollenGenome.speciesId);
   if (!validation.ok) {
     return { ok: false, reason: validation.reason };
   }

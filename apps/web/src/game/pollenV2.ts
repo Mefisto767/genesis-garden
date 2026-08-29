@@ -17,13 +17,12 @@ export const SAME_SPECIES_BREED_COST = 8;
 
 /**
  * Стоимость межвидового скрещивания в пыльце (delta doc §0.8 п.1) —
- * зафиксирована и тестируется уже в Slice 6 как экономика БУДУЩЕГО
- * разрешённого пути (Slice 9). Межвидовое скрещивание НЕ разблокируется этим
- * slice: species-валидация (`validateSameSpeciesParentsV2`, `inheritanceV2.ts`)
- * по-прежнему отклоняет любую пару разных поддерживаемых видов с причиной
- * `interspecies_locked`, ДО того, как эта стоимость успела бы примениться на
- * практике (contract §4.9.4) — это значение достижимо только через прямой
- * unit-тест `breedCostV2`, не через реальный `breedNurseryV2`.
+ * зафиксирована и тестируется с Slice 6 (contract §4.9.4, тогда — как
+ * экономика будущего разрешённого пути). Со Slice 9 (contract §4.12)
+ * достижима и через реальный `breedNurseryV2`, не только через прямой
+ * unit-тест `breedCostV2`: species-валидация (`validateSupportedParentsV2`,
+ * `inheritanceV2.ts`) больше не отклоняет поддерживаемые межвидовые пары
+ * (1×2/2×1) причиной `interspecies_locked` — эта причина удалена целиком.
  */
 export const INTERSPECIES_BREED_COST = 12;
 
@@ -71,10 +70,10 @@ export function speciesBasePollenV2(speciesId: number): number {
 /**
  * Стоимость скрещивания по паре УЖЕ поддерживаемых `speciesId` (1/2,
  * `SUPPORTED_PARENT_SPECIES_V2`). Эта функция НЕ решает, разрешено ли вообще
- * такое скрещивание — species-валидацию (`unsupported_species`/
- * `interspecies_locked`) выполняет `validateSameSpeciesParentsV2`
- * (`inheritanceV2.ts`), явно и раньше денежной проверки (contract §4.9.3
- * шаг 5). `breedCostV2` только считает цену ДЛЯ пары, которая уже прошла (или
+ * такое скрещивание — species-валидацию (`unsupported_species`) выполняет
+ * `validateSupportedParentsV2` (`inheritanceV2.ts`), явно и раньше денежной
+ * проверки (contract §4.9.3/§4.12 шаг 6). `breedCostV2` только считает цену
+ * ДЛЯ пары, которая уже прошла (или
  * будет проходить, в тестах) эту валидацию.
  */
 export function breedCostV2(seedSpeciesId: number, pollenSpeciesId: number): number {

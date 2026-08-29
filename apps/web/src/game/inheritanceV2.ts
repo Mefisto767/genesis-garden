@@ -1,5 +1,6 @@
 // ============================================================================
-// Genetics V2 — Slice 3: одновидовое наследование.
+// Genetics V2 — Slice 3: одновидовое наследование. Slice 9 (contract §4.12)
+// снимает запрет на межвидовые пары 1×2/2×1 — см. правки ниже.
 //
 // Реализует ТОЛЬКО docs/GENETICS_TARGET_DELTA.md §4.1 (обычное наследование,
 // без mutation roll) и §3 (политика доступа legacy species 3-8), в объёме
@@ -8,10 +9,11 @@
 // roll/pity (Slice 4), БЕЗ store/GameStore/коллекции/Nursery Tray, БЕЗ
 // React/UI/Phaser. Эти функции сознательно не реализованы в этом файле.
 //
-// Engine этого slice поддерживает исключительно пары species1×species1 и
-// species2×species2 — межвидовое скрещивание (Slice 9) и species 3-8 как
-// родители (Slice 11 снимает эту политику доступа для V2, не раньше) здесь
-// не реализуются, только детерминированно отклоняются с явной причиной.
+// Engine этого файла поддерживает ровно четыре комбинации родителей —
+// species1×species1, species2×species2, species1×species2, species2×species1
+// (contract §4.12, Slice 9 сняло прежний запрет на последние две) — species
+// 3-8 как родители (Slice 11 снимает эту политику доступа для V2, не раньше)
+// здесь не реализуются, только детерминированно отклоняются с явной причиной.
 // ============================================================================
 
 import type { AllelePair, GenomeV2 } from './geneticsV2';
@@ -39,23 +41,23 @@ export function inheritAlleleV2<T extends string>(pair: AllelePair<T>, rng: RngF
 const SUPPORTED_PARENT_SPECIES_V2: readonly number[] = [1, 2];
 
 /** Discriminated-контракт причины отказа скрещивания (задание — «безопасный
- * discriminated result... без разбора текста исключения»). Ровно две
- * причины, ни одна не пересекается с другой по смыслу:
- * - `unsupported_species` — хотя бы один родитель вне species 1-2 (Slice 11
- *   ещё не реализован, независимо от того, совпадают ли виды родителей);
- * - `interspecies_locked` — оба родителя из поддерживаемого набора (1-2), но
- *   разных видов (межвидовое скрещивание — Slice 9, не этот slice). */
-export type BreedRejectionReasonV2 = 'unsupported_species' | 'interspecies_locked';
+ * discriminated result... без разбора текста исключения»). Ровно одна
+ * причина с Slice 9 (contract §4.12): `unsupported_species` — хотя бы один
+ * родитель вне species 1-2 (Slice 11 ещё не реализован). Прежняя причина
+ * `interspecies_locked` (оба родителя из поддерживаемого набора 1-2, но
+ * разных видов) удалена этим slice — пары 1×2/2×1 больше не отклоняются. */
+export type BreedRejectionReasonV2 = 'unsupported_species';
 
 /**
  * Валидация пары родителей ДО любого обращения к RNG (задание, п.11 —
- * «отклонённая операция не должна потреблять RNG»). Порядок проверок
- * значим: `unsupported_species` проверяется первым — пара из двух разных
- * неподдерживаемых видов (например, species 3 × species 5) отклоняется по
- * этой причине, не как `interspecies_locked` (у неё в принципе нет шанса
- * стать межвидовой парой поддерживаемых видов).
+ * «отклонённая операция не должна потреблять RNG»). Переименована со Slice 9
+ * (contract §4.12) из `validateSameSpeciesParentsV2` — имя больше не
+ * подразумевает «только один вид»: функция проверяет ТОЛЬКО, что оба
+ * родителя входят в уже поддерживаемый V2-набор (species 1-2), и ничего не
+ * говорит о совпадении/несовпадении видов между собой — прежняя вторая,
+ * отклоняющая межвидовые пары ветка снята этим slice.
  */
-export function validateSameSpeciesParentsV2(
+export function validateSupportedParentsV2(
   seedSpeciesId: number,
   pollenSpeciesId: number
 ): { ok: true } | { ok: false; reason: BreedRejectionReasonV2 } {
@@ -64,9 +66,6 @@ export function validateSameSpeciesParentsV2(
     !SUPPORTED_PARENT_SPECIES_V2.includes(pollenSpeciesId)
   ) {
     return { ok: false, reason: 'unsupported_species' };
-  }
-  if (seedSpeciesId !== pollenSpeciesId) {
-    return { ok: false, reason: 'interspecies_locked' };
   }
   return { ok: true };
 }
@@ -132,33 +131,39 @@ export function inheritGenomeV2(seedGenome: GenomeV2, pollenGenome: GenomeV2, rn
   };
 }
 
-/** Успешный результат одновидового скрещивания этого slice — только
- * унаследованный геном, без mutation/rarity/phenotype (те приходят со
- * Slice 4, полный `breedV2`, поверх этого же примитива). */
-export interface BreedSameSpeciesSuccessV2 {
+/** Успешный результат скрещивания поддерживаемой пары (species 1-2, любая из
+ * четырёх комбинаций — Slice 9, contract §4.12) — только унаследованный
+ * геном, без mutation/rarity/phenotype (те приходят со Slice 4, полный
+ * `breedV2`, поверх этого же примитива). Переименовано со Slice 9 из
+ * `BreedSameSpeciesSuccessV2` — имя больше не подразумевает «только один
+ * вид». */
+export interface BreedSupportedSpeciesSuccessV2 {
   ok: true;
   genomeV2: GenomeV2;
 }
 
-export interface BreedSameSpeciesFailureV2 {
+export interface BreedSupportedSpeciesFailureV2 {
   ok: false;
   reason: BreedRejectionReasonV2;
 }
 
-export type BreedSameSpeciesResultV2 = BreedSameSpeciesSuccessV2 | BreedSameSpeciesFailureV2;
+export type BreedSupportedSpeciesResultV2 = BreedSupportedSpeciesSuccessV2 | BreedSupportedSpeciesFailureV2;
 
 /**
- * Engine Slice 3 целиком: валидация видов (без RNG) → наследование (18
- * draws). Отклонённая пара не вызывает `inheritGenomeV2` вообще — значит,
- * не потребляет RNG (задание, п.11) — проверено явным regression-тестом
- * (счётчик вызовов `rng`, не просто «результат корректный»).
+ * Engine этого файла целиком: валидация поддерживаемых родителей (без RNG,
+ * §4.12) → наследование (18 draws) — для любой из четырёх комбинаций
+ * species1×species1/species2×species2/species1×species2/species2×species1.
+ * Отклонённая пара не вызывает `inheritGenomeV2` вообще — значит, не
+ * потребляет RNG (задание, п.11) — проверено явным regression-тестом
+ * (счётчик вызовов `rng`, не просто «результат корректный»). Переименовано
+ * со Slice 9 из `breedSameSpeciesV2`.
  */
-export function breedSameSpeciesV2(
+export function breedSupportedSpeciesV2(
   seedGenome: GenomeV2,
   pollenGenome: GenomeV2,
   rng: RngFn
-): BreedSameSpeciesResultV2 {
-  const validation = validateSameSpeciesParentsV2(seedGenome.speciesId, pollenGenome.speciesId);
+): BreedSupportedSpeciesResultV2 {
+  const validation = validateSupportedParentsV2(seedGenome.speciesId, pollenGenome.speciesId);
   if (!validation.ok) {
     return { ok: false, reason: validation.reason };
   }

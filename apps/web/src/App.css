@@ -172,6 +172,17 @@
   gap: 8px;
 }
 
+/* Genetics V2 — Slice 9 (contract §4.12): "Первый родитель"/"Второй
+   родитель" slots in LabPanelV2. Deliberately a separate class from
+   .sheet-list — its rows reuse .sheet-row/.sheet-row-title/.sheet-row-count
+   for visual consistency, but must NOT match ".sheet-list .sheet-row"
+   selectors elsewhere (e.g. Nursery Tray seed-row counting). */
+.lab-parent-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .sheet-row {
   display: flex;
   align-items: center;

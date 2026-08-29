@@ -197,10 +197,11 @@ describe('breedNurseryV2 — отказы не расходуют бесплат
     expect(store.getState().firstBreedFreeClaimed).toBe(false);
   });
 
-  it('interspecies_locked не переключает firstBreedFreeClaimed', () => {
+  it('Slice 9 (contract §4.12): межвидовая пара 1×2 после L2 успешно скрещивается бесплатно и переключает firstBreedFreeClaimed', () => {
     // Genetics V2 — Slice 8: speciesId 2 (Колокольник) дополнительно гейтится
-    // Lab L2 (contract §4.11.2) — labLevel:2 снимает этот новый гейт, чтобы
-    // изолированно проверить старую (Slice 3-4) species-валидацию.
+    // Lab L2 (contract §4.11.2) — labLevel:2 снимает этот гейт. Slice 9
+    // (contract §4.12) сняло прежнюю species-валидацию (Slice 3-4)
+    // `interspecies_locked` для поддерживаемых пар — эта пара теперь успешна.
     const state = baseState({
       firstBreedFreeClaimed: false,
       labLevel: 2,
@@ -208,20 +209,48 @@ describe('breedNurseryV2 — отказы не расходуют бесплат
     });
     const store = storeWith(state);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
-    expect(store.getState().firstBreedFreeClaimed).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(store.getState().firstBreedFreeClaimed).toBe(true);
   });
 
-  it('interspecies_locked отклоняется раньше денежной проверки — не маскируется insufficient_pollen даже при pollen=0', () => {
+  it('unsupported_species (species 3-8) отклоняется раньше денежной проверки — не маскируется insufficient_pollen даже при pollen=0', () => {
+    // Species 3 не гейтится Lab L2 (isSpeciesUnlockedV2 гейтит только
+    // speciesId 2) — доходит до species-валидации Slice 3-4/9 (шаг 6),
+    // раньше денежной проверки (шаг 7).
     const state = baseState({
       firstBreedFreeClaimed: true, // платный режим — insufficient_pollen был бы правдоподобен, если бы species-проверка не шла раньше
       pollen: 0,
-      labLevel: 2, // снимает Slice 8 species_locked гейт Колокольника — см. комментарий выше
+      specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(3)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(3))],
+    });
+    const store = storeWith(state);
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
+  });
+
+  it('Slice 9 (contract §4.12): платная межвидовая пара с pollen=11 отклоняется insufficient_pollen (requiredPollen:12), 0 no-op', () => {
+    const state = baseState({
+      firstBreedFreeClaimed: true,
+      pollen: 11,
+      labLevel: 2,
       specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
     });
     const store = storeWith(state);
     const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
+    expect(result).toEqual({ ok: false, reason: 'insufficient_pollen', requiredPollen: 12, availablePollen: 11 });
+    expect(store.getState()).toEqual(state);
+  });
+
+  it('Slice 9 (contract §4.12): платная межвидовая пара с pollen=12 успешна и списывает ровно 12', () => {
+    const state = baseState({
+      firstBreedFreeClaimed: true,
+      pollen: 12,
+      labLevel: 2,
+      specimens: [fixtureSpecimen('seed-parent', fixtureGenomeV2(1)), fixtureSpecimen('pollen-parent', fixtureGenomeV2(2))],
+    });
+    const store = storeWith(state);
+    const result = store.breedNurseryV2('seed-parent', 'pollen-parent');
+    expect(result.ok).toBe(true);
+    expect(store.getState().pollen).toBe(0);
   });
 
   it('отмена на уровне UI (breedNurseryV2 вообще не вызывается) не меняет флаг', () => {

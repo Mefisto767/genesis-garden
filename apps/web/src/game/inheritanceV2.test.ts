@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  breedSameSpeciesV2,
+  breedSupportedSpeciesV2,
   inheritAlleleV2,
   inheritGenomeV2,
-  validateSameSpeciesParentsV2,
+  validateSupportedParentsV2,
   type BreedRejectionReasonV2,
 } from './inheritanceV2';
 import { expressPhenotype, DOMINANCE_TABLE } from './phenotypeV2';
@@ -11,12 +11,15 @@ import type { AllelePair, GenomeV2, GenomeV2LocusKey } from './geneticsV2';
 import { mulberry32 } from './rng';
 
 // ============================================================================
-// Genetics V2 — Slice 3 (одновидовое наследование). Обязательные тесты из
-// задания владельца (2026-08-28, пакетный проход Slice 3-4), поверх коммита
-// Slice 2 `a779755` (принят). Mutation roll/pity (Slice 4), Nursery Tray,
-// пыльца, микроскоп, межвидовое скрещивание, UI — здесь не тестируется и не
-// подразумевается — только чистое одновидовое наследование + рабочая
-// `rarityOfV2` (отдельный файл rarityV2.test.ts).
+// Genetics V2 — Slice 3 (одновидовое наследование), расширено Slice 9
+// (contract §4.12): `validateSupportedParentsV2`/`breedSupportedSpeciesV2`
+// (переименованы из `validateSameSpeciesParentsV2`/`breedSameSpeciesV2`)
+// теперь успешны и для пар 1×2/2×1, не только 1×1/2×2 — `interspecies_locked`
+// удалена целиком. Mutation roll/pity (Slice 4, mutationV2.test.ts — включая
+// обязательный speciesId-инвариант с гарантированной мутацией), Nursery Tray,
+// пыльца, микроскоп, UI — здесь не тестируется и не подразумевается — только
+// чистое наследование (без mutation) + рабочая `rarityOfV2` (отдельный файл
+// rarityV2.test.ts).
 // ============================================================================
 
 const LOCI: readonly GenomeV2LocusKey[] = [
@@ -206,51 +209,99 @@ describe('inheritGenomeV2 — каждый из 9 локусов наследу�
   });
 });
 
-describe('валидация видов (без mutation) — species1×1 и species2×2 успешны', () => {
+describe('inheritGenomeV2 — Slice 9 (contract §4.12): межвидовая пара наследует ровно так же, без фильтрации аллелей', () => {
+  // Родители РАЗНЫХ видов (1 и 2), но геометрически различимые на всех 9
+  // локусах — те же fixtures, что уже используются выше для одновидовой
+  // пары, только с разными speciesId. Наследование не смотрит на speciesId
+  // родителей вообще (только на сам факт "кто Seed, кто Pollen") — значит,
+  // не должно вести себя иначе для межвидовой пары.
+  const seed1 = { ...distinctSeedGenome(), speciesId: 1 };
+  const pollen2 = { ...distinctPollenGenome(), speciesId: 2 };
+
+  for (const locus of LOCI) {
+    it(`локус "${locus}" (1×2): a от Seed(1), b от Pollen(2) — без species-фильтра`, () => {
+      const child = inheritGenomeV2(seed1, pollen2, () => 0.1);
+      expect(child[locus]).toEqual({ a: seed1[locus].a, b: pollen2[locus].a });
+    });
+  }
+
+  it('speciesId потомка (1×2) равен speciesId Seed Parent (1), не Pollen (2), на серии RNG-потоков', () => {
+    for (let seedValue = 1; seedValue <= 20; seedValue++) {
+      const rng = mulberry32(seedValue);
+      const child = inheritGenomeV2(seed1, pollen2, rng);
+      expect(child.speciesId).toBe(1);
+    }
+  });
+
+  it('speciesId потомка (2×1, обратное направление) равен speciesId нового Seed Parent (2), на серии RNG-потоков', () => {
+    const seed2 = { ...distinctSeedGenome(), speciesId: 2 };
+    const pollen1 = { ...distinctPollenGenome(), speciesId: 1 };
+    for (let seedValue = 1; seedValue <= 20; seedValue++) {
+      const rng = mulberry32(seedValue);
+      const child = inheritGenomeV2(seed2, pollen1, rng);
+      expect(child.speciesId).toBe(2);
+    }
+  });
+
+  it('межвидовой аллель (значение локуса от родителя другого вида) — обычное значение из каталога, не подставляется нейтральным дефолтом', () => {
+    const child = inheritGenomeV2(seed1, pollen2, () => 0.9); // всегда выбирает .b -> оба слота от pollen2
+    for (const locus of LOCI) {
+      expect(child[locus].b).toBe(pollen2[locus].b);
+      // ...и это реальное каталожное значение донора, не 'stem_standard'/
+      // другой нейтральный ID, кроме случаев, когда донор сам им владеет.
+    }
+  });
+});
+
+describe('валидация поддерживаемых родителей (Slice 9, contract §4.12) — все четыре комбинации 1×1/2×2/1×2/2×1 успешны', () => {
   it('species1 × species1 — успех', () => {
-    const result = validateSameSpeciesParentsV2(1, 1);
+    const result = validateSupportedParentsV2(1, 1);
     expect(result.ok).toBe(true);
   });
 
   it('species2 × species2 — успех', () => {
-    const result = validateSameSpeciesParentsV2(2, 2);
+    const result = validateSupportedParentsV2(2, 2);
     expect(result.ok).toBe(true);
   });
 
-  it('species1 × species2 — отклонено как interspecies_locked', () => {
-    const result = validateSameSpeciesParentsV2(1, 2);
-    const expected: { ok: false; reason: BreedRejectionReasonV2 } = { ok: false, reason: 'interspecies_locked' };
-    expect(result).toEqual(expected);
+  it('species1 × species2 — успех (Slice 9 сняло interspecies_locked)', () => {
+    const result = validateSupportedParentsV2(1, 2);
+    expect(result).toEqual({ ok: true });
   });
 
-  it('species2 × species1 (обратный порядок) — тоже interspecies_locked', () => {
-    const result = validateSameSpeciesParentsV2(2, 1);
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
+  it('species2 × species1 (обратный порядок) — тоже успех', () => {
+    const result = validateSupportedParentsV2(2, 1);
+    expect(result).toEqual({ ok: true });
   });
 
   for (const unsupported of [3, 4, 5, 6, 7, 8]) {
     it(`species${unsupported} × species${unsupported} — отклонено как unsupported_species`, () => {
-      const result = validateSameSpeciesParentsV2(unsupported, unsupported);
+      const result = validateSupportedParentsV2(unsupported, unsupported);
       expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
     });
 
-    it(`species1 × species${unsupported} — отклонено как unsupported_species (не interspecies_locked)`, () => {
-      const result = validateSameSpeciesParentsV2(1, unsupported);
+    it(`species1 × species${unsupported} — отклонено как unsupported_species`, () => {
+      const result = validateSupportedParentsV2(1, unsupported);
       expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
     });
   }
 
-  it('оба родителя из разных неподдерживаемых видов (3×5) — unsupported_species, не interspecies_locked', () => {
-    const result = validateSameSpeciesParentsV2(3, 5);
+  it('оба родителя из разных неподдерживаемых видов (3×5) — unsupported_species', () => {
+    const result = validateSupportedParentsV2(3, 5);
     expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
+  });
+
+  it('BreedRejectionReasonV2 больше не содержит interspecies_locked как достижимое значение (type-level regression через runtime-проверку набора причин)', () => {
+    const reasons: BreedRejectionReasonV2[] = ['unsupported_species'];
+    expect(reasons).toEqual(['unsupported_species']);
   });
 });
 
-describe('breedSameSpeciesV2 — полный engine (валидация + наследование)', () => {
+describe('breedSupportedSpeciesV2 — полный engine (валидация + наследование), Slice 9: все четыре комбинации', () => {
   it('species1×1 — успешно наследует геном', () => {
     const seed = distinctSeedGenome();
     const pollen = { ...distinctPollenGenome(), speciesId: 1 };
-    const result = breedSameSpeciesV2(seed, pollen, mulberry32(1));
+    const result = breedSupportedSpeciesV2(seed, pollen, mulberry32(1));
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.genomeV2.speciesId).toBe(1);
@@ -260,24 +311,37 @@ describe('breedSameSpeciesV2 — полный engine (валидация + на�
   it('species2×2 — успешно наследует геном', () => {
     const seed = fixtureGenomeV2(2);
     const pollen = fixtureGenomeV2(2);
-    const result = breedSameSpeciesV2(seed, pollen, mulberry32(2));
+    const result = breedSupportedSpeciesV2(seed, pollen, mulberry32(2));
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.genomeV2.speciesId).toBe(2);
     }
   });
 
-  it('species1×2 — отклонено с reason=interspecies_locked, без genomeV2 в результате', () => {
+  it('species1×2 (межвидовое) — успешно наследует геном, speciesId потомка = 1 (Seed)', () => {
     const seed = fixtureGenomeV2(1);
     const pollen = fixtureGenomeV2(2);
-    const result = breedSameSpeciesV2(seed, pollen, mulberry32(3));
-    expect(result).toEqual({ ok: false, reason: 'interspecies_locked' });
+    const result = breedSupportedSpeciesV2(seed, pollen, mulberry32(3));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.genomeV2.speciesId).toBe(1);
+    }
+  });
+
+  it('species2×1 (межвидовое, обратный порядок) — успешно наследует геном, speciesId потомка = 2 (Seed)', () => {
+    const seed = fixtureGenomeV2(2);
+    const pollen = fixtureGenomeV2(1);
+    const result = breedSupportedSpeciesV2(seed, pollen, mulberry32(3));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.genomeV2.speciesId).toBe(2);
+    }
   });
 
   it('species3×3 — отклонено с reason=unsupported_species', () => {
     const seed = fixtureGenomeV2(3);
     const pollen = fixtureGenomeV2(3);
-    const result = breedSameSpeciesV2(seed, pollen, mulberry32(4));
+    const result = breedSupportedSpeciesV2(seed, pollen, mulberry32(4));
     expect(result).toEqual({ ok: false, reason: 'unsupported_species' });
   });
 
@@ -287,14 +351,27 @@ describe('breedSameSpeciesV2 — полный engine (валидация + на�
       calls += 1;
       return 0.5;
     };
-    const seed = fixtureGenomeV2(1);
-    const pollen = fixtureGenomeV2(2);
-    const result = breedSameSpeciesV2(seed, pollen, countingRng);
+    const seed = fixtureGenomeV2(3);
+    const pollen = fixtureGenomeV2(5);
+    const result = breedSupportedSpeciesV2(seed, pollen, countingRng);
     expect(result.ok).toBe(false);
     expect(calls).toBe(0);
   });
 
-  it('успешная операция потребляет ровно 18 draws (2 на локус × 9 локусов)', () => {
+  it('успешная межвидовая операция (1×2) тоже потребляет ровно 18 draws (2 на локус × 9 локусов) — снятие interspecies_locked не меняет RNG-контракт', () => {
+    let calls = 0;
+    const countingRng = () => {
+      calls += 1;
+      return 0.5;
+    };
+    const seed = fixtureGenomeV2(1);
+    const pollen = fixtureGenomeV2(2);
+    const result = breedSupportedSpeciesV2(seed, pollen, countingRng);
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(18);
+  });
+
+  it('успешная одновидовая операция потребляет ровно 18 draws (2 на локус × 9 локусов)', () => {
     let calls = 0;
     const countingRng = () => {
       calls += 1;
@@ -302,7 +379,7 @@ describe('breedSameSpeciesV2 — полный engine (валидация + на�
     };
     const seed = fixtureGenomeV2(1);
     const pollen = fixtureGenomeV2(1);
-    const result = breedSameSpeciesV2(seed, pollen, countingRng);
+    const result = breedSupportedSpeciesV2(seed, pollen, countingRng);
     expect(result.ok).toBe(true);
     expect(calls).toBe(18);
   });
@@ -327,7 +404,7 @@ describe('статистический тест — генотипы Aa×Aa и �
   let dominantPhenotype = 0; // expressPhenotype === stem_standard
 
   for (let i = 0; i < TRIALS; i++) {
-    const result = breedSameSpeciesV2(seed, pollen, rng);
+    const result = breedSupportedSpeciesV2(seed, pollen, rng);
     if (!result.ok) throw new Error('unexpected rejection in statistical test');
     const pair = result.genomeV2.stemForm;
     const countStandard = (pair.a === 'stem_standard' ? 1 : 0) + (pair.b === 'stem_standard' ? 1 : 0);

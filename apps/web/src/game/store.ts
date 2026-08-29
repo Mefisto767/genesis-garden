@@ -3,7 +3,7 @@ import { MAX_PLOTS, START_UNLOCKED_PLOTS } from './types';
 import { getSeedDef } from './seedCatalog';
 import { breed, randomGenome, type BreedResult, type GeneLock } from './genetics';
 import { ensureGenomeV2Sidecars, type GenomeV2LocusKey, type HybridSeedV2 } from './geneticsV2';
-import { validateSameSpeciesParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
+import { validateSupportedParentsV2, type BreedRejectionReasonV2 } from './inheritanceV2';
 import { breedV2 } from './mutationV2';
 import { breedCostV2, pollenRewardV2 } from './pollenV2';
 import { grownRecycleDustV2, nurseryRecycleDustV2, firstRecycleTopUpV2 } from './recyclingV2';
@@ -239,9 +239,10 @@ export interface PlotStatus {
 
 /** Причины отказа `breedNurseryV2` (contract §4.8.7, расширено §4.9.3 —
  * Slice 6 добавляет `insufficient_pollen`) — store-level причины плюс
- * прозрачно прокинутые причины Slice 3-4 species-валидации
- * (`unsupported_species`/`interspecies_locked`), не переопределяя и не
- * заменяя их. */
+ * прозрачно прокинутая причина Slice 3-4 species-валидации
+ * (`unsupported_species`), не переопределяя и не заменяя её.
+ * `interspecies_locked` удалена этим типом со Slice 9 (contract §4.12) —
+ * поддерживаемые межвидовые пары (1×2/2×1) больше не отклоняются. */
 export type BreedNurseryV2RejectionReason =
   | 'same_parent'
   | 'parent_not_found'
@@ -249,7 +250,7 @@ export type BreedNurseryV2RejectionReason =
   // Slice 8 (contract §4.11.2): либо родитель — Колокольник, а Lab L2 ещё не
   // открыт. Проверяется ДО nursery_tray_full и species-валидации Slice 3-4
   // (см. breedNurseryV2 ниже) — запрещённый по лабу вид никогда не
-  // маскируется переполненным треем или interspecies_locked.
+  // маскируется переполненным треем или неподдерживаемой парой.
   | 'species_locked'
   | 'nursery_tray_full'
   | BreedRejectionReasonV2
@@ -691,12 +692,13 @@ export class GameStore {
    * шагах 1-7 `breedV2` не вызывается вообще: 0 RNG-вызовов,
    * `pollen`/`pityCounter`/`firstBreedFreeClaimed`/родители/`nurseryTray`/
    * остальной `GameState` не меняются ни на бит. Species-валидация
-   * (`unsupported_species`/`interspecies_locked`) выполняется здесь ЯВНО,
-   * шагом 5 — ДО денежной проверки (contract §4.9.3), чтобы запрещённая пара
-   * никогда не маскировалась ошибкой недостатка пыльцы; `breedV2` (Slice
-   * 3-4, без изменений) сам повторно проверяет то же самое перед реальным
-   * наследованием/mutation RNG — не убирается, просто становится избыточным
-   * defence-in-depth для этого пути.
+   * (`unsupported_species` — Slice 9, contract §4.12, снявший прежнюю
+   * причину `interspecies_locked` для поддерживаемых пар 1×2/2×1)
+   * выполняется здесь ЯВНО, шагом 6 — ДО денежной проверки (contract §4.9.3),
+   * чтобы запрещённая пара никогда не маскировалась ошибкой недостатка
+   * пыльцы; `breedV2` (Slice 3-4, без изменений) сам повторно проверяет то же
+   * самое перед реальным наследованием/mutation RNG — не убирается, просто
+   * становится избыточным defence-in-depth для этого пути.
    */
   breedNurseryV2(seedParentId: string, pollenParentId: string): BreedNurseryV2Result {
     // 1. Разные parent IDs.
@@ -709,9 +711,8 @@ export class GameStore {
     if (!seedParent.genomeV2 || !pollenParent.genomeV2) return { ok: false, reason: 'parent_missing_genome_v2' };
     // 4. Slice 8 (contract §4.11.2) — ни один родитель не Колокольник до
     //    открытия Lab L2. Проверяется раньше nursery_tray_full и
-    //    unsupported_species/interspecies_locked (шаг 6), чтобы запрещённый
-    //    по лабу вид никогда не маскировался переполненным треем или
-    //    межвидовым отказом.
+    //    unsupported_species (шаг 6), чтобы запрещённый по лабу вид никогда
+    //    не маскировался переполненным треем или species-отказом.
     if (
       !isSpeciesUnlockedV2(seedParent.genomeV2.speciesId, this.state.labLevel) ||
       !isSpeciesUnlockedV2(pollenParent.genomeV2.speciesId, this.state.labLevel)
@@ -721,9 +722,9 @@ export class GameStore {
     // 5. Nursery Tray не заполнен.
     if (this.state.nurseryTray.length >= NURSERY_TRAY_CAPACITY) return { ok: false, reason: 'nursery_tray_full' };
     // 6. Чистая species-валидация без RNG — раньше денег, чтобы
-    //    unsupported_species/interspecies_locked никогда не маскировались
-    //    insufficient_pollen.
-    const speciesValidation = validateSameSpeciesParentsV2(
+    //    unsupported_species никогда не маскировался insufficient_pollen.
+    //    Slice 9 (contract §4.12): пропускает 1×2/2×1 наравне с 1×1/2×2.
+    const speciesValidation = validateSupportedParentsV2(
       seedParent.genomeV2.speciesId,
       pollenParent.genomeV2.speciesId
     );

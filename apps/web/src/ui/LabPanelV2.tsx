@@ -10,10 +10,14 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
 /**
  * Genetics V2 — Slice 5 minimal UI (contract §4.8, delta doc §0.7 п.11),
  * расширено Slice 6 пыльцевой экономикой (contract §4.9.5, delta doc §0.8
- * п.7) и Slice 7 переработкой Nursery Tray (contract §4.10.5, delta doc §0.9
+ * п.7), Slice 7 переработкой Nursery Tray (contract §4.10.5, delta doc §0.9
+ * п.6), Slice 8 гейтом Колокольника (contract §4.11.5, delta doc §0.10 п.6)
+ * и Slice 9 межвидовым V2-скрещиванием (contract §4.12.5, delta doc §0.11
  * п.6): текущий баланс пыльцы, "Первое скрещивание: бесплатно" до первого
- * успеха, стоимость выбранной операции после, дословный текст при недостатке
- * пыльцы, disabled кнопка платного скрещивания при недостатке, список семян
+ * успеха, стоимость выбранной операции после (8 одновидовое / 12 межвидовое),
+ * дословный текст при недостатке пыльцы, disabled кнопка платного
+ * скрещивания при недостатке, явные подписанные слоты «Первый родитель»/
+ * «Второй родитель» (Seed/Pollen Parent, в порядке выбора), список семян
  * Nursery Tray с действием "Переработать" (двухшаговое подтверждение перед
  * удалением).
  *
@@ -21,16 +25,17 @@ import { SpecimenThumbnail } from './SpecimenThumbnail';
  * `LabPanel.tsx`, который остаётся нетронутым для Classic/Overhaul+Legacy
  * (owner decision, "не трогать существующий LabPanel/PlantPicker").
  *
- * Показывает ровно то, что решено в Slice 5-7: счётчик Питомника (X/8),
- * выбор двух родителей с уже существующим `genomeV2`, стоимость/бесплатность
- * и кнопку скрещивания. После успешного `breedNurseryV2` — только факт
- * «гибридное семя появилось», БЕЗ генома/фенотипа нового семени (contract
- * §4.8.7, delta doc §0.7 п.11: "геном/фенотип не показывается до
- * созревания") — то же самое верно и для семян в списке переработки ниже:
- * только безопасный номер, никогда геном/фенотип/редкость/размер будущей
- * награды. Микроскоп/межвидовое скрещивание/учебные флаги (кроме
- * `firstBreedFreeClaimed`/`firstRecycleTopUpClaimed`) — вне Slice 7 (Slice
- * 8/9).
+ * Показывает ровно то, что решено в Slice 5-9: счётчик Питомника (X/8),
+ * выбор двух родителей с уже существующим `genomeV2` (включая межвидовые пары
+ * 1×2/2×1 после Lab L2, Slice 9), стоимость/бесплатность и кнопку
+ * скрещивания. После успешного `breedNurseryV2` — только факт «гибридное
+ * семя появилось», БЕЗ генома/фенотипа нового семени (contract §4.8.7, delta
+ * doc §0.7 п.11: "геном/фенотип не показывается до созревания") — то же
+ * самое верно и для семян в списке переработки ниже: только безопасный
+ * номер, никогда геном/фенотип/редкость/размер будущей награды. Учебная
+ * подсказка про роль первого/второго родителя (Slice 12, полный онбординг) —
+ * вне этого slice, здесь только простые подписи слотов. Микроскоп — отдельный
+ * `MicroscopePanel`, не этот компонент.
  */
 
 interface LabPanelV2Props {
@@ -52,7 +57,6 @@ const REJECTION_MESSAGE: Record<BreedNurseryV2RejectionReason, string> = {
   species_locked: COLOKOLNIK_LOCKED_TEXT_V2,
   nursery_tray_full: 'Питомник заполнен — сначала посади или переработай семя.',
   unsupported_species: 'Этот вид пока не поддерживает V2-скрещивание.',
-  interspecies_locked: 'Скрещивание между разными видами пока закрыто.',
   insufficient_pollen: '', // текст строится из requiredPollen/availablePollen на месте, см. doBreed/costLabel ниже.
 };
 
@@ -99,20 +103,10 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const selectedSpecimens = selected
     .map((id) => candidates.find((s) => s.id === id))
     .filter((s): s is NonNullable<typeof s> => !!s && !!s.genomeV2);
-  // Genetics V2 — Slice 7 UI-фикс (contract §4.10.5): межвидовая пара
-  // блокируется уже на уровне выбора, не только после клика "Скрестить" —
-  // раньше (Slice 6) UI позволял выбрать такую пару, и только store отклонял
-  // её как interspecies_locked. Store-level валидация
-  // (`validateSameSpeciesParentsV2`) остаётся обязательным защитным слоем
-  // независимо от этой UI-проверки (defense-in-depth).
-  const interspeciesSelected =
-    selectedSpecimens.length === 2 &&
-    selectedSpecimens[0]!.genomeV2!.speciesId !== selectedSpecimens[1]!.genomeV2!.speciesId;
-  // Стоимость выбранной пары (contract §4.9.5) — 0, пока бесплатная первая
-  // попытка ещё не использована; иначе `breedCostV2` по видам выбранной
-  // пары (8 одновидовое; 12 межвидовое — недостижимо в проде до Slice 9,
-  // но UI честно показывает цифру, если игрок такую пару всё же выберет,
-  // отказ придёт как `interspecies_locked`, не как денежная ошибка).
+  // Стоимость выбранной пары (contract §4.9.5/§4.12) — 0, пока бесплатная
+  // первая попытка ещё не использована; иначе `breedCostV2` по видам
+  // выбранной пары (8 одновидовое; 12 межвидовое — со Slice 9 достижимо и в
+  // проде, не только в unit-тестах самой функции).
   const selectedCost =
     !firstBreedFreeClaimed || selectedSpecimens.length !== 2
       ? 0
@@ -120,7 +114,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
   const insufficientForSelection = firstBreedFreeClaimed && selected.length === 2 && pollen < selectedCost;
 
   function doBreed() {
-    if (selected.length !== 2 || interspeciesSelected) return;
+    if (selected.length !== 2) return;
     setRecycleNotice(null);
     const result = gameStore.breedNurseryV2(selected[0], selected[1]);
     if (!result.ok) {
@@ -147,7 +141,7 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
     }
   }
 
-  const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection && !interspeciesSelected;
+  const canBreed = selected.length === 2 && !trayFull && !insufficientForSelection;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -172,6 +166,34 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
         {trayFull && <p className="sheet-empty lab-hint">{nurseryTrayFullHint(nurseryTray.length, NURSERY_TRAY_CAPACITY)}</p>}
 
         <div className="album-dust">Пыльца: {pollen}</div>
+
+        {/* Genetics V2 — Slice 9 (contract §4.12): явные подписанные слоты
+            выбора родителей — первый выбранный specimen — Seed Parent
+            (задаёт вид/rig потомка), второй — Pollen Parent. Обновляются
+            реактивно из `selected`/`selectedSpecimens` — та же механика
+            выбора (`toggle()`), никакого отдельного состояния слотов. */}
+        <div className="lab-parent-slots">
+          <div className="sheet-row">
+            <div className="sheet-row-title">Первый родитель</div>
+            <div className="sheet-row-count">
+              {selectedSpecimens[0] ? (
+                <SpecimenThumbnail genome={selectedSpecimens[0].genome} size={48} />
+              ) : (
+                'не выбран'
+              )}
+            </div>
+          </div>
+          <div className="sheet-row">
+            <div className="sheet-row-title">Второй родитель</div>
+            <div className="sheet-row-count">
+              {selectedSpecimens[1] ? (
+                <SpecimenThumbnail genome={selectedSpecimens[1].genome} size={48} />
+              ) : (
+                'не выбран'
+              )}
+            </div>
+          </div>
+        </div>
 
         {notice && <p className="sheet-empty lab-hint">{notice}</p>}
         {/* Slice 7 UI-фикс (defect report bug 2): два отдельных элемента, без
@@ -212,15 +234,13 @@ export function LabPanelV2({ specimens, nurseryTray, pollen, firstBreedFreeClaim
 
         <div className="lab-footer">
           <div className="lab-footer-cost">
-            {interspeciesSelected
-              ? REJECTION_MESSAGE.interspecies_locked
-              : !firstBreedFreeClaimed
-                ? 'Первое скрещивание: бесплатно'
-                : selected.length !== 2
-                  ? 'Выбери двух родителей, чтобы увидеть стоимость'
-                  : insufficientForSelection
-                    ? `Не хватает пыльцы: нужно ${selectedCost}, есть ${pollen}`
-                    : `Стоимость: ${selectedCost} пыльцы`}
+            {!firstBreedFreeClaimed
+              ? 'Первое скрещивание: бесплатно'
+              : selected.length !== 2
+                ? 'Выбери двух родителей, чтобы увидеть стоимость'
+                : insufficientForSelection
+                  ? `Не хватает пыльцы: нужно ${selectedCost}, есть ${pollen}`
+                  : `Стоимость: ${selectedCost} пыльцы`}
           </div>
           <button className="sheet-buy-btn" disabled={!canBreed} onClick={doBreed}>
             Скрестить

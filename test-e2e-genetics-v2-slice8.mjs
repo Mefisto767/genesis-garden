@@ -6,17 +6,22 @@ import { fileURLToPath } from 'node:url';
 // Genetics V2 — Slice 8 dedicated smoke test (Overhaul+V2 build only, same
 // :4175 build as test-e2e-genetics-v2.mjs — see CLAUDE.md for the
 // VITE_VISUAL_OVERHAUL_ENABLED=true VITE_DIPLOID_GENETICS_ENABLED=true build
-// command). Covers exactly the 12 required steps for Lab L2 / the first-
-// hybrid grant / Колокольник gating / the minimal microscope (contract
-// §4.11). Does NOT re-exercise Slice 5-7 breeding-UI plumbing (already
-// covered by test-e2e-genetics-v2.mjs) — the growing V2 hybrid and, later,
-// two Колокольник specimens are injected directly via localStorage
-// time-travel, the same established technique test-e2e-genetics-v2.mjs
-// (tray-full test) and test-e2e-genetics-v2-legacy-isolation.mjs already use
-// for save states that are impractical to reach purely through UI flow
-// (breeding a same-species Колокольник pair first requires two existing
-// Колокольник specimens, which is exactly the chicken-and-egg the gate
-// exists to prevent before Lab L2).
+// command). Covers the 12 required steps for Lab L2 / the first-hybrid
+// grant / Колокольник gating / the minimal microscope (contract §4.11).
+// Step 12 was extended in the Slice 9 pass (contract §4.12): it originally
+// asserted that an inter-species pair stayed "still locked" after L2 — Slice
+// 9 supersedes that, so step 12 now covers the exact insufficient-pollen
+// text/disabled-button state, then a successful inter-species breed (with
+// the Seed Parent's speciesId/parentIds order verified), then the original
+// same-species Колокольник check, unweakened. Does NOT re-exercise Slice 5-7
+// breeding-UI plumbing (already covered by test-e2e-genetics-v2.mjs) — the
+// growing V2 hybrid and, later, two Колокольник specimens are injected
+// directly via localStorage time-travel, the same established technique
+// test-e2e-genetics-v2.mjs (tray-full test) and
+// test-e2e-genetics-v2-legacy-isolation.mjs already use for save states that
+// are impractical to reach purely through UI flow (breeding a same-species
+// Колокольник pair first requires two existing Колокольник specimens, which
+// is exactly the chicken-and-egg the gate exists to prevent before Lab L2).
 //
 // Does NOT duplicate the pure-logic/store-level coverage already in
 // labV2.test.ts / microscopeV2.test.ts / store.labV2.test.ts /
@@ -396,11 +401,15 @@ assert(stillFavorite, 'favorite remains true after a successful reveal (the micr
 await page.locator('.sheet-close').first().click(); // close the album
 await page.waitForTimeout(200);
 
-// --- Step 12: inter-species pair is still blocked (Slice 9, not Slice 8) —
-// plus, alongside it, confirm a same-species Колокольник pair IS allowed
-// after L2 (contract §4.11.2). Two Колокольник specimens injected directly
+// --- Step 12: inter-species pair is now ALLOWED after L2 (Slice 9, contract
+// §4.12 — supersedes the Slice 8-era "still locked" behavior) — plus,
+// alongside it, confirm a same-species Колокольник pair is still allowed too
+// (contract §4.11.2, unchanged). Two Колокольник specimens injected directly
 // (breeding one normally first requires an existing pair — exactly the
-// chicken-and-egg the gate exists to prevent pre-L2). ---
+// chicken-and-egg the gate exists to prevent pre-L2). Pollen intentionally
+// stays at 10 (its value since step 3) for the first assertion below —
+// exactly enough to prove the interspecies pair's insufficient-pollen path
+// before it's topped up for the two real breeds that follow. ---
 {
   const state = await readSave();
   const koloGenome = fixtureGenomeV2(2);
@@ -422,16 +431,64 @@ assert(specimenCardCount === 3, `lab shows all 3 V2-eligible specimens (Солн
 await specimenCards.nth(0).click();
 await specimenCards.nth(1).click();
 await page.waitForTimeout(200);
-const interspeciesMsgVisible = await page.getByText('Скрещивание между разными видами пока закрыто.', { exact: true }).isVisible().catch(() => false);
-assert(interspeciesMsgVisible, 'inter-species (Солнечник x Колокольник) pair shows the exact "still locked" message');
-const breedBtnDisabledInterspecies = await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).isDisabled();
-assert(breedBtnDisabledInterspecies, '"Скрестить" button disabled for the inter-species pair — Slice 9 is not implemented');
+const firstParentLabelVisible = await page.getByText('Первый родитель', { exact: true }).isVisible().catch(() => false);
+assert(firstParentLabelVisible, 'inter-species selection shows the "Первый родитель" (Seed Parent) slot label (Slice 9)');
+const secondParentLabelVisible = await page.getByText('Второй родитель', { exact: true }).isVisible().catch(() => false);
+assert(secondParentLabelVisible, 'inter-species selection shows the "Второй родитель" (Pollen Parent) slot label (Slice 9)');
+const interspeciesInsufficientTextVisible = await page
+  .getByText('Не хватает пыльцы: нужно 12, есть 10', { exact: true })
+  .isVisible()
+  .catch(() => false);
+assert(interspeciesInsufficientTextVisible, 'inter-species (Солнечник x Колокольник) pair shows the exact insufficient-pollen text (нужно 12, есть 10) before top-up');
+const breedBtnDisabledInsufficient = await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).isDisabled();
+assert(breedBtnDisabledInsufficient, '"Скрестить" button disabled while pollen (10) is below the inter-species cost (12)');
 
-// Reselect: drop the Солнечник card (index 0), keep kolo-1 (index 1), add
-// kolo-2 (index 2) -> same-species Колокольник pair.
-await specimenCards.nth(0).click(); // deselect
-await specimenCards.nth(2).click(); // add kolo-2
+// Top up pollen to exactly cover both remaining breeds this step performs:
+// 12 (inter-species) + 8 (same-species Колокольник, after) = 20.
+{
+  const state = await readSave();
+  state.pollen = 20;
+  await writeSave(state);
+}
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+await dismissOnboarding();
+await page.getByRole('button', { name: 'Лаборатория' }).click();
+await page.waitForTimeout(300);
+await specimenCards.nth(0).click();
+await specimenCards.nth(1).click();
 await page.waitForTimeout(200);
+const interspeciesCostVisible = await page.getByText('Стоимость: 12 пыльцы', { exact: true }).isVisible().catch(() => false);
+assert(interspeciesCostVisible, 'inter-species pair shows the exact "Стоимость: 12 пыльцы" text once pollen is sufficient');
+const breedBtnEnabledInterspecies = await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).isEnabled();
+assert(breedBtnEnabledInterspecies, '"Скрестить" button enabled for the inter-species pair now that pollen covers the cost');
+
+const stateBeforeInterspeciesBreed = await readSave();
+await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
+await page.waitForTimeout(300);
+const interspeciesBredNoticeVisible = await page.getByText(/Гибридное семя появилось/).isVisible().catch(() => false);
+assert(interspeciesBredNoticeVisible, 'inter-species Солнечник x Колокольник pair breeds successfully after Lab L2 (Slice 9)');
+const stateAfterInterspeciesBreed = await readSave();
+assert(
+  stateAfterInterspeciesBreed.nurseryTray.length === stateBeforeInterspeciesBreed.nurseryTray.length + 1,
+  'the inter-species breed added exactly one hybrid seed to the Nursery Tray'
+);
+assert(stateAfterInterspeciesBreed.pollen === 8, `inter-species breed deducted exactly 12 pollen (20 -> 8, got ${stateAfterInterspeciesBreed.pollen})`);
+const interspeciesSeed = stateAfterInterspeciesBreed.nurseryTray[stateAfterInterspeciesBreed.nurseryTray.length - 1];
+assert(interspeciesSeed.genomeV2.speciesId === 1, `inter-species hybrid seed speciesId equals the Seed Parent (Солнечник, id=1) — Slice 9 contract §4.12 (got ${interspeciesSeed.genomeV2.speciesId})`);
+assert(
+  interspeciesSeed.parentIds[0] === harvestedIdForFavorite && interspeciesSeed.parentIds[1] === 'kolo-1',
+  'parentIds preserved as [seedParentId, pollenParentId] for the inter-species pair'
+);
+await shot('05-interspecies-breed');
+
+// Reselect: kolo-1 (index 1) + kolo-2 (index 2) -> same-species Колокольник
+// pair, still allowed after L2 (contract §4.11.2, unchanged by Slice 9).
+await specimenCards.nth(1).click();
+await specimenCards.nth(2).click();
+await page.waitForTimeout(200);
+const sameSpeciesCostVisible = await page.getByText('Стоимость: 8 пыльцы', { exact: true }).isVisible().catch(() => false);
+assert(sameSpeciesCostVisible, 'same-species Колокольник pair shows the exact "Стоимость: 8 пыльцы" text');
 const stateBeforeSameSpeciesBreed = await readSave();
 await page.locator('.sheet-buy-btn', { hasText: 'Скрестить' }).click();
 await page.waitForTimeout(300);
@@ -442,7 +499,8 @@ assert(
   stateAfterSameSpeciesBreed.nurseryTray.length === stateBeforeSameSpeciesBreed.nurseryTray.length + 1,
   'the same-species Колокольник breed added exactly one hybrid seed to the Nursery Tray'
 );
-await shot('05-kolokolnik-same-species-breed');
+assert(stateAfterSameSpeciesBreed.pollen === 0, `same-species breed deducted exactly 8 pollen (8 -> 0, got ${stateAfterSameSpeciesBreed.pollen})`);
+await shot('06-kolokolnik-same-species-breed');
 await page.locator('.sheet-close').click();
 await page.waitForTimeout(200);
 
