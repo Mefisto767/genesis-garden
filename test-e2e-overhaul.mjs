@@ -134,7 +134,7 @@ async function worldToScreen(worldX, worldY) {
 
 // PLOT_SLOTS[0] world coords (см. worldConfig.ts) — читаем напрямую из страницы,
 // чтобы не дублировать число здесь на случай будущих правок раскладки.
-const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0]
+const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0]
 const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
 await page.mouse.click(plot0Screen.x, plot0Screen.y);
 await page.waitForTimeout(400);
@@ -155,7 +155,7 @@ const labWorld = { x: 980, y: 892 }; // worldConfig.LAB_BUILDING, interactionRad
 // origin (0.5,1) — см. EstateScene.renderBuildings), значит любая точка с
 // y > labWorld.y гарантированно вне hitbox самого спрайта, но в пределах
 // interactionRadius(100) и не над одной из плиток грядок (PLOT_SLOTS макс.
-// y=812+half24=836 — здесь y=900, уже южнее).
+// y=816+half32=848 — здесь y=900, уже южнее).
 const nearLabWorld = { x: labWorld.x - 60, y: labWorld.y + 8 };
 const nearLabScreen = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
 await page.mouse.click(nearLabScreen.x, nearLabScreen.y);

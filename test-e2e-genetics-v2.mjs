@@ -90,7 +90,7 @@ async function worldToScreen(worldX, worldY) {
   return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
 }
 
-const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0]
+const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0]
 const labWorld = { x: 980, y: 892 }; // worldConfig.LAB_BUILDING
 const nearLabWorld = { x: labWorld.x - 60, y: labWorld.y + 8 };
 const nearLabScreen = await worldToScreen(nearLabWorld.x, nearLabWorld.y);

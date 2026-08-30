@@ -203,7 +203,7 @@ async function worldToScreen(worldX, worldY) {
   if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
   return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
 }
-const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0], same constant test-e2e-genetics-v2.mjs uses
+const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0], same constant test-e2e-genetics-v2.mjs uses
 const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
 await page.mouse.click(plot0Screen.x, plot0Screen.y);
 await page.waitForTimeout(500);

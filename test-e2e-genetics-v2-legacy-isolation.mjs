@@ -176,7 +176,7 @@ async function worldToScreen(worldX, worldY) {
 // ("Постоянное растение" text). Here — GENETICS_V2_ENABLED is false — it must
 // not, and the plot's read-only rendering also does not fall through to the
 // "empty plot" branch (which would open PlantPicker instead).
-const plot1World = { x: 852, y: 732 }; // worldConfig.PLOT_SLOTS[1]
+const plot1World = { x: 800, y: 720 }; // worldConfig.PLOT_SLOTS[1]
 for (let i = 0; i < 5; i++) {
   const plot1Screen = await worldToScreen(plot1World.x, plot1World.y);
   await page.mouse.click(plot1Screen.x, plot1Screen.y);
@@ -189,7 +189,7 @@ assert(!pickerOpenedOnMature, 'clicking the Legacy-mode mature-hybridV2 plot doe
 await shot('01-mature-plot-click-no-effect');
 
 // --- Test B: clicking the growing-hybridV2 plot (plot 0) also opens nothing. ---
-const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0]
+const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0]
 for (let i = 0; i < 5; i++) {
   const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
   await page.mouse.click(plot0Screen.x, plot0Screen.y);
@@ -202,7 +202,7 @@ await shot('02-growing-plot-click-no-effect');
 // --- Test C: ordinary planting on a DIFFERENT, unoccupied plot still works
 // (Legacy planting itself is not broken by the presence of hybridV2 data
 // elsewhere in the save). ---
-const plot2World = { x: 924, y: 732 }; // worldConfig.PLOT_SLOTS[2]
+const plot2World = { x: 896, y: 720 }; // worldConfig.PLOT_SLOTS[2]
 let pickerOpenOnEmpty = false;
 for (let i = 0; i < 10 && !pickerOpenOnEmpty; i++) {
   const plot2Screen = await worldToScreen(plot2World.x, plot2World.y);

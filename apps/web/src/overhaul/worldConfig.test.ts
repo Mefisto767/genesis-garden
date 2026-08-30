@@ -75,6 +75,18 @@ describe('world sector layout invariants', () => {
     expect(ids).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
+  it('gives every Visual V1 plot a 64px footprint and a full-tile gutter', () => {
+    expect(PLOT_SLOTS.every((plot) => plot.size === 64)).toBe(true);
+    const top = PLOT_SLOTS.slice(0, 3);
+    const bottom = PLOT_SLOTS.slice(3);
+    expect(top.map((plot) => plot.x)).toEqual([704, 800, 896]);
+    expect(bottom.map((plot) => plot.x)).toEqual([704, 800, 896]);
+    expect(new Set(top.map((plot) => plot.y))).toEqual(new Set([720]));
+    expect(new Set(bottom.map((plot) => plot.y))).toEqual(new Set([816]));
+    expect(top[1].x - top[0].x - top[0].size).toBe(32);
+    expect(bottom[0].y - top[0].y - top[0].size).toBe(32);
+  });
+
   it('keeps all world objects inside the rendered camera-bounds area', () => {
     for (const b of BUILDINGS) {
       expect(b.x).toBeGreaterThanOrEqual(CAMERA_BOUNDS.x);

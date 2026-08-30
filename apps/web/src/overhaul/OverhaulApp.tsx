@@ -55,6 +55,7 @@ export function OverhaulApp() {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const phaserGameRef = useRef<ReturnType<typeof createOverhaulPhaserGame> | null>(null);
   const state = useGameState();
+  const [visualNow, setVisualNow] = useState(() => Date.now());
   const auth = useAuth();
   const [panel, setPanel] = useState<Panel>(null);
   const [plantPlotId, setPlantPlotId] = useState<number | null>(null);
@@ -102,6 +103,19 @@ export function OverhaulApp() {
   // `seedGeneticsTutorialV2()` остаётся обязательной второй защитой
   // (ветеранские save/уже засеянные), эта проверка — дополнительная, более
   // узкая по контексту вызова.
+  useEffect(() => {
+    const timer = window.setInterval(() => setVisualNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const readyCount = state.plots.reduce((count, plot) => {
+    if (!plot.unlocked) return count;
+    const status = plot.hybridV2
+      ? gameStore.hybridPlotStatusV2(plot, visualNow)
+      : gameStore.plotStatus(plot, visualNow);
+    return count + (status?.ready ? 1 : 0);
+  }, 0);
+
   useEffect(() => {
     if (GENETICS_V2_ENABLED && gameStore.isBrandNewGameV2()) gameStore.seedGeneticsTutorialV2();
   }, []);
@@ -250,6 +264,16 @@ export function OverhaulApp() {
         onOpenQuests={() => setPanel('quests')}
         hasClaimableQuest={questStatuses(state).some((q) => q.completed && !q.claimed)}
       />
+
+      {mode === 'estate' && readyCount > 0 && (
+        <button
+          className="overhaul-ready-count"
+          onClick={() => setPanel('inventory')}
+          aria-label={`Готово растений: ${readyCount}`}
+        >
+          Готово: {readyCount}
+        </button>
+      )}
 
       {isOffline && isCloudSyncEnabled && auth.status === 'signed_in' && <OfflineBanner />}
 

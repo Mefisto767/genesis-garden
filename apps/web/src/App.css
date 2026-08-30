@@ -118,6 +118,27 @@
   border-image-source: url('/assets/ui/panel_amber.png');
 }
 
+.overhaul-ready-count {
+  position: absolute;
+  top: 72px;
+  left: 12px;
+  z-index: 11;
+  min-height: 44px;
+  padding: 4px 14px;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  image-rendering: pixelated;
+  border-width: 10px;
+  border-style: solid;
+  border-image-source: url('/assets/ui/panel_green.png');
+  border-image-slice: 24 fill;
+  border-image-width: 10px;
+  text-shadow: 1px 1px 0 rgba(74, 46, 23, 0.55);
+}
+
 .sheet-backdrop {
   position: absolute;
   inset: 0;

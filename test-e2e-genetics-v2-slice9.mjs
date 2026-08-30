@@ -108,8 +108,8 @@ function legacyProjectionFor(genomeV2) {
 // worldConfig.PLOT_SLOTS[0] / [1] — same constants test-e2e-genetics-v2.mjs
 // uses. Two distinct plots so the two hybrids (species1-seed, then
 // species2-seed) can grow without conflict.
-const PLOT0_WORLD = { x: 780, y: 732 };
-const PLOT1_WORLD = { x: 852, y: 732 };
+const PLOT0_WORLD = { x: 704, y: 720 };
+const PLOT1_WORLD = { x: 800, y: 720 };
 // SPECIES_GROWTH_V2 (apps/web/src/game/nurseryV2.ts): species1 (Солнечник)
 // firstGrowMs = 5 min; species2 (Колокольник) firstGrowMs = 8 min. The
 // Seed Parent determines the resulting speciesId AND therefore which

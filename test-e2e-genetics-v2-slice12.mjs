@@ -103,7 +103,7 @@ async function worldToScreen(worldX, worldY) {
   if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
   return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
 }
-const plot0World = { x: 780, y: 732 }; // worldConfig.PLOT_SLOTS[0]
+const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0]
 const labWorld = { x: 980, y: 892 }; // worldConfig.LAB_BUILDING
 const nearLabWorld = { x: labWorld.x - 60, y: labWorld.y + 8 };
 
@@ -374,7 +374,7 @@ await page.waitForTimeout(200);
 assert(await backToEstate(), 'test 12: exited back to Estate to plant the second hybrid seed');
 
 // plot0 already holds the mature first hybrid — use the next free plot.
-const plot1World = { x: 852, y: 732 }; // worldConfig.PLOT_SLOTS[1] (same row, next slot)
+const plot1World = { x: 800, y: 720 }; // worldConfig.PLOT_SLOTS[1] (same row, next slot)
 let pickerOpen2 = false;
 for (let i = 0; i < 10 && !pickerOpen2; i++) {
   const plot1Screen = await worldToScreen(plot1World.x, plot1World.y);

@@ -108,6 +108,10 @@ export class EstateScene extends Phaser.Scene {
   private nearLab = false;
   private nearTransition: BoundaryTransition | null = null;
   private transitioning = false;
+  /** Visual V1: touch/click keeps a growing plot's contextual timer visible
+   * briefly. Hover and player proximity are derived live, not persisted. */
+  private selectedPlotId: number | null = null;
+  private selectedPlotUntil = 0;
   private readonly handleResize = () => this.layoutHud();
 
   constructor() {
@@ -341,12 +345,7 @@ export class EstateScene extends Phaser.Scene {
 
     const tile = this.addTile(x, y, size, false);
 
-    if (ready) {
-      const glow = this.add.circle(x, y - size * 0.06, size * 0.5, PALETTE.amberLight, 0.55);
-      glow.setDepth(y - 1);
-      this.tweens.add({ targets: glow, alpha: 0.2, duration: 700, yoyo: true, repeat: -1 });
-      this.plotsContainer.add(glow);
-    }
+    if (ready) this.renderReadyMarker(x, y, size);
 
     const plantSize = size * (ready ? 0.98 : 0.9);
     const plant = buildPlantSprite(this, x, y - size * 0.06, plantSize, def.speciesId, stage, def.colorway);
@@ -365,33 +364,15 @@ export class EstateScene extends Phaser.Scene {
         .setOrigin(0.5);
       labelText.setDepth(y + 1);
       this.plotsContainer.add(labelText);
-    } else {
-      const barWidth = size * 0.72;
-      const barBg = this.add
-        .rectangle(x, y + size * 0.33, barWidth, size * 0.08, PALETTE.cream, 0.95)
-        .setOrigin(0.5)
-        .setStrokeStyle(2, PALETTE.ink, 0.9);
-      const barFill = this.add
-        .rectangle(x - barWidth / 2, y + size * 0.33, barWidth * progress, size * 0.08, PALETTE.amber, 1)
-        .setOrigin(0, 0.5);
-      const timer = this.add
-        .text(x, y + size * 0.48, formatRemaining(remainingMs), {
-          fontFamily: FONT_BODY,
-          fontSize: `${size * 0.13}px`,
-          fontStyle: '700',
-          color: INK,
-          backgroundColor: '#FDF3D9',
-          padding: { left: 5, right: 5, top: 1, bottom: 1 },
-        })
-        .setOrigin(0.5);
-      barBg.setDepth(y + 1);
-      barFill.setDepth(y + 1);
-      timer.setDepth(y + 1);
-      this.plotsContainer.add([barBg, barFill, timer]);
+    } else if (this.plotContextVisible(plot.id, x, y, size)) {
+      this.renderProgressBar(x, y, size, progress, remainingMs);
     }
 
     tile.on('pointerdown', () => {
-      if (!ready) return;
+      if (!ready) {
+        this.pinPlotContext(plot.id);
+        return;
+      }
       const ok = gameStore.harvest(plot.id);
       if (ok) track('plant_harvested', { plotId: plot.id, seedId: plot.seedId });
     });
@@ -451,12 +432,7 @@ export class EstateScene extends Phaser.Scene {
       const stage = ready ? 3 : progress < STAGE2_THRESHOLD ? 1 : 2;
       const neutralColorway = { primary: PALETTE.neutral, secondary: PALETTE.neutral, leaf: PALETTE.leafDark };
 
-      if (ready) {
-        const glow = this.add.circle(x, y - size * 0.06, size * 0.5, PALETTE.amberLight, 0.55);
-        glow.setDepth(y - 1);
-        this.tweens.add({ targets: glow, alpha: 0.2, duration: 700, yoyo: true, repeat: -1 });
-        this.plotsContainer.add(glow);
-      }
+      if (ready) this.renderReadyMarker(x, y, size);
 
       const plantSize = size * (ready ? 0.98 : 0.9);
       const plant = buildPlantSprite(this, x, y - size * 0.06, plantSize, speciesId, stage, neutralColorway);
@@ -475,12 +451,15 @@ export class EstateScene extends Phaser.Scene {
           .setOrigin(0.5);
         labelText.setDepth(y + 1);
         this.plotsContainer.add(labelText);
-      } else {
+      } else if (this.plotContextVisible(plot.id, x, y, size)) {
         this.renderProgressBar(x, y, size, progress, remainingMs);
       }
 
       tile.on('pointerdown', () => {
-        if (!ready) return;
+        if (!ready) {
+          this.pinPlotContext(plot.id);
+          return;
+        }
         gameStore.harvestHybridV2(plot.id);
       });
       return;
@@ -501,11 +480,8 @@ export class EstateScene extends Phaser.Scene {
     this.plotsContainer.add(plant);
 
     if (status.ready) {
-      const glow = this.add.circle(x, y - size * 0.06, size * 0.5, PALETTE.amberLight, 0.4);
-      glow.setDepth(y - 1);
-      this.tweens.add({ targets: glow, alpha: 0.15, duration: 900, yoyo: true, repeat: -1 });
-      this.plotsContainer.add(glow);
-    } else {
+      this.renderReadyMarker(x, y, size);
+    } else if (this.plotContextVisible(plot.id, x, y, size)) {
       this.renderProgressBar(x, y, size, status.progress, status.remainingMs);
     }
 
@@ -524,7 +500,7 @@ export class EstateScene extends Phaser.Scene {
       .rectangle(x - barWidth / 2, y + size * 0.33, barWidth * progress, size * 0.08, PALETTE.amber, 1)
       .setOrigin(0, 0.5);
     const timer = this.add
-      .text(x, y + size * 0.48, formatRemaining(remainingMs), {
+      .text(x, y + size * 0.5, `Рост · ${formatRemaining(remainingMs)}`, {
         fontFamily: FONT_BODY,
         fontSize: `${size * 0.13}px`,
         fontStyle: '700',
@@ -537,6 +513,49 @@ export class EstateScene extends Phaser.Scene {
     barFill.setDepth(y + 1);
     timer.setDepth(y + 1);
     this.plotsContainer.add([barBg, barFill, timer]);
+  }
+
+  /** Context appears without filling every plot with dashboard chrome:
+   * desktop hover, player proximity, or a three-second touch/click pin. */
+  private plotContextVisible(plotId: number, x: number, y: number, size: number): boolean {
+    if (this.selectedPlotId === plotId && this.time.now <= this.selectedPlotUntil) return true;
+    const pointer = this.input.activePointer;
+    if (
+      pointer &&
+      Math.abs(pointer.worldX - x) <= size * 0.6 &&
+      Math.abs(pointer.worldY - y) <= size * 0.6
+    ) {
+      return true;
+    }
+    return !!this.player?.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) <= 88;
+  }
+
+  private pinPlotContext(plotId: number) {
+    this.selectedPlotId = plotId;
+    this.selectedPlotUntil = this.time.now + 3000;
+    this.renderPlots();
+  }
+
+  /** Ready is never encoded by colour alone: a diamond + exclamation mark
+   * supplies a stable shape while the restrained pulse supplies motion. */
+  private renderReadyMarker(x: number, y: number, size: number) {
+    const glow = this.add.circle(x, y - size * 0.08, size * 0.5, PALETTE.amberLight, 0.42);
+    glow.setDepth(y - 1);
+    const diamond = this.add
+      .rectangle(x, y - size * 0.72, size * 0.24, size * 0.24, PALETTE.amber, 1)
+      .setRotation(Math.PI / 4)
+      .setStrokeStyle(2, PALETTE.ink, 1);
+    const mark = this.add
+      .text(x, y - size * 0.72, '!', {
+        fontFamily: FONT_HEAD,
+        fontSize: `${size * 0.2}px`,
+        color: INK,
+      })
+      .setOrigin(0.5);
+    diamond.setDepth(y + 2);
+    mark.setDepth(y + 3);
+    this.tweens.add({ targets: [glow, diamond, mark], alpha: 0.28, duration: 760, yoyo: true, repeat: -1 });
+    this.plotsContainer.add([glow, diamond, mark]);
   }
 
   // ---- персонаж -------------------------------------------------------------

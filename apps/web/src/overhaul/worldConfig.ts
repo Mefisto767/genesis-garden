@@ -185,9 +185,9 @@ export const LUMI_STATION_POS: Point = tileToPx(lumiStationSlot.tile.col, lumiSt
 export const POND: Rect = { x: 740, y: 912, w: 100, h: 70 };
 
 export const DECOR: WorldDecor[] = [
-  { id: 'bench', assetId: 'decor_bench', x: 852, y: 700, displayWidth: 64, displayHeight: 42 },
+  { id: 'bench', assetId: 'decor_bench', x: 852, y: 660, displayWidth: 64, displayHeight: 42 },
   { id: 'lantern_path', assetId: 'decor_lantern', x: 700, y: 780, displayWidth: 36, displayHeight: 54 },
-  { id: 'lantern_lab', assetId: 'decor_lantern', x: 924, y: 780, displayWidth: 36, displayHeight: 54 },
+  { id: 'lantern_lab', assetId: 'decor_lantern', x: 1012, y: 780, displayWidth: 36, displayHeight: 54 },
 ];
 
 // Зарезервированная площадка landmark_central (см. estateBlueprint.ts) —
@@ -197,22 +197,23 @@ const centralLandmark = LANDMARK_SLOTS.find((l) => l.id === 'landmark_central')!
 export const LANDMARK_CENTRAL_POS: Point = tileToPx(centralLandmark.tile.col, centralLandmark.tile.row);
 
 // 6 стартовых грядок (GARDEN_CONFIG.startUnlockedPlots) как мировые сущности —
-// id 0..5 напрямую соответствуют gameStore.getState().plots[0..5]. Позиции не
-// менялись по смыслу (2 ряда по 3), только пересчитаны под новый сектор.
+// id 0..5 напрямую соответствуют gameStore.getState().plots[0..5]. Visual V1:
+// отдельные 64px footprints стоят с pitch 96px (полный 32px тайл между
+// грядками), чтобы высокое растение однозначно относилось к одной ячейке.
 export const PLOT_SLOTS: WorldPlotSlot[] = [
-  { plotId: 0, x: 780, y: 732, size: 48 },
-  { plotId: 1, x: 852, y: 732, size: 48 },
-  { plotId: 2, x: 924, y: 732, size: 48 },
-  { plotId: 3, x: 780, y: 812, size: 48 },
-  { plotId: 4, x: 852, y: 812, size: 48 },
-  { plotId: 5, x: 924, y: 812, size: 48 },
+  { plotId: 0, x: 704, y: 720, size: 64 },
+  { plotId: 1, x: 800, y: 720, size: 64 },
+  { plotId: 2, x: 896, y: 720, size: 64 },
+  { plotId: 3, x: 704, y: 816, size: 64 },
+  { plotId: 4, x: 800, y: 816, size: 64 },
+  { plotId: 5, x: 896, y: 816, size: 64 },
 ];
 
 export const NPC_PATROL: NpcPatrol = {
   id: 'mascot',
   assetId: 'npc_mascot_patrol',
-  from: { x: 780, y: 700 },
-  to: { x: 900, y: 700 },
+  from: { x: 760, y: 660 },
+  to: { x: 900, y: 660 },
   speed: 24,
   displayWidth: 40,
   displayHeight: 48,

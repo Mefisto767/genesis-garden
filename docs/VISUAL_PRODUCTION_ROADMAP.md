@@ -30,6 +30,14 @@
 9. Typed V1 asset metadata и validator.
 10. Текущие ассеты остаются явно маркированными placeholders.
 
+### Текущий прогресс V1
+
+Первый implementation pass завершил пункты 2–8: новая сетка 64/96,
+контекстный таймер, shape-based ready marker и агрегат `Готово: N` в Overhaul
+HUD. Координаты focused E2E синхронизированы. Пункты 1, 9 и production asset
+replacement остаются следующей работой; V1 ещё не объявлен принятым без
+визуального screenshot-review реального canvas.
+
 V1 не меняет рост, экономику, RNG, генетику, save schema, количество грядок
 или feature flags.
 

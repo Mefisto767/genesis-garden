@@ -142,8 +142,8 @@ async function runPhase1() {
     if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
     return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
   }
-  const plot0World = { x: 780, y: 732 };
-  const plot1World = { x: 852, y: 732 };
+  const plot0World = { x: 704, y: 720 };
+  const plot1World = { x: 800, y: 720 };
   const labWorld = { x: 980, y: 892 };
   const nearLabWorld = { x: labWorld.x - 60, y: labWorld.y + 8 };
 
@@ -573,7 +573,7 @@ async function runPhase2() {
     const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
     return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
   }
-  const plot0World = { x: 780, y: 732 };
+  const plot0World = { x: 704, y: 720 };
   let pickerOpen = false;
   for (let i = 0; i < 10 && !pickerOpen; i++) {
     const plot0Screen = await worldToScreen(plot0World.x, plot0World.y);
