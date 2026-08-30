@@ -17,13 +17,14 @@ import {
   type Point,
 } from '../../overhaul/movement';
 import { deriveLumiState, lumiFollowStep, type LumiState } from '../../overhaul/lumiBehavior';
+import { CAMERA_FOLLOW_OFFSET_Y, computeCameraZoom } from '../../overhaul/camera';
 import {
   BOUNDARY_TRANSITIONS,
   BUILDINGS,
   CAMERA_BOUNDS,
   DECOR,
   LAB_BUILDING,
-  LANDMARK_CENTRAL_POS,
+  LANDMARK_CLEARING_RENDER_POS,
   LUMI_STATION_POS,
   NPC_PATROL,
   PLAYER_SPAWN,
@@ -71,8 +72,28 @@ function hexStringToTint(hex: string): number {
   return parseInt(hex.replace('#', ''), 16);
 }
 
+/** Read-only снимок одной грядки для e2e (Visual V1): что реально
+ * отрисовано в мире прямо сейчас — без раскрытия генома/фенотипа. */
+type PlotDebugSnapshot = {
+  plotId: number;
+  x: number;
+  y: number;
+  size: number;
+  ready: boolean;
+  timerVisible: boolean;
+};
+
 type EstateDebugApi = {
-  getEstateState: () => { cameraScrollX: number; cameraScrollY: number; playerX: number; playerY: number };
+  getEstateState: () => {
+    cameraScrollX: number;
+    cameraScrollY: number;
+    cameraZoom: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    playerX: number;
+    playerY: number;
+    plots: PlotDebugSnapshot[];
+  };
 };
 
 /**
@@ -112,7 +133,10 @@ export class EstateScene extends Phaser.Scene {
    * briefly. Hover and player proximity are derived live, not persisted. */
   private selectedPlotId: number | null = null;
   private selectedPlotUntil = 0;
-  private readonly handleResize = () => this.layoutHud();
+  /** Read-only снимок отрисованных грядок текущего кадра renderPlots —
+   * только для e2e/debug API, игровая логика его не читает. */
+  private plotDebugSnapshots: PlotDebugSnapshot[] = [];
+  private readonly handleResize = () => this.applyResponsiveCamera();
 
   constructor() {
     super('Estate');
@@ -148,10 +172,15 @@ export class EstateScene extends Phaser.Scene {
     });
   }
 
-  private layoutHud() {
-    // Камера сама подстраивается под новый размер канваса (Phaser Scale.RESIZE);
-    // выделенная функция — задел на будущую адаптацию HUD-элементов сцены
-    // (сейчас всё в мировых координатах и camera.setBounds уже достаточно).
+  /** Visual V1 (docs/VISUAL_BIBLE_V1.md §3): responsive cover-камера.
+   * Вызывается на create и на каждом resize/orientation change — zoom
+   * пересчитывается из реального размера канваса и CAMERA_BOUNDS, чтобы
+   * видимая область мира никогда не выходила за границы (пустое
+   * пространство за CAMERA_BOUNDS не показывается: setBounds клампит
+   * scroll, а cover-zoom гарантирует, что viewport/zoom ≤ bounds). */
+  private applyResponsiveCamera() {
+    const cam = this.cameras.main;
+    cam.setZoom(computeCameraZoom(this.scale.width, this.scale.height));
   }
 
   /** Только для e2e/ручной проверки — read-only снимок состояния сцены на
@@ -162,10 +191,19 @@ export class EstateScene extends Phaser.Scene {
     if (typeof window === 'undefined') return;
     const api: EstateDebugApi = {
       getEstateState: () => ({
-        cameraScrollX: this.cameras.main.scrollX,
-        cameraScrollY: this.cameras.main.scrollY,
+        // Мировая координата ВИДИМОГО левого верхнего угла кадра. При
+        // zoom ≠ 1 это camera.worldView.x/y, а не scrollX/scrollY (scrollX в
+        // Phaser отсчитывается от НЕзумированной ширины кадра) — e2e-формула
+        // screenX = canvasX + (worldX - cameraScrollX) * cameraZoom остаётся
+        // верной именно с worldView.
+        cameraScrollX: this.cameras.main.worldView.x,
+        cameraScrollY: this.cameras.main.worldView.y,
+        cameraZoom: this.cameras.main.zoom,
+        viewportWidth: this.scale.width,
+        viewportHeight: this.scale.height,
         playerX: this.player.x,
         playerY: this.player.y,
+        plots: this.plotDebugSnapshots.map((p) => ({ ...p })),
       }),
     };
     (window as unknown as { __overhaulDebug?: EstateDebugApi }).__overhaulDebug = api;
@@ -202,7 +240,7 @@ export class EstateScene extends Phaser.Scene {
   /** Зарезервированная площадка landmark_central — только расчищенная
    * поляна, без монумента (см. estateBlueprint.ts LANDMARK_SLOTS). */
   private renderLandmarkClearing() {
-    const img = this.add.image(LANDMARK_CENTRAL_POS.x, LANDMARK_CENTRAL_POS.y, 'landmark_clearing');
+    const img = this.add.image(LANDMARK_CLEARING_RENDER_POS.x, LANDMARK_CLEARING_RENDER_POS.y, 'landmark_clearing');
     img.setDepth(-900);
   }
 
@@ -256,10 +294,17 @@ export class EstateScene extends Phaser.Scene {
   private renderPlots() {
     const state = gameStore.getState();
     this.plotsContainer.removeAll(true);
+    this.plotDebugSnapshots = [];
     for (const slot of PLOT_SLOTS) {
       const plot = state.plots.find((p) => p.id === slot.plotId);
       if (plot) this.renderPlotCell(plot, slot.x, slot.y, slot.size);
     }
+  }
+
+  /** Read-only debug (Visual V1 e2e): фиксирует, что реально показано на
+   * грядке в этом кадре. Не влияет на игровую логику и не раскрывает геном. */
+  private snapshotPlot(plotId: number, x: number, y: number, size: number, ready: boolean, timerVisible: boolean) {
+    this.plotDebugSnapshots.push({ plotId, x, y, size, ready, timerVisible });
   }
 
   private addTile(x: number, y: number, size: number, locked: boolean): Phaser.GameObjects.Image {
@@ -274,6 +319,7 @@ export class EstateScene extends Phaser.Scene {
 
   private renderPlotCell(plot: Plot, x: number, y: number, size: number) {
     if (!plot.unlocked) {
+      this.snapshotPlot(plot.id, x, y, size, false, false);
       const cost = gameStore.unlockCostFor(plot.id);
       const tile = this.addTile(x, y, size, true);
       const label = this.add
@@ -319,12 +365,14 @@ export class EstateScene extends Phaser.Scene {
       if (GENETICS_V2_ENABLED) {
         this.renderHybridPlotCell(plot, plot.hybridV2, x, y, size);
       } else {
+        this.snapshotPlot(plot.id, x, y, size, false, false);
         this.renderHybridPlotCellReadOnly(x, y, size);
       }
       return;
     }
 
     if (!plot.seedId) {
+      this.snapshotPlot(plot.id, x, y, size, false, false);
       const tile = this.addTile(x, y, size, false);
       const plus = this.add
         .text(x, y - size * 0.02, '+', { fontFamily: FONT_HEAD, fontSize: `${size * 0.5}px`, color: '#FDF3D9' })
@@ -352,6 +400,8 @@ export class EstateScene extends Phaser.Scene {
     plant.setDepth(y);
     this.plotsContainer.add(plant);
 
+    const timerVisible = !ready && this.plotContextVisible(plot.id, x, y, size);
+    this.snapshotPlot(plot.id, x, y, size, ready, timerVisible);
     if (ready) {
       const labelText = this.add
         .text(x, y + size * 0.38, 'Собрать', {
@@ -364,7 +414,7 @@ export class EstateScene extends Phaser.Scene {
         .setOrigin(0.5);
       labelText.setDepth(y + 1);
       this.plotsContainer.add(labelText);
-    } else if (this.plotContextVisible(plot.id, x, y, size)) {
+    } else if (timerVisible) {
       this.renderProgressBar(x, y, size, progress, remainingMs);
     }
 
@@ -439,6 +489,8 @@ export class EstateScene extends Phaser.Scene {
       plant.setDepth(y);
       this.plotsContainer.add(plant);
 
+      const timerVisible = !ready && this.plotContextVisible(plot.id, x, y, size);
+      this.snapshotPlot(plot.id, x, y, size, ready, timerVisible);
       if (ready) {
         const labelText = this.add
           .text(x, y + size * 0.38, 'Собрать', {
@@ -451,7 +503,7 @@ export class EstateScene extends Phaser.Scene {
           .setOrigin(0.5);
         labelText.setDepth(y + 1);
         this.plotsContainer.add(labelText);
-      } else if (this.plotContextVisible(plot.id, x, y, size)) {
+      } else if (timerVisible) {
         this.renderProgressBar(x, y, size, progress, remainingMs);
       }
 
@@ -479,9 +531,11 @@ export class EstateScene extends Phaser.Scene {
     plant.setDepth(y);
     this.plotsContainer.add(plant);
 
+    const matureTimerVisible = !status.ready && this.plotContextVisible(plot.id, x, y, size);
+    this.snapshotPlot(plot.id, x, y, size, status.ready, matureTimerVisible);
     if (status.ready) {
       this.renderReadyMarker(x, y, size);
-    } else if (this.plotContextVisible(plot.id, x, y, size)) {
+    } else if (matureTimerVisible) {
       this.renderProgressBar(x, y, size, status.progress, status.remainingMs);
     }
 
@@ -520,12 +574,15 @@ export class EstateScene extends Phaser.Scene {
   private plotContextVisible(plotId: number, x: number, y: number, size: number): boolean {
     if (this.selectedPlotId === plotId && this.time.now <= this.selectedPlotUntil) return true;
     const pointer = this.input.activePointer;
-    if (
-      pointer &&
-      Math.abs(pointer.worldX - x) <= size * 0.6 &&
-      Math.abs(pointer.worldY - y) <= size * 0.6
-    ) {
-      return true;
+    if (pointer) {
+      // Мировые координаты считаем сами через getWorldPoint: pointer.worldX
+      // обновляется Phaser'ом лениво и может остаться устаревшим после ухода
+      // курсора с интерактивного объекта (а при zoom ≠ 1 это давало бы ещё и
+      // навсегда «прилипший» hover-таймер).
+      const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      if (Math.abs(world.x - x) <= size * 0.6 && Math.abs(world.y - y) <= size * 0.6) {
+        return true;
+      }
     }
     return !!this.player?.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) <= 88;
   }
@@ -609,7 +666,10 @@ export class EstateScene extends Phaser.Scene {
 
   private setupCamera() {
     this.cameras.main.setBounds(CAMERA_BOUNDS.x, CAMERA_BOUNDS.y, CAMERA_BOUNDS.w, CAMERA_BOUNDS.h);
-    this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
+    // Follow-offset поднимает центр кадра чуть выше персонажа, чтобы при
+    // нижнем клампе скролла грядки не уезжали под верхний HUD (64 CSS px).
+    this.cameras.main.startFollow(this.player, true, 0.14, 0.14, 0, CAMERA_FOLLOW_OFFSET_Y);
+    this.applyResponsiveCamera();
   }
 
   private setupInput() {

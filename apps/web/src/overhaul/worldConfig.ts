@@ -143,14 +143,22 @@ const labSlot = buildingSlotById('building_laboratory')!;
 const storageSlot = buildingSlotById('building_storage')!;
 const lumiStationSlot = buildingSlotById('building_lumi_station')!;
 
-export const PLAYER_SPAWN: Point = { x: 780, y: 852 };
+// Visual V1: точка появления — на главной дорожке ПОД сеткой грядок (нижний
+// ряд заканчивается на y=848), вне любого plot footprint и вне коллизий.
+export const PLAYER_SPAWN: Point = { x: 780, y: 864 };
 
+// Visual V1: display box зданий 150→128, чтобы спрайты зданий не
+// перекрывали footprints грядок (дом справа упирался в plot 0, лаборатория
+// слева — в plot 5, и её правый край выходил за границу сектора). 128 px
+// даёт ровное касание границ (дом: правый край = 672 = левый край plot 0;
+// лаборатория: правый край = 1056 = восточная граница сектора) без
+// пересечений — см. worldConfig.test.ts "no world object overlaps a plot".
 export const HOUSE: WorldBuilding = {
   id: houseSlot.id,
   assetId: 'building_house',
   ...tileToPx(houseSlot.tile.col, houseSlot.tile.row),
-  displayWidth: 150,
-  displayHeight: 150,
+  displayWidth: 128,
+  displayHeight: 128,
   interactive: false,
   interactionRadius: 0,
   label: 'Дом',
@@ -160,8 +168,8 @@ export const LAB_BUILDING: WorldBuilding = {
   id: labSlot.id,
   assetId: 'building_lab',
   ...tileToPx(labSlot.tile.col, labSlot.tile.row),
-  displayWidth: 150,
-  displayHeight: 150,
+  displayWidth: 128,
+  displayHeight: 128,
   interactive: true,
   interactionRadius: 100,
   label: 'Лаборатория',
@@ -186,8 +194,13 @@ export const POND: Rect = { x: 740, y: 912, w: 100, h: 70 };
 
 export const DECOR: WorldDecor[] = [
   { id: 'bench', assetId: 'decor_bench', x: 852, y: 660, displayWidth: 64, displayHeight: 42 },
-  { id: 'lantern_path', assetId: 'decor_lantern', x: 700, y: 780, displayWidth: 36, displayHeight: 54 },
-  { id: 'lantern_lab', assetId: 'decor_lantern', x: 1012, y: 780, displayWidth: 36, displayHeight: 54 },
+  // Visual V1: фонарь у дорожки перенесён с (700, 780) — там его спрайт
+  // (рисуется по Y-sort ПОВЕРХ тайла грядки) перекрывал footprints
+  // грядок 0 и 3. Теперь стоит у главной дорожки ниже сетки грядок.
+  { id: 'lantern_path', assetId: 'decor_lantern', x: 700, y: 908, displayWidth: 36, displayHeight: 54 },
+  // Visual V1: фонарь у лаборатории поднят с y=780 на y=760, чтобы не
+  // прятаться под спрайтом здания лаборатории (его верхний край теперь 768).
+  { id: 'lantern_lab', assetId: 'decor_lantern', x: 1012, y: 760, displayWidth: 36, displayHeight: 54 },
 ];
 
 // Зарезервированная площадка landmark_central (см. estateBlueprint.ts) —
@@ -195,6 +208,15 @@ export const DECOR: WorldDecor[] = [
 // монумента — конкретный монумент этим этапом не придумывается).
 const centralLandmark = LANDMARK_SLOTS.find((l) => l.id === 'landmark_central')!;
 export const LANDMARK_CENTRAL_POS: Point = tileToPx(centralLandmark.tile.col, centralLandmark.tile.row);
+
+/** Visual V1: точка ОТРИСОВКИ декали "расчищенная поляна" — поднята на 16px
+ * от точки слота, чтобы 64×64 декаль не заезжала под footprint грядки 1
+ * (грядки начинаются на y=688; сам слот landmark_central и его данные в
+ * estateBlueprint.ts не меняются — это чисто презентационный сдвиг декали). */
+export const LANDMARK_CLEARING_RENDER_POS: Point = {
+  x: LANDMARK_CENTRAL_POS.x,
+  y: LANDMARK_CENTRAL_POS.y - 16,
+};
 
 // 6 стартовых грядок (GARDEN_CONFIG.startUnlockedPlots) как мировые сущности —
 // id 0..5 напрямую соответствуют gameStore.getState().plots[0..5]. Visual V1:
@@ -220,15 +242,20 @@ export const NPC_PATROL: NpcPatrol = {
 };
 
 /** Простая ломаная дорожки — используется и для отрисовки tile_path, и просто
- * как визуальный ориентир; коллизий не создаёт (дорожка не мешает ходить). */
+ * как визуальный ориентир; коллизий не создаёт (дорожка не мешает ходить).
+ *
+ * Visual V1: маршрут перепроложен — прежняя трасса шла тайлами прямо через
+ * hit areas грядок 0/3/4 (Bible §6.2: «путь не проходит через hit area
+ * грядки»). Теперь: от двери дома вниз по col 20 (x 640–672, восточнее
+ * склада), затем главный коридор по row 27 (y 864–896 — свободная полоса
+ * между нижним рядом грядок, заканчивающимся на y=848, и прудом,
+ * начинающимся на y=912) до двери лаборатории. Точка появления игрока
+ * (PLAYER_SPAWN) стоит на этом коридоре. */
 export const PATH_POLYLINE: Point[] = [
-  { x: 610, y: 790 },
-  { x: 700, y: 790 },
-  { x: 780, y: 852 },
-  { x: 780, y: 770 },
-  { x: 852, y: 770 },
-  { x: 924, y: 770 },
-  { x: 980, y: 800 },
+  { x: 656, y: 744 },
+  { x: 656, y: 880 },
+  { x: 780, y: 880 },
+  { x: 984, y: 880 },
 ];
 
 // ---- Граница открытого сектора: заросли/ворота/разрушенные проходы ---------

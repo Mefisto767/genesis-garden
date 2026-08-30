@@ -140,7 +140,7 @@ async function runPhase1() {
   async function worldToScreen(worldX, worldY) {
     const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
     if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
-    return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
+    return { x: canvasBox.x + (worldX - debug.cameraScrollX) * debug.cameraZoom, y: canvasBox.y + (worldY - debug.cameraScrollY) * debug.cameraZoom };
   }
   const plot0World = { x: 704, y: 720 };
   const plot1World = { x: 800, y: 720 };
@@ -571,7 +571,7 @@ async function runPhase2() {
   const canvasBox = await page.locator('canvas').boundingBox();
   async function worldToScreen(worldX, worldY) {
     const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
-    return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
+    return { x: canvasBox.x + (worldX - debug.cameraScrollX) * debug.cameraZoom, y: canvasBox.y + (worldY - debug.cameraScrollY) * debug.cameraZoom };
   }
   const plot0World = { x: 704, y: 720 };
   let pickerOpen = false;

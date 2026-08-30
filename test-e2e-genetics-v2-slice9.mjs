@@ -155,7 +155,7 @@ async function worldToScreen(worldX, worldY) {
   const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
   if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
   const box = await page.locator('canvas').boundingBox();
-  return { x: box.x + (worldX - debug.cameraScrollX), y: box.y + (worldY - debug.cameraScrollY) };
+  return { x: box.x + (worldX - debug.cameraScrollX) * debug.cameraZoom, y: box.y + (worldY - debug.cameraScrollY) * debug.cameraZoom };
 }
 void canvasBox0;
 

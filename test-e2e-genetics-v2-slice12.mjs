@@ -101,7 +101,7 @@ const canvasBox = await page.locator('canvas').boundingBox();
 async function worldToScreen(worldX, worldY) {
   const debug = await page.evaluate(() => window.__overhaulDebug?.getEstateState());
   if (!debug) throw new Error('window.__overhaulDebug not available — EstateScene debug hook missing');
-  return { x: canvasBox.x + (worldX - debug.cameraScrollX), y: canvasBox.y + (worldY - debug.cameraScrollY) };
+  return { x: canvasBox.x + (worldX - debug.cameraScrollX) * debug.cameraZoom, y: canvasBox.y + (worldY - debug.cameraScrollY) * debug.cameraZoom };
 }
 const plot0World = { x: 704, y: 720 }; // worldConfig.PLOT_SLOTS[0]
 const labWorld = { x: 980, y: 892 }; // worldConfig.LAB_BUILDING

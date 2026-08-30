@@ -7,14 +7,17 @@ import {
   CAMERA_BOUNDS,
   DECOR,
   LAB_BUILDING,
+  NPC_PATROL,
   PLAYER_SPAWN,
   PLOT_SLOTS,
   POND,
   SECTOR,
+  TILE,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   collisionRects,
   isInsideOpenSector,
+  pathTileCenters,
   pathTileKeySet,
   terrainAt,
 } from './worldConfig';
@@ -176,6 +179,96 @@ describe('closed sectors are inaccessible to the player', () => {
     expect(new Set(ids).size).toBe(4);
     for (const t of BOUNDARY_TRANSITIONS) {
       expect(t.label.toLowerCase()).toContain('скоро');
+    }
+  });
+});
+
+// ---- Visual V1: чистота сетки грядок (docs/VISUAL_BIBLE_V1.md §6.1/§6.2) ----
+// Спрайты зданий/декора/NPC рисуются по Y-sort ПОВЕРХ тайла грядки, поэтому
+// их видимые прямоугольники не должны пересекать footprints грядок; дорожка
+// не должна проходить тайлами через hit area грядки; персонаж появляется вне
+// грядок и коллизий.
+
+describe('Visual V1: nothing overlaps the plot grid', () => {
+  const plotRects = PLOT_SLOTS.map((p) => ({
+    x: p.x - p.size / 2,
+    y: p.y - p.size / 2,
+    w: p.size,
+    h: p.size,
+  }));
+
+  it('keeps building sprites (bottom-center anchored) off every plot footprint', () => {
+    for (const b of BUILDINGS) {
+      const spriteRect = {
+        x: b.x - b.displayWidth / 2,
+        y: b.y - b.displayHeight,
+        w: b.displayWidth,
+        h: b.displayHeight,
+      };
+      for (const plot of plotRects) {
+        expect(rectsIntersect(spriteRect, plot), `${b.id} overlaps a plot`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps decor sprites off every plot footprint', () => {
+    for (const d of DECOR) {
+      const spriteRect = {
+        x: d.x - d.displayWidth / 2,
+        y: d.y - d.displayHeight,
+        w: d.displayWidth,
+        h: d.displayHeight,
+      };
+      for (const plot of plotRects) {
+        expect(rectsIntersect(spriteRect, plot), `${d.id} overlaps a plot`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps the NPC patrol band off every plot footprint', () => {
+    const minX = Math.min(NPC_PATROL.from.x, NPC_PATROL.to.x) - NPC_PATROL.displayWidth / 2;
+    const maxX = Math.max(NPC_PATROL.from.x, NPC_PATROL.to.x) + NPC_PATROL.displayWidth / 2;
+    const minY = Math.min(NPC_PATROL.from.y, NPC_PATROL.to.y) - NPC_PATROL.displayHeight;
+    const maxY = Math.max(NPC_PATROL.from.y, NPC_PATROL.to.y);
+    const band = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    for (const plot of plotRects) {
+      expect(rectsIntersect(band, plot), 'NPC patrol crosses a plot').toBe(false);
+    }
+  });
+
+  it('keeps the pond off every plot footprint', () => {
+    for (const plot of plotRects) {
+      expect(rectsIntersect(POND, plot), 'pond overlaps a plot').toBe(false);
+    }
+  });
+
+  it('routes path tiles around every plot hit area (Bible §6.2)', () => {
+    for (const center of pathTileCenters()) {
+      const tileRect = { x: center.x - TILE / 2, y: center.y - TILE / 2, w: TILE, h: TILE };
+      for (const plot of plotRects) {
+        expect(rectsIntersect(tileRect, plot), `path tile at (${tileRect.x},${tileRect.y}) crosses a plot`).toBe(false);
+      }
+    }
+  });
+
+  it('spawns the player on the main path, outside every plot footprint and collision', () => {
+    for (const plot of plotRects) {
+      const inside =
+        PLAYER_SPAWN.x >= plot.x &&
+        PLAYER_SPAWN.x <= plot.x + plot.w &&
+        PLAYER_SPAWN.y >= plot.y &&
+        PLAYER_SPAWN.y <= plot.y + plot.h;
+      expect(inside, 'player spawns inside a plot footprint').toBe(false);
+    }
+    expect(pointBlocked(PLAYER_SPAWN, collisionRects())).toBe(false);
+    const spawnTileKey = `${Math.floor(PLAYER_SPAWN.x / TILE)},${Math.floor(PLAYER_SPAWN.y / TILE)}`;
+    expect(pathTileKeySet().has(spawnTileKey), 'player spawn stands on the main path').toBe(true);
+  });
+
+  it('keeps every building sprite fully inside the open sector horizontally', () => {
+    for (const b of BUILDINGS) {
+      expect(b.x - b.displayWidth / 2).toBeGreaterThanOrEqual(SECTOR.x);
+      expect(b.x + b.displayWidth / 2).toBeLessThanOrEqual(SECTOR.x + SECTOR.w);
     }
   });
 });
