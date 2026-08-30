@@ -25,12 +25,24 @@
 
 | id | source | status | назначение |
 |---|---|---|---|
-| `tile_grass` | procedural: `generateGrassTile` | temporary | базовая трава EstateScene |
-| `tile_path` | procedural: `generatePathTile` | temporary | дорожка |
-| `tile_water` | procedural: `generateWaterTile` (2 кадра мерцания) | temporary | пруд |
 | `tile_soil` | `assets/tiles/tile_soil.png` | approved | открытая грядка (без изменений) |
 | `tile_soil_locked` | `assets/tiles/tile_soil_locked.png` | approved | заблокированная грядка (без изменений) |
-| `tile_thicket` | procedural: `generateThicketTile` | temporary | заросли за границей открытого сектора — непроходимо |
+
+## environment art slice B (см. docs/ENVIRONMENT_ART_SLICE_B.md)
+
+Заменяет четыре старых процедурных `tile_grass`/`tile_path`/`tile_water`/
+`tile_thicket` (удалены вместе с их генераторами в `proceduralAssets.ts`) —
+шесть 32×32 material-текстур, компонуемых по 4-битной adjacency-маске
+(`overhaul/terrainComposition.ts` + `overhaul/terrainTextures.ts`).
+
+| id | source | status | назначение |
+|---|---|---|---|
+| `tile_grass_v1` | `assets/terrain/tile_grass_v1.png` | approved | базовый материал травы всего сектора |
+| `tile_grass_v1_alt` | `assets/terrain/tile_grass_v1_alt.png` | approved | разреженная вариация, чистый хэш (col,row), не RNG |
+| `tile_path_earth_v1` | `assets/terrain/tile_path_earth_v1.png` | approved | материал дорожки, компонуется по маске связности |
+| `tile_water_v1` | `assets/terrain/tile_water_v1.png` | approved | базовый кадр пруда, берег — по маске вода/не-вода |
+| `tile_water_v1_alt` | `assets/terrain/tile_water_v1_alt.png` | approved | кадр мерцания, отключается при prefers-reduced-motion |
+| `tile_thicket_v1` | `assets/terrain/tile_thicket_v1.png` | approved | материал непроходимой границы, рисуется напрямую |
 
 ## paths/water/fences
 
