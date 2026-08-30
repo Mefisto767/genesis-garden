@@ -33,6 +33,7 @@ import {
   PATH_FRINGE_FRAC,
   silhouetteCornersFor,
   thicketVariantIndex,
+  thicketNoiseSeed,
   waterAnimatesFor,
   type AdjacencyShape,
   type BankDecor,
@@ -448,39 +449,95 @@ function buildGrassTexture(scene: Phaser.Scene, col: number, row: number): strin
   return key;
 }
 
-// ---- boundary hedge (thicket): 3 deterministic variants ---------------------
+// ---- boundary hedge (thicket): per-tile deterministic variation -------------
 
-/** Owner complaint #6: the single `tile_thicket_v1` source drawn identically
- * everywhere visibly repeats along the boundary ring. With no new source art
- * available, 3 variants are produced purely by transform (flip / 180°
- * rotate — both preserve the square tile's bounding box, so occupancy/
- * collision geometry, which never reads this texture, is entirely
- * unaffected) plus a slight per-variant tint, hash-selected per tile via
- * `thicketVariantIndex` — same pattern as grass's tone variant. */
-function buildThicketTexture(scene: Phaser.Scene, variant: number): string {
-  const key = `terrain_thicket_v1_${variant}`;
+/** Owner complaint #6 (SECOND re-audit — the first correction pass did not
+ * actually fix this). Root cause, confirmed by inspecting the approved
+ * `tile_thicket_v1.png` source pixels directly: the 32×32 source itself has
+ * a strong, bespoke, radially-symmetric "eye/onion-ring" motif baked into
+ * its pixels — a distinctive one-off shape, not generic foliage texture.
+ * Any tiling of that source, however transformed, reads as an obviously
+ * repeating decorative motif, because:
+ *  - horizontal-flip / 180°-rotate are no-ops on it (confirmed byte-
+ *    identical), so the first correction pass's "3 variants" were really 1;
+ *  - even after fixing that (per-tile caching + a low-alpha fleck overlay,
+ *    same technique used for grass), the motif's contrast still dominates
+ *    a handful of small ~3-4% low-opacity dots — a real screenshot crop
+ *    still read as an obvious repeat, because grass's fleck technique
+ *    assumes a visually flat/uniform base to sit on top of, and this base
+ *    is the opposite of that.
+ *
+ * Fix: stop treating the source image as the dominant visual layer. Draw it
+ * heavily muted (tinted toward a flat dark hedge color, low remaining
+ * contrast) purely for base color/palette fidelity to the approved art,
+ * then layer a DENSE, per-tile deterministic procedural foliage-cluster
+ * pattern (overlapping blobs at varied size/darkness, `thicketNoiseSeed`-
+ * seeded) that is the dominant thing actually read at tile scale — this is
+ * what suppresses the baked-in motif instead of merely decorating it.
+ * Cached PER TILE (`terrain_thicket_v1_${col}_${row}`, same convention as
+ * `buildGrassTexture`), never per-variant. */
+function buildThicketTexture(scene: Phaser.Scene, col: number, row: number): string {
+  const key = `terrain_thicket_v1_${col}_${row}`;
   const tex = ensureCanvasTexture(scene, key, TILE);
   if (!tex) return key;
+  const variant = thicketVariantIndex(col, row);
   const ctx = tex.getContext();
   ctx.clearRect(0, 0, TILE, TILE);
   ctx.save();
   if (variant === 1) {
-    // horizontal flip
     ctx.translate(TILE, 0);
     ctx.scale(-1, 1);
   } else if (variant === 2) {
-    // 180° rotate
     ctx.translate(TILE, TILE);
     ctx.rotate(Math.PI);
   }
   ctx.drawImage(sourceImage(scene, TERRAIN_KEYS.thicket), 0, 0, TILE, TILE);
   ctx.restore();
+
+  // Mute the source's baked-in motif: a strong flat dark-hedge tint that
+  // leaves only faint value variation from the source showing through, so
+  // it contributes color/palette but is no longer the legible shape.
+  ctx.save();
+  ctx.fillStyle = 'rgba(18, 32, 14, 0.62)';
+  ctx.fillRect(0, 0, TILE, TILE);
+  ctx.restore();
   if (variant !== 0) {
     ctx.save();
-    ctx.fillStyle = variant === 1 ? 'rgba(20, 34, 16, 0.1)' : 'rgba(60, 78, 40, 0.08)';
+    ctx.fillStyle = variant === 1 ? 'rgba(20, 34, 16, 0.12)' : 'rgba(60, 78, 40, 0.1)';
     ctx.fillRect(0, 0, TILE, TILE);
     ctx.restore();
   }
+
+  // Dense per-tile procedural foliage-cluster overlay — the actual fix.
+  // Deterministic from thicketNoiseSeed(col,row); large enough and opaque
+  // enough to be the dominant visual signal at tile scale, so the muted
+  // motif underneath is no longer legible as a repeating shape. Two
+  // passes: broad soft clumps (shape/depth), then small tight leaf dots
+  // (fine texture) on top.
+  const rng = mulberry32(thicketNoiseSeed(col, row));
+  const clumpCount = 5 + Math.floor(rng() * 3);
+  for (let i = 0; i < clumpCount; i++) {
+    const fx = rng() * TILE;
+    const fy = rng() * TILE;
+    const r = TILE * (0.16 + rng() * 0.14);
+    const dark = rng() > 0.4;
+    ctx.fillStyle = dark ? 'rgba(8, 18, 6, 0.34)' : 'rgba(70, 92, 42, 0.24)';
+    ctx.beginPath();
+    ctx.arc(fx, fy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const fleckCount = 14 + Math.floor(rng() * 8);
+  for (let i = 0; i < fleckCount; i++) {
+    const fx = rng() * TILE;
+    const fy = rng() * TILE;
+    const r = TILE * (0.03 + rng() * 0.035);
+    const dark = rng() > 0.45;
+    ctx.fillStyle = dark ? 'rgba(6, 14, 5, 0.4)' : 'rgba(104, 126, 62, 0.3)';
+    ctx.beginPath();
+    ctx.arc(fx, fy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   tex.refresh();
   return key;
 }
@@ -510,8 +567,7 @@ export function terrainCellTextures(
   const kind = terrainAt(col, row, pathTiles);
 
   if (kind === 'thicket') {
-    const variant = thicketVariantIndex(col, row);
-    return { key: buildThicketTexture(scene, variant), shimmerAltKey: null };
+    return { key: buildThicketTexture(scene, col, row), shimmerAltKey: null };
   }
 
   if (kind === 'path') {
