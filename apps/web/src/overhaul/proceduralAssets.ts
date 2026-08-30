@@ -18,65 +18,14 @@ function already(scene: Phaser.Scene, key: string): boolean {
   return scene.textures.exists(key);
 }
 
-export function generateGrassTile(scene: Phaser.Scene): void {
-  if (already(scene, 'tile_grass')) return;
-  const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(PALETTE.leafDark, 1).fillRect(0, 0, 32, 32);
-  g.fillStyle(PALETTE.leaf, 1).fillRect(0, 0, 32, 30);
-  // Лёгкий детерминированный спекл — не случайный на каждый кадр, фиксированный узор.
-  const speckles: [number, number][] = [
-    [4, 6], [12, 3], [22, 9], [7, 18], [26, 15], [17, 24], [3, 27], [29, 22],
-  ];
-  g.fillStyle(PALETTE.leafLight, 0.55);
-  for (const [sx, sy] of speckles) g.fillRect(sx, sy, 2, 2);
-  g.generateTexture('tile_grass', 32, 32);
-  g.destroy();
-}
-
-export function generatePathTile(scene: Phaser.Scene): void {
-  if (already(scene, 'tile_path')) return;
-  const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(PALETTE.woodShade, 1).fillRect(0, 0, 32, 32);
-  g.fillStyle(PALETTE.wood, 1).fillRect(1, 1, 30, 30);
-  const speckles: [number, number][] = [[5, 5], [20, 8], [10, 20], [24, 24], [15, 14]];
-  g.fillStyle(PALETTE.woodShade, 0.5);
-  for (const [sx, sy] of speckles) g.fillRect(sx, sy, 2, 2);
-  g.generateTexture('tile_path', 32, 32);
-  g.destroy();
-}
-
-export function generateWaterTile(scene: Phaser.Scene): void {
-  if (already(scene, 'tile_water')) return;
-  const base = scene.make.graphics({ x: 0, y: 0 }, false);
-  base.fillStyle(0x3f7fa6, 1).fillRect(0, 0, 32, 32);
-  base.fillStyle(0x5aa0c9, 0.6).fillRect(2, 4, 26, 6);
-  base.generateTexture('tile_water', 32, 32);
-  base.destroy();
-
-  if (already(scene, 'tile_water_alt')) return;
-  const alt = scene.make.graphics({ x: 0, y: 0 }, false);
-  alt.fillStyle(0x3f7fa6, 1).fillRect(0, 0, 32, 32);
-  alt.fillStyle(0x8fc6e6, 0.6).fillRect(4, 18, 22, 6);
-  alt.generateTexture('tile_water_alt', 32, 32);
-  alt.destroy();
-}
-
-/** Заросли/дикая полоса за границей открытого сектора (см. worldConfig.ts
- * CAMERA_BOUNDS/collisionRects) — нарочито темнее и гуще травы, чтобы честно
- * читаться как "сюда пока нельзя", а не как обычный газон. */
-export function generateThicketTile(scene: Phaser.Scene): void {
-  if (already(scene, 'tile_thicket')) return;
-  const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(PALETTE.leafDark, 1).fillRect(0, 0, 32, 32);
-  g.fillStyle(0x1c2e1a, 1).fillRect(0, 0, 32, 30);
-  const clumps: [number, number, number][] = [
-    [4, 4, 6], [16, 8, 7], [26, 6, 5], [8, 18, 6], [22, 20, 7], [3, 26, 5], [28, 27, 5],
-  ];
-  g.fillStyle(0x122011, 0.85);
-  for (const [cx, cy, r] of clumps) g.fillCircle(cx, cy, r);
-  g.generateTexture('tile_thicket', 32, 32);
-  g.destroy();
-}
+// generateGrassTile/generatePathTile/generateWaterTile/generateThicketTile
+// (procedural grass/path/water/thicket prototype tiles) were removed here —
+// Environment Art Slice B (docs/ENVIRONMENT_ART_SLICE_B.md) replaced all
+// four with the approved 32×32 material textures + adjacency compositing in
+// overhaul/terrainTextures.ts. Keeping the old generators around after
+// EstateScene stopped calling them would have meant either dead code or a
+// manifest that quietly lied about what actually renders — see git history
+// for the removed implementations if a future revert is ever needed.
 
 /** Небольшой склад-сарай (building_storage) — отдельная от дома силуэт-форма
  * (дом временно переиспользует building_storage.png из v0.3-pack; этот сарай
@@ -348,10 +297,6 @@ export function generateRevealPedestal(scene: Phaser.Scene): void {
 /** Вызывается один раз из BootSceneOverhaul.preload()/create() — генерирует
  * все процедурные текстуры манифеста разом, до старта EstateScene. */
 export function generateAllProceduralTextures(scene: Phaser.Scene): void {
-  generateGrassTile(scene);
-  generatePathTile(scene);
-  generateWaterTile(scene);
-  generateThicketTile(scene);
   generateGateTexture(scene);
   generateRuinedPassageTexture(scene);
   generateStorageShedTexture(scene);

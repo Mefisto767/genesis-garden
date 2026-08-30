@@ -52,13 +52,39 @@ describe('ASSET_MANIFEST_V1 — реальный манифест против �
     expect(errors).toEqual([]);
   });
 
-  it('approves only the three Art Vertical Slice A assets — everything else stays placeholder', () => {
-    // Production-арт начался ровно с Art Vertical Slice A (см.
-    // docs/ART_VERTICAL_SLICE_A.md): approved появляется только после
-    // прохождения V1 pipeline и приёмки владельцем (контракт §9).
+  it('approves exactly the Art Vertical Slice A assets plus the Environment Art Slice B materials — everything else stays placeholder', () => {
+    // Production-арт начался с Art Vertical Slice A (docs/ART_VERTICAL_SLICE_A.md)
+    // и продолжился Environment Art Slice B (docs/ENVIRONMENT_ART_SLICE_B.md):
+    // approved появляется только после прохождения V1 pipeline и приёмки
+    // владельцем (контракт §9).
     const approvedIds = ASSET_MANIFEST_V1.filter((e) => e.status === 'approved').map((e) => e.id);
-    expect(new Set(approvedIds)).toEqual(new Set(['plot_empty', 'plant_hybrid_unrevealed', 'plant_sunflower_mature']));
+    expect(new Set(approvedIds)).toEqual(
+      new Set([
+        'plot_empty',
+        'plant_hybrid_unrevealed',
+        'plant_sunflower_mature',
+        'tile_grass_v1',
+        'tile_grass_v1_alt',
+        'tile_path_earth_v1',
+        'tile_water_v1',
+        'tile_water_v1_alt',
+        'tile_thicket_v1',
+      ])
+    );
     expect(ASSET_MANIFEST_V1.filter((e) => e.status === 'placeholder').length).toBeGreaterThan(0);
+  });
+
+  it('declares all six Environment Art Slice B materials as exactly 32×32, required, with no footprint of their own', () => {
+    const ids = ['tile_grass_v1', 'tile_grass_v1_alt', 'tile_path_earth_v1', 'tile_water_v1', 'tile_water_v1_alt', 'tile_thicket_v1'];
+    for (const id of ids) {
+      const e = ASSET_MANIFEST_V1.find((x) => x.id === id);
+      expect(e, id).toBeDefined();
+      expect(e!.sourceSize, id).toEqual([32, 32]);
+      expect(e!.displaySize, id).toEqual([32, 32]);
+      expect(e!.required, id).toBe(true);
+      expect(e!.status, id).toBe('approved');
+      expect(e!.footprint, id).toBeNull();
+    }
   });
 
   it('keeps every required asset non-missing', () => {

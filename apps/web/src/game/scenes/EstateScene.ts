@@ -19,6 +19,7 @@ import {
 } from '../../overhaul/movement';
 import { deriveLumiState, lumiFollowStep, type LumiState } from '../../overhaul/lumiBehavior';
 import { CAMERA_FOLLOW_OFFSET_Y, computeCameraZoom } from '../../overhaul/camera';
+import { shouldAnimateWater, terrainCellTextures } from '../../overhaul/terrainTextures';
 import {
   BOUNDARY_TRANSITIONS,
   BUILDINGS,
@@ -37,7 +38,6 @@ import {
   TILE,
   collisionRects,
   pathTileKeySet,
-  terrainAt,
   type BoundaryTransition,
 } from '../../overhaul/worldConfig';
 
@@ -106,6 +106,23 @@ type EstateDebugApi = {
     playerX: number;
     playerY: number;
     plots: PlotDebugSnapshot[];
+    /** Environment Art Slice B (docs/ENVIRONMENT_ART_SLICE_B.md): read-only
+     * confirmation that the six approved material textures actually loaded
+     * into Phaser's texture manager — lets e2e assert real asset wiring
+     * instead of pixel-diffing screenshots, same idea as tileTextureKey/
+     * plantTextureKey above. */
+    terrainMaterialsLoaded: {
+      grass: boolean;
+      grassAlt: boolean;
+      pathEarth: boolean;
+      water: boolean;
+      waterAlt: boolean;
+      thicket: boolean;
+    };
+    /** Whether this session actually allows water shimmer animation
+     * (terrainTextures.shouldAnimateWater(), which folds in
+     * prefers-reduced-motion) — read once at scene create. */
+    waterAnimating: boolean;
   };
 };
 
@@ -150,6 +167,9 @@ export class EstateScene extends Phaser.Scene {
    * только для e2e/debug API, игровая логика его не читает. */
   private plotDebugSnapshots: PlotDebugSnapshot[] = [];
   private readonly handleResize = () => this.applyResponsiveCamera();
+  /** Environment Art Slice B: read once in renderTerrain() (create()), read
+   * back by exposeDebugHook() — see terrainMaterialsLoaded/waterAnimating. */
+  private waterAnimatingDebug = false;
 
   constructor() {
     super('Estate');
@@ -217,6 +237,15 @@ export class EstateScene extends Phaser.Scene {
         playerX: this.player.x,
         playerY: this.player.y,
         plots: this.plotDebugSnapshots.map((p) => ({ ...p })),
+        terrainMaterialsLoaded: {
+          grass: this.textures.exists('tile_grass_v1'),
+          grassAlt: this.textures.exists('tile_grass_v1_alt'),
+          pathEarth: this.textures.exists('tile_path_earth_v1'),
+          water: this.textures.exists('tile_water_v1'),
+          waterAlt: this.textures.exists('tile_water_v1_alt'),
+          thicket: this.textures.exists('tile_thicket_v1'),
+        },
+        waterAnimating: this.waterAnimatingDebug,
       }),
     };
     (window as unknown as { __overhaulDebug?: EstateDebugApi }).__overhaulDebug = api;
@@ -224,30 +253,86 @@ export class EstateScene extends Phaser.Scene {
 
   // ---- мир: террейн/декор/здания ------------------------------------------
 
+  /**
+   * Environment Art Slice B (docs/ENVIRONMENT_ART_SLICE_B.md): replaces the
+   * flat-rectangle prototype terrain (solid grass fill / brown path
+   * rectangles / blue pond rectangle / dark thicket rectangle) with the six
+   * approved 32×32 material textures, composited deterministically per cell
+   * from the SAME `terrainAt`/`pathTileKeySet` data this scene already used
+   * — no new geometry invented, only how each existing cell is painted.
+   * `terrainTextures.ts` owns the actual Canvas 2D compositing; the
+   * adjacency-mask/hash DECISIONS it consumes live in the pure, unit-tested
+   * `terrainComposition.ts`.
+   */
   private renderTerrain() {
     const pathTiles = pathTileKeySet();
+    const animateWater = shouldAnimateWater();
+    this.waterAnimatingDebug = animateWater;
     for (let row = RENDER_ROW_START; row < RENDER_ROW_START + RENDER_ROWS; row++) {
       for (let col = RENDER_COL_START; col < RENDER_COL_START + RENDER_COLS; col++) {
-        const kind = terrainAt(col, row, pathTiles);
-        const key =
-          kind === 'grass' ? 'tile_grass' : kind === 'path' ? 'tile_path' : kind === 'water' ? 'tile_water' : 'tile_thicket';
+        const { key, shimmerAltKey } = terrainCellTextures(this, col, row, pathTiles, animateWater);
         const img = this.add.image(col * TILE, row * TILE, key).setOrigin(0, 0);
         img.setDepth(-1000);
-        if (kind === 'water') {
-          const shine = this.add.image(col * TILE, row * TILE, 'tile_water_alt').setOrigin(0, 0);
+        if (shimmerAltKey) {
+          // Water shimmer: alternate/crossfade the two composited water
+          // frames. shouldAnimateWater() already folded in
+          // prefers-reduced-motion (terrainComposition.waterAnimatesFor) —
+          // shimmerAltKey is only ever non-null when animation is allowed,
+          // so reduced motion always renders exactly the base frame, never
+          // this tween.
+          const shine = this.add.image(col * TILE, row * TILE, shimmerAltKey).setOrigin(0, 0);
           shine.setDepth(-999);
           shine.setAlpha(0);
           this.tweens.add({
             targets: shine,
-            alpha: 0.6,
-            duration: 1400 + ((col + row) % 5) * 120,
+            alpha: 0.55,
+            duration: 1600 + ((col + row) % 5) * 140,
             yoyo: true,
             repeat: -1,
-            delay: ((col * 7 + row * 13) % 10) * 80,
+            delay: ((col * 7 + row * 13) % 10) * 90,
           });
         }
       }
     }
+  }
+
+  /**
+   * Environment Art Slice B: one restrained soft contact-shadow recipe,
+   * shared by buildings/plots/player/Lumi (docs/ENVIRONMENT_ART_SLICE_B.md
+   * "Locked visual direction" — warm daylight from upper-left, one shadow
+   * language). Presentation only: no setInteractive, never added to
+   * `obstacles`/collisionRects, so it cannot affect hit areas or collision.
+   * Two stacked low-alpha ellipses fake a soft edge without a real blur
+   * filter (Phaser has no cheap CSS-blur-equivalent for this without a
+   * post-fx pipeline, which is out of scope for a "restrained" shadow) —
+   * an explicit, documented interpretation choice, not a silent shortcut.
+   * Offset is down-right, consistent with the locked upper-left light
+   * direction. Depth is placed just below `depth` so it never draws over
+   * the object that casts it, regardless of call order.
+   */
+  private addContactShadow(x: number, y: number, width: number, depth: number) {
+    const w = width;
+    const h = width * 0.3;
+    const ox = w * 0.08;
+    const oy = h * 0.32;
+    const outer = this.add.ellipse(x + ox, y + oy, w, h, 0x1a1208, 0.14).setDepth(depth);
+    const inner = this.add.ellipse(x + ox, y + oy, w * 0.62, h * 0.62, 0x1a1208, 0.14).setDepth(depth);
+    return [outer, inner];
+  }
+
+  /** Same shadow recipe as `addContactShadow`, but as loose GameObjects
+   * meant to be added as the FIRST children of a Container (player/Lumi) —
+   * container-local coordinates, no explicit depth (the container's single
+   * depth value governs the whole group; drawing the shadow before the body
+   * sprite already keeps it visually behind, same idea as depth ordering). */
+  private buildContactShadowChild(width: number): Phaser.GameObjects.Ellipse[] {
+    const w = width;
+    const h = width * 0.3;
+    const ox = w * 0.08;
+    const oy = h * 0.32;
+    const outer = this.add.ellipse(ox, oy, w, h, 0x1a1208, 0.14);
+    const inner = this.add.ellipse(ox, oy, w * 0.62, h * 0.62, 0x1a1208, 0.14);
+    return [outer, inner];
   }
 
   /** Зарезервированная площадка landmark_central — только расчищенная
@@ -269,6 +354,7 @@ export class EstateScene extends Phaser.Scene {
 
   private renderBuildings() {
     for (const b of BUILDINGS) {
+      this.addContactShadow(b.x, b.y, b.displayWidth * 0.7, b.y - 1);
       const img = this.add
         .image(b.x, b.y, b.assetId)
         .setOrigin(0.5, 1)
@@ -335,6 +421,10 @@ export class EstateScene extends Phaser.Scene {
     // unlocked plot cell (empty, growing, ready, permanent V2 hybrid) — the
     // same role tile_soil already played. Locked plots are out of this
     // pack's scope and keep 'tile_soil_locked' unchanged.
+    // Environment Art Slice B: restrained contact shadow behind every plot
+    // tile, same recipe as buildings/player/Lumi.
+    const shadow = this.addContactShadow(x, y, size * 0.8, y - 1);
+    this.plotsContainer.add(shadow);
     const tile = this.add
       .image(x, y, locked ? 'tile_soil_locked' : 'plot_empty_v1')
       .setDisplaySize(size, size)
@@ -697,9 +787,10 @@ export class EstateScene extends Phaser.Scene {
   // ---- персонаж -------------------------------------------------------------
 
   private createPlayer() {
+    const shadow = this.buildContactShadowChild(20);
     const avatar = this.add.image(0, 0, 'char_avatar').setOrigin(0.5, 0.92);
     this.facingIndicator = this.add.image(10, -4, 'char_facing_indicator').setOrigin(0.5, 0.5);
-    this.player = this.add.container(PLAYER_SPAWN.x, PLAYER_SPAWN.y, [avatar, this.facingIndicator]);
+    this.player = this.add.container(PLAYER_SPAWN.x, PLAYER_SPAWN.y, [...shadow, avatar, this.facingIndicator]);
     this.player.setDepth(PLAYER_SPAWN.y);
   }
 
@@ -730,9 +821,10 @@ export class EstateScene extends Phaser.Scene {
    * добавлена в obstacles/collisionRects — намеренно: не блокирует движение
    * персонажа и не может случайно вызвать игровое действие. */
   private createLumi() {
+    const shadow = this.buildContactShadowChild(18);
     const body = this.add.image(0, 0, 'companion_lumi_idle').setOrigin(0.5, 0.92);
     this.lumiGlow = this.add.image(0, -body.displayHeight * 0.62, 'companion_lumi_glow').setAlpha(0.7);
-    this.lumi = this.add.container(this.lumiPos.x, this.lumiPos.y, [body, this.lumiGlow]);
+    this.lumi = this.add.container(this.lumiPos.x, this.lumiPos.y, [...shadow, body, this.lumiGlow]);
     this.lumi.setDepth(this.lumiPos.y);
     this.tweens.add({
       targets: this.lumiGlow,

@@ -43,6 +43,21 @@ export class BootSceneOverhaul extends Phaser.Scene {
     // Classic/dist (там EstateScene.ts целиком не импортируется, см.
     // CLAUDE.md "grep EstateScene dist/assets/*.js" и итоговый отчёт).
     this.load.image('plot_empty_v1', 'assets/tiles/plot_empty.png');
+
+    // Environment Art Slice B (docs/ENVIRONMENT_ART_SLICE_B.md). Six 32×32
+    // material textures — loaded unconditionally for Overhaul (both Legacy
+    // and V2 Genetics render EstateScene's terrain the same way; this is
+    // not a V2-only asset like the two below it). Classic never imports
+    // BootSceneOverhaul/EstateScene at all, so these never reach a Classic
+    // build (verified by the same "grep EstateScene dist/assets/*.js"
+    // tree-shake check CLAUDE.md documents for the rest of this scene).
+    this.load.image('tile_grass_v1', 'assets/terrain/tile_grass_v1.png');
+    this.load.image('tile_grass_v1_alt', 'assets/terrain/tile_grass_v1_alt.png');
+    this.load.image('tile_path_earth_v1', 'assets/terrain/tile_path_earth_v1.png');
+    this.load.image('tile_water_v1', 'assets/terrain/tile_water_v1.png');
+    this.load.image('tile_water_v1_alt', 'assets/terrain/tile_water_v1_alt.png');
+    this.load.image('tile_thicket_v1', 'assets/terrain/tile_thicket_v1.png');
+
     if (GENETICS_V2_ENABLED) {
       this.load.image('plant_hybrid_unrevealed_v1', 'assets/plants/plant_hybrid_unrevealed.png');
       this.load.image('plant_sunflower_mature_v1', 'assets/plants/plant_sunflower_mature.png');
