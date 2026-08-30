@@ -1,5 +1,10 @@
 # ASSET_MANIFEST — Visual Overhaul (вертикальный срез)
 
+> Production note: следующий визуальный проход зафиксирован в
+> `VISUAL_BIBLE_V1.md`, `VISUAL_ASSET_CONTRACT.md` и
+> `VISUAL_PRODUCTION_ROADMAP.md`. Существующий пакет ниже считается
+> legacy/placeholder до прохождения V1 validation конкретным asset family.
+
 Источник правды — машиночитаемый `apps/web/src/overhaul/assetManifest.ts`.
 Этот файл — читаемая проекция того же списка для ревью художником/владельцем.
 Если правишь состав ассетов — правь оба файла синхронно (или сначала `.ts`,
