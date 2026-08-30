@@ -545,6 +545,47 @@ export const ASSET_MANIFEST: AssetManifestEntry[] = [
     status: 'temporary',
     note: 'Сам специмен рисуется существующим SpecimenThumbnail/specimenRender.ts (approved) — подставка вокруг него временная.',
   },
+
+  // ---- Art Vertical Slice A (см. docs/ART_VERTICAL_SLICE_A.md) -------------
+  {
+    id: 'plot_empty',
+    group: 'art_vertical_slice_a',
+    source: { kind: 'file', path: 'assets/tiles/plot_empty.png' },
+    purpose: 'Базовый тайл грядки — первый production-art ассет, заменяет tile_soil для незаблокированных грядок',
+    sizePx: [64, 64],
+    frameCount: 1,
+    anchor: [0.5, 0.5],
+    collisionBox: null,
+    animationFps: null,
+    sortLayer: 'ground-decor',
+    status: 'approved',
+  },
+  {
+    id: 'plant_hybrid_unrevealed',
+    group: 'art_vertical_slice_a',
+    source: { kind: 'file', path: 'assets/plants/plant_hybrid_unrevealed.png' },
+    purpose: 'Нейтральный species-neutral спрайт гибрида (hybridV2 phase=growing, до Reveal) — не раскрывает фенотип/редкость',
+    sizePx: [64, 96],
+    frameCount: 1,
+    anchor: [0.5, 1],
+    collisionBox: null,
+    animationFps: null,
+    sortLayer: 'world-object',
+    status: 'approved',
+  },
+  {
+    id: 'plant_sunflower_mature',
+    group: 'art_vertical_slice_a',
+    source: { kind: 'file', path: 'assets/plants/plant_sunflower_mature.png' },
+    purpose: 'Mature-рендер только для speciesId===1 (Солнечник) с primary===primary_coral; любой другой фенотип остаётся на процедурном рендере',
+    sizePx: [64, 96],
+    frameCount: 1,
+    anchor: [0.5, 1],
+    collisionBox: null,
+    animationFps: null,
+    sortLayer: 'world-object',
+    status: 'approved',
+  },
 ];
 
 export function assetById(id: string): AssetManifestEntry | undefined {

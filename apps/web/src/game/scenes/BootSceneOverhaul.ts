@@ -4,6 +4,7 @@ import { preloadSpecies } from '../plantArt';
 import { generateAllProceduralTextures } from '../../overhaul/proceduralAssets';
 import { BUILDINGS } from '../../overhaul/worldConfig';
 import { assetById } from '../../overhaul/assetManifest';
+import { GENETICS_V2_ENABLED } from '../featureFlags';
 
 /**
  * Boot-сцена overhaul-режима — расширяет обычный BootScene: та же загрузка
@@ -24,6 +25,23 @@ export class BootSceneOverhaul extends Phaser.Scene {
     this.load.image('decor_bench', 'assets/decor/decor_bench.png');
     this.load.image('decor_lantern', 'assets/decor/decor_lantern.png');
     this.load.image('ui_panel_cream', 'assets/ui/panel_cream.png');
+
+    // Art Vertical Slice A (см. docs/ART_VERTICAL_SLICE_A.md). plot_empty
+    // заменяет tile_soil для ЛЮБОЙ незаблокированной грядки в обоих
+    // overhaul-режимах (Legacy и V2) — грузится всегда. Гибрид/Солнечник —
+    // строго V2-lifecycle ассеты (renderHybridPlotCell), Overhaul + Legacy
+    // Genetics их не рендерит вообще (renderHybridPlotCellReadOnly), поэтому
+    // load вызов гейтится тем же GENETICS_V2_ENABLED, что и сам рендер —
+    // не только чтобы не тратить сеть впустую в Legacy-режиме, но и чтобы
+    // строковые литералы путей этих двух файлов не появлялись в
+    // dist-overhaul (Overhaul + Legacy) бандле при статическом
+    // dead-code-elimination константного `if (false)` (GENETICS_V2_ENABLED
+    // строится из import.meta.env.VITE_*, статически инлайнится на билде).
+    this.load.image('plot_empty_v1', 'assets/tiles/plot_empty.png');
+    if (GENETICS_V2_ENABLED) {
+      this.load.image('plant_hybrid_unrevealed_v1', 'assets/plants/plant_hybrid_unrevealed.png');
+      this.load.image('plant_sunflower_mature_v1', 'assets/plants/plant_sunflower_mature.png');
+    }
 
     // Здания — только реальные файловые ассеты манифеста (пропускаем missing/procedural).
     for (const b of BUILDINGS) {

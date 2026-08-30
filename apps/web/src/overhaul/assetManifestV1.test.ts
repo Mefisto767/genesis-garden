@@ -52,10 +52,12 @@ describe('ASSET_MANIFEST_V1 — реальный манифест против �
     expect(errors).toEqual([]);
   });
 
-  it('marks every existing image as placeholder — nothing is approved yet', () => {
-    // Production-арт не начинался: approved появляется только после
+  it('approves only the three Art Vertical Slice A assets — everything else stays placeholder', () => {
+    // Production-арт начался ровно с Art Vertical Slice A (см.
+    // docs/ART_VERTICAL_SLICE_A.md): approved появляется только после
     // прохождения V1 pipeline и приёмки владельцем (контракт §9).
-    expect(ASSET_MANIFEST_V1.some((e) => e.status === 'approved')).toBe(false);
+    const approvedIds = ASSET_MANIFEST_V1.filter((e) => e.status === 'approved').map((e) => e.id);
+    expect(new Set(approvedIds)).toEqual(new Set(['plot_empty', 'plant_hybrid_unrevealed', 'plant_sunflower_mature']));
     expect(ASSET_MANIFEST_V1.filter((e) => e.status === 'placeholder').length).toBeGreaterThan(0);
   });
 

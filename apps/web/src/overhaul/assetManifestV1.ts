@@ -10,8 +10,11 @@
 //                   прошло V1 validation и не объявляется production-артом.
 //                   ВСЕ текущие изображения v0.2/v0.3-паков — placeholder.
 //   'approved'    — прошло полный V1 pipeline и принято владельцем.
-//                   На момент создания манифеста таких ассетов НЕТ —
-//                   production-арт ещё не начинался (и не должен был).
+//                   На момент создания манифеста таких ассетов НЕ было —
+//                   production-арт ещё не начинался. Первые три approved
+//                   записи появились с Art Vertical Slice A (см.
+//                   docs/ART_VERTICAL_SLICE_A.md): plot_empty,
+//                   plant_hybrid_unrevealed, plant_sunflower_mature.
 //   'missing'     — файла не существует вообще; целевой слот будущего арта.
 //
 // Сцены ПОКА продолжают использовать legacy assetManifest.ts — переключение
@@ -246,6 +249,51 @@ export const ASSET_MANIFEST_V1: AssetMetadataV1[] = [
   // ---- plant layer sets (виды 1–2, стадии 1–3) ------------------------------
   ...plantLayerEntries('species01'),
   ...plantLayerEntries('species02'),
+
+  // ---- Art Vertical Slice A (см. docs/ART_VERTICAL_SLICE_A.md) -------------
+  // Первые три approved production-ассета манифеста. Runtime-производные
+  // (64×64 / 64×96), сгенерированы детерминированно
+  // scripts/build-art-vertical-slice-a.py из untouched source-PNG в
+  // apps/web/art_source/v1/ (не публикуются, вне public/).
+  {
+    id: 'plot_empty',
+    file: 'assets/tiles/plot_empty.png',
+    sourceSize: [64, 64],
+    displaySize: [64, 64],
+    anchor: [0.5, 0.5],
+    footprint: null,
+    interactionPoint: [0, 0],
+    depthOffset: 0,
+    status: 'approved',
+    required: true,
+    note: 'Art Vertical Slice A — заменяет tile_soil как базовый тайл грядки (EstateScene.addTile).',
+  },
+  {
+    id: 'plant_hybrid_unrevealed',
+    file: 'assets/plants/plant_hybrid_unrevealed.png',
+    sourceSize: [64, 96],
+    displaySize: [64, 96],
+    anchor: [0.5, 1],
+    footprint: null,
+    interactionPoint: null,
+    depthOffset: 0,
+    status: 'approved',
+    required: true,
+    note: 'Art Vertical Slice A — нейтральный species-neutral спрайт для hybridV2 phase=growing (planted/growing/pending-Reveal), не раскрывает фенотип/редкость.',
+  },
+  {
+    id: 'plant_sunflower_mature',
+    file: 'assets/plants/plant_sunflower_mature.png',
+    sourceSize: [64, 96],
+    displaySize: [64, 96],
+    anchor: [0.5, 1],
+    footprint: null,
+    interactionPoint: null,
+    depthOffset: 0,
+    status: 'approved',
+    required: true,
+    note: 'Art Vertical Slice A — mature-рендер ТОЛЬКО для speciesId===1 (Солнечник) с primary===primary_coral (#FF8C77); любой другой вид/цвет остаётся на процедурном рендере (см. docs/ART_VERTICAL_SLICE_A.md).',
+  },
 ];
 
 export function assetV1ById(id: string): AssetMetadataV1 | undefined {

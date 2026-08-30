@@ -6,6 +6,7 @@ import { gardenEvents } from '../events';
 import { GENETICS_V2_ENABLED } from '../featureFlags';
 import { overhaulEvents } from '../../overhaul/events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
+import { PRIMARY_HEX_TO_ID } from '../geneticsV2';
 import { track } from '../../analytics/track';
 import {
   clampToBounds,
@@ -308,13 +309,35 @@ export class EstateScene extends Phaser.Scene {
   }
 
   private addTile(x: number, y: number, size: number, locked: boolean): Phaser.GameObjects.Image {
+    // Art Vertical Slice A (docs/ART_VERTICAL_SLICE_A.md): 'plot_empty_v1'
+    // replaces the placeholder 'tile_soil' as the base tile for every
+    // unlocked plot cell (empty, growing, ready, permanent V2 hybrid) — the
+    // same role tile_soil already played. Locked plots are out of this
+    // pack's scope and keep 'tile_soil_locked' unchanged.
     const tile = this.add
-      .image(x, y, locked ? 'tile_soil_locked' : 'tile_soil')
+      .image(x, y, locked ? 'tile_soil_locked' : 'plot_empty_v1')
       .setDisplaySize(size, size)
       .setInteractive({ useHandCursor: true });
     tile.setDepth(y);
     this.plotsContainer.add(tile);
     return tile;
+  }
+
+  /**
+   * Art Vertical Slice A: bottom-center-anchored 64×96 static plant sprite
+   * (docs/VISUAL_ASSET_CONTRACT.md §5 "Plant" row). `scale` multiplies the
+   * 64px display width; height follows the fixed 2:3 source aspect ratio
+   * (64×96), no separate height parameter to avoid an inconsistent canvas.
+   * The bottom anchor (`y + size * 0.44`) matches where the previous
+   * square procedural plant's bottom edge already sat (verified against
+   * buildPlantSprite's `y - size * 0.06` center + ~size*0.98 square), so
+   * swapping sprites does not shift the visual "planted in this tile" point.
+   */
+  private addBottomAnchoredPlantSprite(x: number, y: number, size: number, key: string, scale: number): Phaser.GameObjects.Image {
+    const width = size * scale;
+    const height = width * 1.5;
+    const img = this.add.image(x, y + size * 0.44, key).setOrigin(0.5, 1).setDisplaySize(width, height);
+    return img;
   }
 
   private renderPlotCell(plot: Plot, x: number, y: number, size: number) {
@@ -477,15 +500,18 @@ export class EstateScene extends Phaser.Scene {
     const tile = this.addTile(x, y, size, false);
 
     if (hybridV2.phase === 'growing') {
-      const speciesId = hybridV2.hybrid.genomeV2.speciesId;
       const { ready, progress, remainingMs } = status;
-      const stage = ready ? 3 : progress < STAGE2_THRESHOLD ? 1 : 2;
-      const neutralColorway = { primary: PALETTE.neutral, secondary: PALETTE.neutral, leaf: PALETTE.leafDark };
 
       if (ready) this.renderReadyMarker(x, y, size);
 
-      const plantSize = size * (ready ? 0.98 : 0.9);
-      const plant = buildPlantSprite(this, x, y - size * 0.06, plantSize, speciesId, stage, neutralColorway);
+      // Art Vertical Slice A (docs/ART_VERTICAL_SLICE_A.md): one static,
+      // species-neutral "unrevealed" sprite for the whole 'growing' phase
+      // (planted/growing/pending-Reveal) — replaces the previous 3-stage
+      // procedural render, which already used a neutral colorway but still
+      // leaked shape via speciesId/stage. The new sprite reveals neither
+      // phenotype nor rarity, matching the contract's "no phenotype leak"
+      // acceptance criterion more strictly than before.
+      const plant = this.addBottomAnchoredPlantSprite(x, y, size, 'plant_hybrid_unrevealed_v1', ready ? 0.98 : 0.9);
       plant.setDepth(y);
       this.plotsContainer.add(plant);
 
@@ -522,12 +548,32 @@ export class EstateScene extends Phaser.Scene {
     const specimen = state.specimens.find((s) => s.id === hybridV2.specimenId);
     if (!specimen) return; // повреждённые данные — не рендерим (contract §4.8.4 idempotency guard)
 
-    const colorway = {
-      primary: hexStringToTint(specimen.genome.primary),
-      secondary: hexStringToTint(specimen.genome.secondary),
-      leaf: hexStringToTint(specimen.genome.leaf),
-    };
-    const plant = buildPlantSprite(this, x, y - size * 0.06, size * 0.98, specimen.genome.shape, 3, colorway);
+    // Art Vertical Slice A (docs/ART_VERTICAL_SLICE_A.md): the mature
+    // Sunflower art asset depicts exactly one phenotype — Солнечник
+    // (speciesId 1) with primary_coral (#FF8C77). It is used ONLY when the
+    // specimen's actual revealed genome matches both; every other
+    // species/primary-color keeps the existing procedural layered render,
+    // which can faithfully represent all 8 primary colors and both species.
+    // A single flat PNG cannot honestly stand in for the other 7 primary
+    // colors of the same species (see docs/ART_VERTICAL_SLICE_A.md for the
+    // full reasoning) — this is a deliberate, narrow scope, not an oversight.
+    const isCoralSunflower = specimen.genome.shape === 1 && PRIMARY_HEX_TO_ID[specimen.genome.primary] === 'primary_coral';
+
+    const plant: Phaser.GameObjects.Image | Phaser.GameObjects.Container = isCoralSunflower
+      ? this.addBottomAnchoredPlantSprite(x, y, size, 'plant_sunflower_mature_v1', 0.98)
+      : buildPlantSprite(
+          this,
+          x,
+          y - size * 0.06,
+          size * 0.98,
+          specimen.genome.shape,
+          3,
+          {
+            primary: hexStringToTint(specimen.genome.primary),
+            secondary: hexStringToTint(specimen.genome.secondary),
+            leaf: hexStringToTint(specimen.genome.leaf),
+          }
+        );
     plant.setDepth(y);
     this.plotsContainer.add(plant);
 
