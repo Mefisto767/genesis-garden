@@ -205,14 +205,32 @@ React UI
 Все world-объекты используют bottom-center Y-sort. Видимая крыша или крона
 не расширяет collision footprint.
 
+Типизированный V1 manifest (`apps/web/src/overhaul/assetManifestV1.ts`)
+использует статусы `placeholder` / `approved` / `missing`:
+
+- `placeholder` — существующее изображение или процедурная текстура,
+  временно занимающая слот; НЕ прошло V1 validation и не объявляется
+  production-артом;
+- `approved` — прошло полный V1 pipeline (§1) и принято владельцем;
+- `missing` — файла нет вообще; система честно не показывает
+  функциональность или помечает «скоро».
+
+Все текущие изображения по умолчанию — `placeholder`, пока владелец явно
+не примет конкретный asset family.
+
 Типизированный manifest валидируется тестом:
 
-- файл существует и PNG имеет ожидаемый размер;
+- файл существует и PNG имеет ожидаемый размер (фактический canvas файла
+  совпадает с `sourceSize`);
 - ID уникален;
 - anchor находится в `[0,1]`;
 - footprint валиден;
-- plant layers имеют одинаковый canvas;
+- plant layers одного набора имеют одинаковый canvas и anchor;
 - required production asset не имеет status `missing`.
+
+Camera/viewport: canvas responsive, камера — cover-подход с допустимым
+дробным zoom (см. уточнённый контракт `VISUAL_BIBLE_V1.md` §3); 960×540 —
+контрольный desktop viewport, не фиксированный размер canvas.
 
 ## 10. UI integration
 

@@ -19,7 +19,9 @@
 
 ## Первый рабочий пакет V1
 
-1. Логический viewport 960×540 и целочисленное pixel scaling.
+1. Контрольный desktop viewport 960×540 (reference, не фиксированный
+   canvas) + responsive cover-камера с дробным zoom по контракту
+   `VISUAL_BIBLE_V1.md` §3.
 2. Plot footprint 48→64 px.
 3. Pitch центров 72/80→96 px, проверка коллизий и дорожек.
 4. Selected/hover/tap state грядки.
@@ -34,8 +36,10 @@
 
 Первый implementation pass завершил пункты 2–8: новая сетка 64/96,
 контекстный таймер, shape-based ready marker и агрегат `Готово: N` в Overhaul
-HUD. Координаты focused E2E синхронизированы. Пункты 1, 9 и production asset
-replacement остаются следующей работой; V1 ещё не объявлен принятым без
+HUD. Координаты focused E2E синхронизированы. Пункты 1 (в уточнённой
+формулировке cover-камеры, см. `VISUAL_BIBLE_V1.md` §3) и 9 (typed V1
+manifest + validator) закрываются техническим V1 foundation pass; production
+asset replacement остаётся следующей работой. V1 не объявляется принятым без
 визуального screenshot-review реального canvas.
 
 V1 не меняет рост, экономику, RNG, генетику, save schema, количество грядок
