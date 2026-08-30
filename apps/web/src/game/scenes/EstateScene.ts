@@ -708,6 +708,10 @@ export class EstateScene extends Phaser.Scene {
     const reduced =
       typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const duration = reduced ? 80 : 320;
+    // Симметрично LaboratoryScene.exitToEstate (см. комментарий там): любой
+    // активный fade-эффект камеры сбрасывается, иначе fadeOut может молча
+    // не стартовать и переход зависнет с transitioning=true.
+    this.cameras.main.fadeEffect.reset();
     this.cameras.main.fadeOut(duration, 20, 15, 12);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       overhaulEvents.emit('enterLaboratory', {});

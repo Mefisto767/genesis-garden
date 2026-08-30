@@ -42,6 +42,20 @@ export class LaboratoryScene extends Phaser.Scene {
   private escKey?: Phaser.Input.Keyboard.Key;
   private transitioning = false;
   private readonly handleResize = () => this.layout();
+  /** Fix (Visual V1 pass): выход по Escape дублируется DOM-слушателем.
+   * Опрос Phaser.Input.Keyboard.JustDown в update() терял нажатие на части
+   * пересозданий сцены (Estate<->Laboratory) — это и был давно
+   * задокументированный «тайминговый флейк repeat transition» в
+   * test-e2e-overhaul.mjs. DOM keydown детерминирован; уважает тот же
+   * переключатель game.input.enabled, которым React-панели глушат Phaser
+   * (Escape внутри открытой панели по-прежнему НЕ выходит из лаборатории),
+   * а повторный вызов защищён существующим guard'ом transitioning. */
+  private readonly handleDomKeydown = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    if (!this.game.input.enabled) return;
+    if (!this.scene.isActive()) return;
+    this.exitToEstate();
+  };
 
   constructor() {
     super('Laboratory');
@@ -109,8 +123,11 @@ export class LaboratoryScene extends Phaser.Scene {
       typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     this.cameras.main.fadeIn(reduced ? 60 : 260, 20, 15, 12);
 
+    if (typeof window !== 'undefined') window.addEventListener('keydown', this.handleDomKeydown);
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.handleResize);
+      if (typeof window !== 'undefined') window.removeEventListener('keydown', this.handleDomKeydown);
     });
   }
 
@@ -166,6 +183,13 @@ export class LaboratoryScene extends Phaser.Scene {
     const reduced =
       typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const duration = reduced ? 80 : 260;
+    // Fix (Visual V1 pass): fadeIn (create) и fadeOut делят ОДИН fade-эффект
+    // камеры, и fadeOut без forceRestart молча игнорируется, пока fadeIn ещё
+    // идёт — FADE_OUT_COMPLETE тогда не наступал никогда, transitioning
+    // застревал в true, и сцена больше не реагировала ни на Escape, ни на
+    // кнопку выхода (второй механизм того же «флейка repeat transition»).
+    // reset() останавливает любой активный fade перед стартом нового.
+    this.cameras.main.fadeEffect.reset();
     this.cameras.main.fadeOut(duration, 0, 0, 0);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       overhaulEvents.emit('exitLaboratory', {});
