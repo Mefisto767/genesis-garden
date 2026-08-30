@@ -31,12 +31,17 @@ export class BootSceneOverhaul extends Phaser.Scene {
     // overhaul-режимах (Legacy и V2) — грузится всегда. Гибрид/Солнечник —
     // строго V2-lifecycle ассеты (renderHybridPlotCell), Overhaul + Legacy
     // Genetics их не рендерит вообще (renderHybridPlotCellReadOnly), поэтому
-    // load вызов гейтится тем же GENETICS_V2_ENABLED, что и сам рендер —
-    // не только чтобы не тратить сеть впустую в Legacy-режиме, но и чтобы
-    // строковые литералы путей этих двух файлов не появлялись в
-    // dist-overhaul (Overhaul + Legacy) бандле при статическом
-    // dead-code-elimination константного `if (false)` (GENETICS_V2_ENABLED
-    // строится из import.meta.env.VITE_*, статически инлайнится на билде).
+    // load вызов гейтится тем же GENETICS_V2_ENABLED, что и сам рендер: сеть
+    // за этими двумя файлами не ходит и текстура не используется в
+    // Overhaul + Legacy — тот же уровень runtime-изоляции, что уже принят
+    // для LabPanelV2/AlbumPanelV2/ShopPanelV2 (условный рендер, не условный
+    // бандл). Честная оговорка: сами строковые ЛИТЕРАЛЫ путей этих файлов
+    // (как и весь код renderHybridPlotCell) остаются частью dist-overhaul
+    // JS — проверено сборкой, esbuild/rolldown НЕ схлопывает этот `if` в
+    // dead code через реэкспортированную константу GENETICS_V2_ENABLED;
+    // истинное отсутствие строки в бандле подтверждено только для
+    // Classic/dist (там EstateScene.ts целиком не импортируется, см.
+    // CLAUDE.md "grep EstateScene dist/assets/*.js" и итоговый отчёт).
     this.load.image('plot_empty_v1', 'assets/tiles/plot_empty.png');
     if (GENETICS_V2_ENABLED) {
       this.load.image('plant_hybrid_unrevealed_v1', 'assets/plants/plant_hybrid_unrevealed.png');

@@ -6,7 +6,7 @@ import { gardenEvents } from '../events';
 import { GENETICS_V2_ENABLED } from '../featureFlags';
 import { overhaulEvents } from '../../overhaul/events';
 import { buildPlantSprite, PALETTE } from '../plantArt';
-import { PRIMARY_HEX_TO_ID } from '../geneticsV2';
+import { isCoralMatureSunflower } from '../artVerticalSliceA';
 import { track } from '../../analytics/track';
 import {
   clampToBounds,
@@ -82,6 +82,18 @@ type PlotDebugSnapshot = {
   size: number;
   ready: boolean;
   timerVisible: boolean;
+  /** Art Vertical Slice A (docs/ART_VERTICAL_SLICE_A.md) — Phaser texture
+   * key of the base plot tile currently drawn on this cell, e.g.
+   * 'plot_empty_v1' or 'tile_soil_locked'. Read-only, does not affect game
+   * logic; lets e2e assert asset wiring without pixel-diffing screenshots. */
+  tileTextureKey: string | null;
+  /** Same idea for the plant/hybrid sprite drawn on top, if any — e.g.
+   * 'plant_hybrid_unrevealed_v1' before Reveal, 'plant_sunflower_mature_v1'
+   * only for the one coral-Sunflower mature phenotype this pack covers, or
+   * null when nothing is planted. Exposing the KEY (not the genome) does not
+   * leak phenotype for the pre-Reveal neutral sprite — it is the same single
+   * key regardless of the hidden genome, by construction. */
+  plantTextureKey: string | null;
 };
 
 type EstateDebugApi = {
@@ -304,8 +316,17 @@ export class EstateScene extends Phaser.Scene {
 
   /** Read-only debug (Visual V1 e2e): фиксирует, что реально показано на
    * грядке в этом кадре. Не влияет на игровую логику и не раскрывает геном. */
-  private snapshotPlot(plotId: number, x: number, y: number, size: number, ready: boolean, timerVisible: boolean) {
-    this.plotDebugSnapshots.push({ plotId, x, y, size, ready, timerVisible });
+  private snapshotPlot(
+    plotId: number,
+    x: number,
+    y: number,
+    size: number,
+    ready: boolean,
+    timerVisible: boolean,
+    tileTextureKey: string | null = null,
+    plantTextureKey: string | null = null
+  ) {
+    this.plotDebugSnapshots.push({ plotId, x, y, size, ready, timerVisible, tileTextureKey, plantTextureKey });
   }
 
   private addTile(x: number, y: number, size: number, locked: boolean): Phaser.GameObjects.Image {
@@ -342,7 +363,7 @@ export class EstateScene extends Phaser.Scene {
 
   private renderPlotCell(plot: Plot, x: number, y: number, size: number) {
     if (!plot.unlocked) {
-      this.snapshotPlot(plot.id, x, y, size, false, false);
+      this.snapshotPlot(plot.id, x, y, size, false, false, 'tile_soil_locked', null);
       const cost = gameStore.unlockCostFor(plot.id);
       const tile = this.addTile(x, y, size, true);
       const label = this.add
@@ -388,14 +409,14 @@ export class EstateScene extends Phaser.Scene {
       if (GENETICS_V2_ENABLED) {
         this.renderHybridPlotCell(plot, plot.hybridV2, x, y, size);
       } else {
-        this.snapshotPlot(plot.id, x, y, size, false, false);
+        this.snapshotPlot(plot.id, x, y, size, false, false, 'plot_empty_v1', null);
         this.renderHybridPlotCellReadOnly(x, y, size);
       }
       return;
     }
 
     if (!plot.seedId) {
-      this.snapshotPlot(plot.id, x, y, size, false, false);
+      this.snapshotPlot(plot.id, x, y, size, false, false, 'plot_empty_v1', null);
       const tile = this.addTile(x, y, size, false);
       const plus = this.add
         .text(x, y - size * 0.02, '+', { fontFamily: FONT_HEAD, fontSize: `${size * 0.5}px`, color: '#FDF3D9' })
@@ -424,7 +445,10 @@ export class EstateScene extends Phaser.Scene {
     this.plotsContainer.add(plant);
 
     const timerVisible = !ready && this.plotContextVisible(plot.id, x, y, size);
-    this.snapshotPlot(plot.id, x, y, size, ready, timerVisible);
+    // Composite procedural render (multiple tinted layers, legacy species
+    // catalog) — no single asset id represents it, unlike the Art Vertical
+    // Slice A static sprites below.
+    this.snapshotPlot(plot.id, x, y, size, ready, timerVisible, 'plot_empty_v1', null);
     if (ready) {
       const labelText = this.add
         .text(x, y + size * 0.38, 'Собрать', {
@@ -516,7 +540,7 @@ export class EstateScene extends Phaser.Scene {
       this.plotsContainer.add(plant);
 
       const timerVisible = !ready && this.plotContextVisible(plot.id, x, y, size);
-      this.snapshotPlot(plot.id, x, y, size, ready, timerVisible);
+      this.snapshotPlot(plot.id, x, y, size, ready, timerVisible, 'plot_empty_v1', 'plant_hybrid_unrevealed_v1');
       if (ready) {
         const labelText = this.add
           .text(x, y + size * 0.38, 'Собрать', {
@@ -557,7 +581,7 @@ export class EstateScene extends Phaser.Scene {
     // A single flat PNG cannot honestly stand in for the other 7 primary
     // colors of the same species (see docs/ART_VERTICAL_SLICE_A.md for the
     // full reasoning) — this is a deliberate, narrow scope, not an oversight.
-    const isCoralSunflower = specimen.genome.shape === 1 && PRIMARY_HEX_TO_ID[specimen.genome.primary] === 'primary_coral';
+    const isCoralSunflower = isCoralMatureSunflower(specimen.genome);
 
     const plant: Phaser.GameObjects.Image | Phaser.GameObjects.Container = isCoralSunflower
       ? this.addBottomAnchoredPlantSprite(x, y, size, 'plant_sunflower_mature_v1', 0.98)
@@ -578,7 +602,16 @@ export class EstateScene extends Phaser.Scene {
     this.plotsContainer.add(plant);
 
     const matureTimerVisible = !status.ready && this.plotContextVisible(plot.id, x, y, size);
-    this.snapshotPlot(plot.id, x, y, size, status.ready, matureTimerVisible);
+    this.snapshotPlot(
+      plot.id,
+      x,
+      y,
+      size,
+      status.ready,
+      matureTimerVisible,
+      'plot_empty_v1',
+      isCoralSunflower ? 'plant_sunflower_mature_v1' : null
+    );
     if (status.ready) {
       this.renderReadyMarker(x, y, size);
     } else if (matureTimerVisible) {
