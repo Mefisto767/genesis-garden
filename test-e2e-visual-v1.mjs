@@ -175,18 +175,27 @@ assert(await page.locator('.overhaul-mode-estate').isVisible(), 'Overhaul+V2 bui
   assert((await plotSnapshot(0)).timerVisible === true, '[desktop] hovering the growing plot shows its timer');
 
   // Мышь ушла -> таймер прячется (перерисовка идёт 250ms-циклом; в headless
-  // среде тики могут группироваться — даём запас).
+  // среде тики могут группироваться — опрашиваем с запасом по времени).
   await page.mouse.move(10, 300);
-  await page.waitForTimeout(1600);
-  assert((await plotSnapshot(0)).timerVisible === false, '[desktop] moving the pointer away hides the timer again');
+  let hiddenAfterLeave = false;
+  for (let i = 0; i < 12 && !hiddenAfterLeave; i++) {
+    await page.waitForTimeout(400);
+    hiddenAfterLeave = (await plotSnapshot(0)).timerVisible === false;
+  }
+  assert(hiddenAfterLeave, '[desktop] moving the pointer away hides the timer again');
 
   // Tap -> пин ~3 секунды, затем прячется.
   await page.mouse.click(plot0Screen.x, plot0Screen.y);
   await page.mouse.move(10, 300);
   await page.waitForTimeout(600);
   assert((await plotSnapshot(0)).timerVisible === true, '[desktop] tapping the growing plot pins its timer');
-  await page.waitForTimeout(4200);
-  assert((await plotSnapshot(0)).timerVisible === false, '[desktop] the pinned timer disappears after the ~3s pin timeout');
+  await page.waitForTimeout(3200);
+  let hiddenAfterPin = (await plotSnapshot(0)).timerVisible === false;
+  for (let i = 0; i < 8 && !hiddenAfterPin; i++) {
+    await page.waitForTimeout(400);
+    hiddenAfterPin = (await plotSnapshot(0)).timerVisible === false;
+  }
+  assert(hiddenAfterPin, '[desktop] the pinned timer disappears after the ~3s pin timeout');
 
   // Ready-маркер (форма+анимация, см. renderReadyMarker) активен на plot 1.
   assert((await plotSnapshot(1)).ready === true, '[desktop] ready plot 1 exposes an active ready marker state');

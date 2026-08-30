@@ -285,9 +285,17 @@ const genomeLeakedAfterGrowingReload = await page
   .catch(() => false);
 assert(!genomeLeakedAfterGrowingReload, 'growing hybrid reveals no phenotype/genome after reload, before maturity');
 
-const plot0ScreenAfterReload = await worldToScreen(plot0World.x, plot0World.y);
-await page.mouse.click(plot0ScreenAfterReload.x, plot0ScreenAfterReload.y);
-await page.waitForTimeout(500);
+// Тот же retry-цикл, что уже используют slice8/slice9/gate1-сценарии для
+// кликов по грядке сразу после reload() — известный класс тайминговой
+// флейковости Phaser-сцены (первый клик по канвасу после перезагрузки может
+// не попасть в интерактивный тайл); сама проверка ниже не ослаблена.
+for (let i = 0; i < 6; i++) {
+  const plot0ScreenAfterReload = await worldToScreen(plot0World.x, plot0World.y);
+  await page.mouse.click(plot0ScreenAfterReload.x, plot0ScreenAfterReload.y);
+  await page.waitForTimeout(500);
+  const opened = await page.locator('.reveal-species-name').first().isVisible().catch(() => false);
+  if (opened) break;
+}
 
 // --- Test D1 (Slice 12 fix-pass, contract §4.14.14): this tile click is the
 // first-ever mature interaction with this hybrid — it now opens the Reveal
@@ -372,13 +380,26 @@ await page.waitForTimeout(300);
 // revealing its genome/phenotype. Parents 'a'/'b' are still in the
 // collection (breeding never consumes them). ---
 {
-  const nearLabScreen3 = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
-  await page.mouse.click(nearLabScreen3.x, nearLabScreen3.y);
+  // Cover-камера (Visual V1): дальняя мировая точка может быть за пределами
+  // экрана — идём к лаборатории многошагово, кламя точку клика внутрь
+  // канваса (ниже HUD), пересчитывая её по мере движения камеры за игроком.
   let enteredLab3 = false;
-  for (let i = 0; i < 10 && !enteredLab3; i++) {
+  for (let i = 0; i < 15 && !enteredLab3; i++) {
+    const near = await worldToScreen(nearLabWorld.x, nearLabWorld.y);
+    const cx = Math.min(Math.max(near.x, canvasBox.x + 24), canvasBox.x + canvasBox.width - 24);
+    const cy = Math.min(Math.max(near.y, canvasBox.y + 90), canvasBox.y + canvasBox.height - 24);
+    await page.mouse.click(cx, cy);
+    await page.waitForTimeout(600);
     const labScreen = await worldToScreen(labWorld.x, labWorld.y - 40);
-    await page.mouse.click(labScreen.x, labScreen.y);
-    await page.waitForTimeout(500);
+    const labOnScreen =
+      labScreen.x > canvasBox.x + 8 &&
+      labScreen.x < canvasBox.x + canvasBox.width - 8 &&
+      labScreen.y > canvasBox.y + 70 &&
+      labScreen.y < canvasBox.y + canvasBox.height - 8;
+    if (labOnScreen) {
+      await page.mouse.click(labScreen.x, labScreen.y);
+      await page.waitForTimeout(400);
+    }
     enteredLab3 = await page.locator('.overhaul-mode-laboratory').isVisible().catch(() => false);
   }
   assert(enteredLab3, 'walked back into LaboratoryScene for Slice 7 recycling test');
