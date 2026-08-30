@@ -65,7 +65,14 @@ export function OverhaulApp() {
   // EstateScene по клику на mature-V2-грядку (см. events.ts requestHybridCard),
   // не пересекается с существующими панелями/плантпикером.
   const [hybridCardPlotId, setHybridCardPlotId] = useState<number | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  // Fix (Visual V1 pass): тост хранится объектом, а не голой строкой. Если
+  // повторный emit ТОГО ЖЕ текста совпадал с тиком clear-таймера, React
+  // сливал null->та-же-строка в «состояние не изменилось», эффект с таймером
+  // не перезапускался — и тост застревал на экране навсегда, перехватывая
+  // клики по кнопкам под ним (так падал test-e2e-genetics-v2-slice12.mjs на
+  // «Понятно, начать»). Новый объект на каждый emit => идентичность всегда
+  // меняется => таймер всегда перевзводится.
+  const [toast, setToast] = useState<{ text: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   // Genetics V2 — Slice 12 (onboarding spec §14/§17): при активной Genetics
   // V2 старый 4-слайдовый общий тур не показывается вообще — новый
@@ -193,7 +200,7 @@ export function OverhaulApp() {
 
   useEffect(() => {
     const offPlant = gardenEvents.on('requestPlant', ({ plotId }) => setPlantPlotId(plotId));
-    const offToast = gardenEvents.on('toast', ({ text }) => setToast(text));
+    const offToast = gardenEvents.on('toast', ({ text }) => setToast({ text }));
     // Fix-pass (audit, bug 1): подписка на requestHybridCard — только при
     // активном GENETICS_V2_ENABLED. EstateScene и так никогда не эмитит этот
     // ивент, когда флаг выключен (см. EstateScene.ts renderHybridPlotCellReadOnly),
@@ -391,7 +398,7 @@ export function OverhaulApp() {
           подсказок Люми — только Overhaul+V2, не модальна (рендерится вне
           isOverlayOpen — не должна блокировать игру ни в каком виде). */}
       {GENETICS_V2_ENABLED && <LumiHintBubble />}
-      {toast && <Toast text={toast} />}
+      {toast && <Toast text={toast.text} />}
     </div>
   );
 }
