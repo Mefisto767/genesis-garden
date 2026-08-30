@@ -119,3 +119,149 @@ export function bankDecorAt(col: number, row: number): BankDecor {
 export function waterAnimatesFor(prefersReducedMotion: boolean): boolean {
   return !prefersReducedMotion;
 }
+
+// ============================================================================
+// Visual Correction (docs/ENVIRONMENT_ART_SLICE_B_VISUAL_CORRECTION.md) —
+// added on top of the original Slice B pure logic above (unchanged). Same
+// split as before: this module only decides WHAT to draw (variant indices,
+// corner geometry, shadow dimensions) via pure coordinate-hash functions —
+// the actual Canvas 2D pixel drawing lives in terrainTextures.ts.
+// ============================================================================
+
+/** Grass tone variants: at least 3, hash-selected per tile, applied ON TOP
+ * of whichever of the two approved source PNGs (`tile_grass_v1`/`_alt`,
+ * still picked by `grassVariantAlt` above, unchanged) forms the base — a
+ * per-tile hue/brightness/fleck-noise treatment so no two adjacent tiles of
+ * the same source render pixel-identical (owner complaint #1: "too flat/
+ * uniform"). Pure coordinate hash, never game RNG. */
+export const GRASS_TONE_VARIANT_COUNT = 3;
+
+export function grassToneVariant(col: number, row: number): number {
+  return mixHash(col * 3 + 1, row * 3 + 1) % GRASS_TONE_VARIANT_COUNT;
+}
+
+/** Per-tile deterministic seed for the fleck/noise pattern drawn into the
+ * grass texture — NOT the tone variant (that picks a color treatment; this
+ * seeds where individual flecks land) so two tiles sharing a tone variant
+ * still don't look identical. Pure function of (col,row). */
+export function grassNoiseSeed(col: number, row: number): number {
+  return mixHash(col * 7 + 3, row * 7 + 3);
+}
+
+/** Boundary-hedge (thicket) variants: at least 3, same hash pattern as
+ * grass, so the repeating tile pattern owner complaint #6 called out is
+ * broken up. Rendering-only — occupancy/collision (`collisionRects()`) is
+ * untouched by this or any other part of this pass. */
+export const THICKET_VARIANT_COUNT = 3;
+
+export function thicketVariantIndex(col: number, row: number): number {
+  return mixHash(col * 5 + 2, row * 5 + 2) % THICKET_VARIANT_COUNT;
+}
+
+// ---- organic silhouette corner geometry (path + pond) ----------------------
+
+/**
+ * Root-cause fix for owner complaint #4 (square green protrusions on the
+ * pond's north shore) and #2 (hard right-angle path corners): the OLD
+ * silhouette compositor (`terrainTextures.ts` pre-correction) unioned a
+ * rounded-corner "core" rect with sharp-cornered rectangular "arms" per open
+ * direction. At any corner where exactly one of the two adjacent directions
+ * is open, the sharp arm rectangle's corner sits exactly where the core's
+ * smooth arc should have been, flattening it into a hard square notch —
+ * every real perimeter tile of a rectangular pond has exactly this shape
+ * (one lateral neighbour open, the shore-facing neighbour closed), so this
+ * was systematic, not incidental.
+ *
+ * The fix: classify each of the 4 corners by its two adjacent directions —
+ * both open -> 'flush' (interior corner, no visible shore there, safe to
+ * leave sharp/full-bleed); both closed -> 'rounded' (an isolated/outer
+ * corner of the shape, gets a normal small rounded corner); exactly one open
+ * -> 'wedge' (a real shoreline/path-edge transition — gets a wide, smooth
+ * diagonal blend instead of ever being flush/square). 'wedge' is the corner
+ * kind that never existed as a distinct case in the old geometry — THAT
+ * omission is the actual bug, not a specific mask value, so it cannot recur
+ * by construction: every corner is one of these three kinds, and only two
+ * closed adjacent directions ever produces a bare 90° corner.
+ */
+export type CornerKind = 'flush' | 'rounded' | 'wedge';
+
+export function cornerKindFor(dirAOpen: boolean, dirBOpen: boolean): CornerKind {
+  if (dirAOpen && dirBOpen) return 'flush';
+  if (!dirAOpen && !dirBOpen) return 'rounded';
+  return 'wedge';
+}
+
+export interface SilhouetteCorners {
+  NE: CornerKind;
+  SE: CornerKind;
+  SW: CornerKind;
+  NW: CornerKind;
+}
+
+/** The 4 corner kinds for a tile's silhouette, derived purely from which of
+ * its 4 neighbour directions are "open" (same-kind neighbour present) — see
+ * `CornerKind` doc above for why this eliminates the square-protrusion bug
+ * by construction rather than special-casing the specific masks that used
+ * to produce it. */
+export function silhouetteCornersFor(openDirs: readonly Dir[]): SilhouetteCorners {
+  const has = (d: Dir) => openDirs.includes(d);
+  const n = has('N');
+  const e = has('E');
+  const s = has('S');
+  const w = has('W');
+  return {
+    NE: cornerKindFor(n, e),
+    SE: cornerKindFor(s, e),
+    SW: cornerKindFor(s, w),
+    NW: cornerKindFor(n, w),
+  };
+}
+
+// ---- path effective visual width -------------------------------------------
+
+/** Fraction of the tile filled by the path's own "core" (before any bleed
+ * into neighbouring grass cells). Raised from the old 0.46 (owner complaint
+ * #2: "reads as a thin geometric line") to read as an actual dirt path. */
+export const PATH_CORE_FRAC = 0.82;
+
+/** Fraction of the tile the soft dirt fringe bleeds OUTWARD into each
+ * neighbouring grass cell along a path-facing edge — the fill "bleeding a
+ * few px into neighboring grass cells for visual softness" the task
+ * explicitly allows, never crossing into a different logical zone (pond/
+ * thicket/plot), only ever drawn onto grass cells. */
+export const PATH_FRINGE_FRAC = 0.3;
+
+/** The effective visual width (world px) of a straight path segment: its own
+ * core plus fringe bleed on both sides. Kept in the pure/tested module so
+ * the 40–48px acceptance range from the task can be asserted at the data
+ * level without touching Canvas. */
+export function pathEffectiveWidthPx(tile: number): number {
+  return tile * PATH_CORE_FRAC + 2 * tile * PATH_FRINGE_FRAC;
+}
+
+// ---- contact shadows ---------------------------------------------------
+
+/** Owner complaint #5: "large messy ovals". The old recipe was
+ * `height = width*0.3` with NO upper bound — on a 128px-wide building that
+ * produced an ~90x27px double-ellipse blob. The corrected recipe is capped:
+ * regardless of the object's footprint, the rendered shadow never exceeds
+ * these dimensions, and stays proportionally tighter for small objects too
+ * (the height fraction itself is lower than the old 0.3). */
+export const CONTACT_SHADOW_MAX_WIDTH = 44;
+export const CONTACT_SHADOW_MAX_HEIGHT = 12;
+export const CONTACT_SHADOW_HEIGHT_FRAC = 0.24;
+
+export interface ContactShadowSize {
+  width: number;
+  height: number;
+}
+
+/** Pure sizing function shared by every contact-shadow call site (buildings/
+ * plots/player/Lumi) — `rawWidth` is whatever footprint-derived width the
+ * caller previously used unclamped; this always returns a small, compact,
+ * capped ellipse size instead. */
+export function contactShadowSize(rawWidth: number): ContactShadowSize {
+  const width = Math.min(rawWidth, CONTACT_SHADOW_MAX_WIDTH);
+  const height = Math.min(width * CONTACT_SHADOW_HEIGHT_FRAC, CONTACT_SHADOW_MAX_HEIGHT);
+  return { width, height };
+}

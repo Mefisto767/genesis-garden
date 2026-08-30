@@ -20,6 +20,7 @@ import {
 import { deriveLumiState, lumiFollowStep, type LumiState } from '../../overhaul/lumiBehavior';
 import { CAMERA_FOLLOW_OFFSET_Y, computeCameraZoom } from '../../overhaul/camera';
 import { shouldAnimateWater, terrainCellTextures } from '../../overhaul/terrainTextures';
+import { contactShadowSize } from '../../overhaul/terrainComposition';
 import {
   BOUNDARY_TRANSITIONS,
   BUILDINGS,
@@ -297,26 +298,28 @@ export class EstateScene extends Phaser.Scene {
   }
 
   /**
-   * Environment Art Slice B: one restrained soft contact-shadow recipe,
-   * shared by buildings/plots/player/Lumi (docs/ENVIRONMENT_ART_SLICE_B.md
-   * "Locked visual direction" — warm daylight from upper-left, one shadow
-   * language). Presentation only: no setInteractive, never added to
-   * `obstacles`/collisionRects, so it cannot affect hit areas or collision.
-   * Two stacked low-alpha ellipses fake a soft edge without a real blur
-   * filter (Phaser has no cheap CSS-blur-equivalent for this without a
-   * post-fx pipeline, which is out of scope for a "restrained" shadow) —
-   * an explicit, documented interpretation choice, not a silent shortcut.
-   * Offset is down-right, consistent with the locked upper-left light
-   * direction. Depth is placed just below `depth` so it never draws over
-   * the object that casts it, regardless of call order.
+   * Environment Art Slice B, corrected by the Visual Correction pass
+   * (docs/ENVIRONMENT_ART_SLICE_B_VISUAL_CORRECTION.md — owner complaint #5,
+   * "large messy ovals"): one restrained soft contact-shadow recipe, shared
+   * by buildings/plots/player/Lumi. Presentation only: no setInteractive,
+   * never added to `obstacles`/collisionRects, so it cannot affect hit areas
+   * or collision. Sizing now goes through `contactShadowSize` (pure, tested
+   * in terrainComposition.test.ts) instead of the old unbounded
+   * `height = width*0.3` — every shadow is capped to a small, compact size
+   * regardless of the casting object's footprint. Two stacked low-alpha
+   * ellipses still fake a soft edge without a real blur filter (Phaser has
+   * no cheap CSS-blur-equivalent without a post-fx pipeline, out of scope
+   * for a "restrained" shadow) — an explicit, documented interpretation
+   * choice, not a silent shortcut. Offset is down-right, consistent with the
+   * locked upper-left light direction. Depth is placed just below `depth` so
+   * it never draws over the object that casts it, regardless of call order.
    */
-  private addContactShadow(x: number, y: number, width: number, depth: number) {
-    const w = width;
-    const h = width * 0.3;
+  private addContactShadow(x: number, y: number, rawWidth: number, depth: number) {
+    const { width: w, height: h } = contactShadowSize(rawWidth);
     const ox = w * 0.08;
     const oy = h * 0.32;
-    const outer = this.add.ellipse(x + ox, y + oy, w, h, 0x1a1208, 0.14).setDepth(depth);
-    const inner = this.add.ellipse(x + ox, y + oy, w * 0.62, h * 0.62, 0x1a1208, 0.14).setDepth(depth);
+    const outer = this.add.ellipse(x + ox, y + oy, w, h, 0x1a1208, 0.16).setDepth(depth);
+    const inner = this.add.ellipse(x + ox, y + oy, w * 0.6, h * 0.6, 0x1a1208, 0.16).setDepth(depth);
     return [outer, inner];
   }
 
@@ -325,13 +328,12 @@ export class EstateScene extends Phaser.Scene {
    * container-local coordinates, no explicit depth (the container's single
    * depth value governs the whole group; drawing the shadow before the body
    * sprite already keeps it visually behind, same idea as depth ordering). */
-  private buildContactShadowChild(width: number): Phaser.GameObjects.Ellipse[] {
-    const w = width;
-    const h = width * 0.3;
+  private buildContactShadowChild(rawWidth: number): Phaser.GameObjects.Ellipse[] {
+    const { width: w, height: h } = contactShadowSize(rawWidth);
     const ox = w * 0.08;
     const oy = h * 0.32;
-    const outer = this.add.ellipse(ox, oy, w, h, 0x1a1208, 0.14);
-    const inner = this.add.ellipse(ox, oy, w * 0.62, h * 0.62, 0x1a1208, 0.14);
+    const outer = this.add.ellipse(ox, oy, w, h, 0x1a1208, 0.16);
+    const inner = this.add.ellipse(ox, oy, w * 0.6, h * 0.6, 0x1a1208, 0.16);
     return [outer, inner];
   }
 
