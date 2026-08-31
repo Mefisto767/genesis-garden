@@ -254,8 +254,15 @@ async function runViewport(name, width, height, { checkPondAndPath = false } = {
   // (already covered elsewhere).
   const anySheetVisible = pickerVisible || (await page.locator('body').evaluate((b) => b.querySelectorAll('[class*="sheet"], [class*="picker"], [class*="Picker"]').length > 0));
   assert(anySheetVisible, `[${name}] clicking plot 3 through the computed world->screen point opens a picker (hit target + coordinate conversion both work)`);
-  // Close whatever opened, harmlessly, via Escape (does not affect the assertions above).
-  await page.keyboard.press('Escape').catch(() => {});
+  // PlantPicker is controlled by React and does not implement Escape-close.
+  // Close it through the same visible control a player uses, then wait until
+  // the overlay is really gone before movement checks and screenshots.
+  const sheetClose = page.locator('.sheet-close').last();
+  if (await sheetClose.isVisible().catch(() => false)) {
+    await sheetClose.click();
+    await sheetClose.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+  }
+  await page.waitForTimeout(150);
 
   if (checkPondAndPath) {
     // --- Path/pond/boundary occupancy unchanged (still world-config-derived, not touched by this slice). ---
