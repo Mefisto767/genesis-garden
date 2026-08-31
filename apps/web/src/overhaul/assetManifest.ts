@@ -78,7 +78,7 @@ export const ASSET_MANIFEST: AssetManifestEntry[] = [
   {
     id: 'fence_gate',
     group: 'paths_water_fences',
-    source: { kind: 'procedural', gen: 'generateGateTexture' },
+    source: { kind: 'file', path: 'assets/v1/environment/gate_botanical_closed.png' },
     purpose: 'Ворота на границе сектора (2 из 4 boundary transitions — восток/юг)',
     sizePx: [96, 64],
     frameCount: 1,
@@ -87,7 +87,7 @@ export const ASSET_MANIFEST: AssetManifestEntry[] = [
     animationFps: null,
     sortLayer: 'world-object',
     status: 'temporary',
-    note: 'Честная "заглушка будущего": подпись "Скоро" вместо попытки нарисовать реальные ворота.',
+    note: 'Starting Garden Visual Pack C: файловые закрытые ботанические ворота; interaction/collision и условия будущего unlock не меняются.',
   },
   {
     id: 'prop_ruined_passage',

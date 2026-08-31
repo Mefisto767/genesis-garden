@@ -435,6 +435,19 @@ export const ASSET_MANIFEST_V1: AssetMetadataV1[] = [
     required: true,
     note: 'Organic foliage source composited into deterministic 32×32 boundary variants; collision remains in worldConfig.',
   },
+  {
+    id: 'gate_botanical_closed',
+    file: 'assets/v1/environment/gate_botanical_closed.png',
+    sourceSize: [96, 64],
+    displaySize: [96, 64],
+    anchor: [0.5, 1],
+    footprint: null,
+    interactionPoint: [0, 0],
+    depthOffset: 0,
+    status: 'placeholder',
+    required: true,
+    note: 'Closed botanical gate for existing fence_gate runtime key; unlock rules and collision are outside this visual asset.',
+  },
 ];
 
 export function assetV1ById(id: string): AssetMetadataV1 | undefined {

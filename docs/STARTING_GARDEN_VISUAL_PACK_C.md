@@ -66,6 +66,7 @@
 | `tile_water_v1_alt` | `water_base_02.png` |
 | `landmark_clearing` | `landmark_monument.png` |
 | `prop_ruined_passage` | `boundary_ruined_passage.png` |
+| `fence_gate` | `gate_botanical_closed.png` |
 
 `boundary_hedge.png` не используется как один повторяющийся full-screen tile.
 `terrainTextures.ts` создаёт из него 8 детерминированных 32×32 crop/rotate/flip

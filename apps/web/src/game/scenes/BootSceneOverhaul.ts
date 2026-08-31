@@ -75,7 +75,7 @@ export class BootSceneOverhaul extends Phaser.Scene {
     if (lumiStationEntry?.source.kind === 'file') {
       this.load.image('building_lumi_station', lumiStationEntry.source.path);
     }
-    for (const visualId of ['landmark_clearing', 'prop_ruined_passage'] as const) {
+    for (const visualId of ['fence_gate', 'landmark_clearing', 'prop_ruined_passage'] as const) {
       const entry = assetById(visualId);
       if (entry?.source.kind === 'file') {
         this.load.image(visualId, entry.source.path);
