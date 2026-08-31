@@ -32,6 +32,14 @@ describe('estate blueprint — full-world zones', () => {
     expect(open[0].id).toBe('zone_starting_garden');
   });
 
+  it('locks the five-zone Crossroads topology around the starting garden', () => {
+    expect(ESTATE_ZONES).toHaveLength(5);
+    expect(zoneById('zone_working_farm')?.tileRect).toEqual({ col: 15, row: 0, cols: 18, rows: 16 });
+    expect(zoneById('zone_botanical_estate')?.tileRect).toEqual({ col: 33, row: 16, cols: 15, rows: 16 });
+    expect(zoneById('zone_exhibition_courtyard')?.tileRect).toEqual({ col: 0, row: 16, cols: 15, rows: 16 });
+    expect(zoneById('zone_late_territory')?.tileRect).toEqual({ col: 15, row: 32, cols: 18, rows: 16 });
+  });
+
   it('keeps the starting garden at roughly 16x16 tiles', () => {
     expect(ZONE_STARTING_GARDEN.tileRect.cols).toBeGreaterThanOrEqual(14);
     expect(ZONE_STARTING_GARDEN.tileRect.cols).toBeLessThanOrEqual(20);

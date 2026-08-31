@@ -273,7 +273,7 @@ export const BOUNDARY_TRANSITIONS: BoundaryTransition[] = [
     displayHeight: 70,
     interactionRadius: 90,
     label: 'К северу — скоро',
-    towardZoneId: null,
+    towardZoneId: 'zone_working_farm',
   },
   {
     id: 'transition_east',
@@ -284,7 +284,7 @@ export const BOUNDARY_TRANSITIONS: BoundaryTransition[] = [
     displayHeight: 64,
     interactionRadius: 90,
     label: 'На восток — скоро',
-    towardZoneId: 'zone_working_farm',
+    towardZoneId: 'zone_botanical_estate',
   },
   {
     id: 'transition_south',
@@ -295,7 +295,7 @@ export const BOUNDARY_TRANSITIONS: BoundaryTransition[] = [
     displayHeight: 64,
     interactionRadius: 90,
     label: 'На юг — скоро',
-    towardZoneId: 'zone_botanical_estate',
+    towardZoneId: 'zone_late_territory',
   },
   {
     id: 'transition_west',
@@ -306,7 +306,7 @@ export const BOUNDARY_TRANSITIONS: BoundaryTransition[] = [
     displayHeight: 70,
     interactionRadius: 90,
     label: 'На запад — скоро',
-    towardZoneId: 'zone_late_territory',
+    towardZoneId: 'zone_exhibition_courtyard',
   },
 ];
 

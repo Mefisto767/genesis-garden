@@ -75,15 +75,23 @@ export const ZONE_WORKING_FARM: EstateZone = {
   id: 'zone_working_farm',
   nameRu: 'Рабочая ферма',
   descriptionRu: 'Теплица, компостная мастерская, питомник и хранилище семян, дополнительные грядки.',
-  tileRect: { col: 33, row: 10, cols: 15, rows: 24 },
+  tileRect: { col: 15, row: 0, cols: 18, rows: 16 },
   status: 'locked',
 };
 
 export const ZONE_BOTANICAL_ESTATE: EstateZone = {
   id: 'zone_botanical_estate',
-  nameRu: 'Ботаническое поместье',
-  descriptionRu: 'Пруд и влажная зона, пасека/опылительный сад, выставочный двор, социальные ворота.',
-  tileRect: { col: 2, row: 33, cols: 26, rows: 15 },
+  nameRu: 'Пруд и сад опылителей',
+  descriptionRu: 'Большой пруд, пасека, цветочный сад и три водных habitat-места; без обычных грядок.',
+  tileRect: { col: 33, row: 16, cols: 15, rows: 16 },
+  status: 'locked',
+};
+
+export const ZONE_EXHIBITION_COURTYARD: EstateZone = {
+  id: 'zone_exhibition_courtyard',
+  nameRu: 'Выставочный и социальный двор',
+  descriptionRu: 'Выставочный павильон, витрины растений и родословных, гостевые ворота.',
+  tileRect: { col: 0, row: 16, cols: 15, rows: 16 },
   status: 'locked',
 };
 
@@ -91,7 +99,7 @@ export const ZONE_LATE_TERRITORY: EstateZone = {
   id: 'zone_late_territory',
   nameRu: 'Поздняя территория',
   descriptionRu: 'Ночной сад, большая Genesis Conservatory, сезонная исследовательская зона.',
-  tileRect: { col: 0, row: 0, cols: 15, rows: 33 },
+  tileRect: { col: 15, row: 32, cols: 18, rows: 16 },
   status: 'locked',
 };
 
@@ -99,6 +107,7 @@ export const ESTATE_ZONES: EstateZone[] = [
   ZONE_STARTING_GARDEN,
   ZONE_WORKING_FARM,
   ZONE_BOTANICAL_ESTATE,
+  ZONE_EXHIBITION_COURTYARD,
   ZONE_LATE_TERRITORY,
 ];
 
@@ -132,42 +141,42 @@ export const BUILDING_SLOTS: BuildingSlot[] = [
     id: 'building_greenhouse',
     zoneId: 'zone_working_farm',
     nameRu: 'Теплица',
-    tile: { col: 38, row: 16 },
+    tile: { col: 20, row: 7 },
     status: 'reserved',
   },
   {
     id: 'building_compost',
     zoneId: 'zone_working_farm',
     nameRu: 'Компостная мастерская',
-    tile: { col: 42, row: 22 },
+    tile: { col: 28, row: 8 },
     status: 'reserved',
   },
   {
     id: 'building_seed_nursery',
     zoneId: 'zone_working_farm',
     nameRu: 'Питомник и хранилище семян',
-    tile: { col: 38, row: 28 },
+    tile: { col: 22, row: 13 },
     status: 'reserved',
   },
   {
     id: 'building_apiary',
     zoneId: 'zone_botanical_estate',
     nameRu: 'Пасека / опылительный сад',
-    tile: { col: 10, row: 40 },
+    tile: { col: 42, row: 22 },
     status: 'reserved',
   },
   {
     id: 'building_exhibition_pavilion',
-    zoneId: 'zone_botanical_estate',
+    zoneId: 'zone_exhibition_courtyard',
     nameRu: 'Выставочный павильон',
-    tile: { col: 20, row: 44 },
+    tile: { col: 7, row: 24 },
     status: 'reserved',
   },
   {
     id: 'building_genesis_conservatory',
     zoneId: 'zone_late_territory',
     nameRu: 'Genesis Conservatory',
-    tile: { col: 7, row: 12 },
+    tile: { col: 24, row: 42 },
     status: 'reserved',
   },
   // Станция Люми — не входит в минимальный список 9 building ID из ТЗ (у неё
@@ -209,15 +218,15 @@ export const LANDMARK_SLOTS: LandmarkSlot[] = [
     id: 'landmark_pond',
     zoneId: 'zone_botanical_estate',
     nameRu: 'Большой пруд / влажная зона',
-    tile: { col: 6, row: 36 },
+    tile: { col: 38, row: 23 },
     status: 'reserved',
     note: 'Крупный водный ландшафтный объект Ботанического поместья — не путать с маленьким декоративным прудом стартового сада (тот отдельный, см. worldConfig.POND).',
   },
   {
     id: 'landmark_exhibition',
-    zoneId: 'zone_botanical_estate',
+    zoneId: 'zone_exhibition_courtyard',
     nameRu: 'Выставочный двор',
-    tile: { col: 22, row: 40 },
+    tile: { col: 11, row: 25 },
     status: 'reserved',
     note: 'Площадка под будущие выставки/социальные события — рядом с building_exhibition_pavilion.',
   },

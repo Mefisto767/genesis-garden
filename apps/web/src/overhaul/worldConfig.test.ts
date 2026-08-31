@@ -173,13 +173,19 @@ describe('closed sectors are inaccessible to the player', () => {
     }
   });
 
-  it('defines exactly 4 boundary transitions, all honestly marked as leading nowhere yet', () => {
+  it('maps the four closed passages to the canonical Crossroads sectors', () => {
     expect(BOUNDARY_TRANSITIONS).toHaveLength(4);
     const ids = BOUNDARY_TRANSITIONS.map((t) => t.id);
     expect(new Set(ids).size).toBe(4);
     for (const t of BOUNDARY_TRANSITIONS) {
       expect(t.label.toLowerCase()).toContain('скоро');
     }
+    expect(Object.fromEntries(BOUNDARY_TRANSITIONS.map((t) => [t.id, t.towardZoneId]))).toEqual({
+      transition_north: 'zone_working_farm',
+      transition_east: 'zone_botanical_estate',
+      transition_south: 'zone_late_territory',
+      transition_west: 'zone_exhibition_courtyard',
+    });
   });
 });
 
