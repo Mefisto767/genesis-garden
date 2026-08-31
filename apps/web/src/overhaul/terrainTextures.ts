@@ -126,8 +126,14 @@ function buildThicketTexture(scene: Phaser.Scene, col: number, row: number): str
   ctx.translate(TILE / 2 + dx, TILE / 2 + dy);
   ctx.rotate((variant % 4) * (Math.PI / 2));
   ctx.scale(variant & 4 ? -1 : 1, 1);
+  ctx.globalAlpha = 0.5;
   ctx.drawImage(sourceImage(scene, TERRAIN_KEYS.boundaryFoliage), -size / 2, -size / 2, size, size);
   ctx.restore();
+  // The source cutout is intentionally vivid at object scale. As a continuous
+  // perimeter it must recede behind the garden, so fold it into one dark,
+  // low-contrast hedge material instead of letting lime highlights dominate.
+  ctx.fillStyle = 'rgba(10, 31, 18, 0.44)';
+  ctx.fillRect(0, 0, TILE, TILE);
   tex.refresh();
   return key;
 }
