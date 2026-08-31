@@ -1,0 +1,65 @@
+name: Visual audit
+
+on:
+  push:
+    branches: [visual-overhaul]
+  workflow_dispatch: {}
+
+concurrency:
+  group: visual-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/web
+
+      - name: Validate visual build
+        working-directory: apps/web
+        run: |
+          npx tsc -b --noEmit
+          npx vitest run src/overhaul/assetManifestV1.test.ts src/overhaul/terrainComposition.test.ts
+
+      - name: Build Overhaul + Genetics V2
+        working-directory: apps/web
+        env:
+          VITE_VISUAL_OVERHAUL_ENABLED: "true"
+          VITE_DIPLOID_GENETICS_ENABLED: "true"
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start preview
+        working-directory: apps/web
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4175 --strictPort &
+          npx -y wait-on http://127.0.0.1:4175/genesis-garden/ --timeout 30000
+
+      - name: Capture real Estate screenshots
+        run: node test-e2e-environment-art-b.mjs http://127.0.0.1:4175/genesis-garden/
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: starting-garden-visual-audit-${{ github.sha }}
+          path: shots/art-b-*.png
+          if-no-files-found: warn
+          retention-days: 14
