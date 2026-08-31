@@ -93,12 +93,28 @@ describe('ASSET_MANIFEST_V1 — реальный манифест против �
     }
   });
 
-  it('declares missing targets honestly (house and lab background do not exist)', () => {
+  it('declares the remaining lab background target honestly', () => {
     const missing = ASSET_MANIFEST_V1.filter((e) => e.status === 'missing').map((e) => e.id);
-    expect(missing).toContain('building_house_target');
     expect(missing).toContain('lab_bg_level1_target');
     for (const e of ASSET_MANIFEST_V1.filter((x) => x.status === 'missing')) {
       expect(existsSync(path.join(PUBLIC_DIR, e.file)), `${e.file} must not exist`).toBe(false);
+    }
+  });
+
+  it('keeps Gate 2 buildings as validated placeholders until screenshot approval', () => {
+    const expected = new Map<string, [number, number]>([
+      ['building_house', [128, 128]],
+      ['building_lab', [128, 128]],
+      ['building_storage_shed', [70, 70]],
+      ['building_lumi_station', [64, 80]],
+    ]);
+    for (const [id, size] of expected) {
+      const entry = ASSET_MANIFEST_V1.find((asset) => asset.id === id);
+      expect(entry, id).toBeDefined();
+      expect(entry!.sourceSize, id).toEqual(size);
+      expect(entry!.displaySize, id).toEqual(size);
+      expect(entry!.status, id).toBe('placeholder');
+      expect(entry!.file, id).toMatch(/^assets\/v1\/buildings\//);
     }
   });
 

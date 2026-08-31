@@ -70,6 +70,10 @@ export class BootSceneOverhaul extends Phaser.Scene {
         this.load.image(b.assetId, entry.source.path);
       }
     }
+    const lumiStationEntry = assetById('building_lumi_station');
+    if (lumiStationEntry?.source.kind === 'file') {
+      this.load.image('building_lumi_station', lumiStationEntry.source.path);
+    }
     const npcEntry = assetById('npc_mascot_patrol');
     if (npcEntry && npcEntry.source.kind === 'file') {
       this.load.image('npc_mascot_patrol', npcEntry.source.path);
