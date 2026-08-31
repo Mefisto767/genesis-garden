@@ -158,20 +158,6 @@ export function thicketVariantIndex(col: number, row: number): number {
   return mixHash(col * 5 + 2, row * 5 + 2) % THICKET_VARIANT_COUNT;
 }
 
-/** Per-tile deterministic seed for thicket fleck/leaf-cluster noise — same
- * role as `grassNoiseSeed` for grass. Required because the single approved
- * `tile_thicket_v1` source is symmetric under horizontal-flip and 180°-
- * rotate (confirmed byte-identical), so those two transforms alone (used by
- * `thicketVariantIndex`'s variant 1/2) are visually inert; without per-tile
- * noise on top, caching a shared texture per variant (3 total images)
- * across the whole boundary ring reproduces the exact repeating pattern
- * from owner complaint #6, just with a 3-tile period instead of a 1-tile
- * period. This seed drives real per-(col,row) fleck placement so no two
- * boundary tiles render pixel-identical. Pure function of (col,row). */
-export function thicketNoiseSeed(col: number, row: number): number {
-  return mixHash(col * 11 + 5, row * 11 + 5);
-}
-
 // ---- organic silhouette corner geometry (path + pond) ----------------------
 
 /**

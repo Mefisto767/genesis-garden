@@ -20,7 +20,6 @@ import {
   pathEffectiveWidthPx,
   silhouetteCornersFor,
   thicketVariantIndex,
-  thicketNoiseSeed,
   waterAnimatesFor,
   type Dir,
 } from './terrainComposition';
@@ -405,40 +404,6 @@ describe('grass/thicket variants — at least 3, hash-selected, actually distrib
     const row = 8;
     const seeds = Array.from({ length: 10 }, (_, col) => grassNoiseSeed(col, row));
     expect(new Set(seeds).size).toBeGreaterThan(1);
-  });
-
-  it('thicketNoiseSeed is stable and varies between adjacent boundary tiles (re-audit fix: flip/rotate of tile_thicket_v1 alone is a no-op, so per-tile noise is what actually breaks the repeat)', () => {
-    expect(thicketNoiseSeed(3, 3)).toBe(thicketNoiseSeed(3, 3));
-    // A single column of boundary tiles (fixed col, varying row) is exactly
-    // the crop the owner's report flagged as still showing an obvious
-    // repeat — assert real variation along that axis, not just some axis.
-    const col = 0;
-    const seeds = Array.from({ length: 12 }, (_, row) => thicketNoiseSeed(col, row));
-    expect(new Set(seeds).size).toBeGreaterThan(6);
-  });
-
-  it('thicketNoiseSeed is independent of thicketVariantIndex (two tiles sharing a variant still get different noise)', () => {
-    // Find two distinct (col,row) pairs that land on the same variant and
-    // confirm their noise seeds differ — this is what makes them visually
-    // distinguishable despite the flip/rotate transform being a no-op on
-    // this particular symmetric source image.
-    const byVariant = new Map<number, Array<[number, number]>>();
-    for (let col = 0; col < 20; col++) {
-      for (let row = 0; row < 20; row++) {
-        const v = thicketVariantIndex(col, row);
-        const list = byVariant.get(v) ?? [];
-        list.push([col, row]);
-        byVariant.set(v, list);
-      }
-    }
-    let checkedAtLeastOnePair = false;
-    for (const pairs of byVariant.values()) {
-      if (pairs.length < 2) continue;
-      const [a, b] = pairs;
-      expect(thicketNoiseSeed(a[0], a[1])).not.toBe(thicketNoiseSeed(b[0], b[1]));
-      checkedAtLeastOnePair = true;
-    }
-    expect(checkedAtLeastOnePair).toBe(true);
   });
 });
 
