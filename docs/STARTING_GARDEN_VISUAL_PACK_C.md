@@ -67,10 +67,9 @@
 | `landmark_clearing` | `landmark_monument.png` |
 | `prop_ruined_passage` | `boundary_ruined_passage.png` |
 
-`boundary_hedge.png` нельзя превращать в один повторяющийся full-screen tile.
-Использовать только как отдельные 64×64 boundary sprites с
-детерминированными вариантами поворота/смещения, если это не меняет collision
-contract. Иначе оставить вне runtime до отдельного visual wiring pass.
+`boundary_hedge.png` не используется как один повторяющийся full-screen tile.
+`terrainTextures.ts` создаёт из него 8 детерминированных 32×32 crop/rotate/flip
+вариантов по coordinate hash. Геометрия кольца и collision contract не меняются.
 
 ## Screenshot acceptance
 

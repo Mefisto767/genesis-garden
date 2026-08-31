@@ -422,6 +422,19 @@ export const ASSET_MANIFEST_V1: AssetMetadataV1[] = [
     required: true,
     note: 'Visual replacement for runtime key prop_ruined_passage; existing interaction/collision contract stays intact.',
   },
+  {
+    id: 'boundary_hedge_v1',
+    file: 'assets/v1/environment/boundary_hedge.png',
+    sourceSize: [64, 64],
+    displaySize: [32, 32],
+    anchor: [0, 0],
+    footprint: null,
+    interactionPoint: null,
+    depthOffset: 0,
+    status: 'placeholder',
+    required: true,
+    note: 'Organic foliage source composited into deterministic 32×32 boundary variants; collision remains in worldConfig.',
+  },
 ];
 
 export function assetV1ById(id: string): AssetMetadataV1 | undefined {

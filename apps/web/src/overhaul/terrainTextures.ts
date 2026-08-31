@@ -24,6 +24,7 @@
 import Phaser from 'phaser';
 import {
   bankDecorAt,
+  boundaryFoliageVariant,
   classifyFourNeighbourMask,
   grassVariantAlt,
   neighbourMaskAt,
@@ -41,6 +42,7 @@ const TERRAIN_KEYS = {
   water: 'tile_water_v1',
   waterAlt: 'tile_water_v1_alt',
   thicket: 'tile_thicket_v1',
+  boundaryFoliage: 'boundary_hedge_v1',
 } as const;
 
 function sourceImage(scene: Phaser.Scene, key: string): CanvasImageSource {
@@ -98,6 +100,36 @@ function traceOrganicSilhouette(
 function ensureCanvasTexture(scene: Phaser.Scene, key: string, size: number): Phaser.Textures.CanvasTexture | null {
   if (scene.textures.exists(key)) return null; // already built — idempotent, same convention as proceduralAssets.ts
   return scene.textures.createCanvas(key, size, size);
+}
+
+// ---- boundary foliage ------------------------------------------------------
+
+/** Turns the accepted 64×64 bush cutout into eight dense 32×32 boundary
+ * material variants. Each variant uses a different deterministic crop,
+ * quarter-turn and flip, so the perimeter reads as overlapping foliage
+ * instead of a repeated wallpaper tile. The underlying thicket occupancy
+ * and collision remain entirely in worldConfig. */
+function buildThicketTexture(scene: Phaser.Scene, col: number, row: number): string {
+  const variant = boundaryFoliageVariant(col, row);
+  const key = `terrain_thicket_v1_${variant}`;
+  const tex = ensureCanvasTexture(scene, key, TILE);
+  if (!tex) return key;
+
+  const ctx = tex.getContext();
+  ctx.clearRect(0, 0, TILE, TILE);
+  ctx.fillStyle = '#173b22';
+  ctx.fillRect(0, 0, TILE, TILE);
+  const size = TILE * (1.32 + (variant % 3) * 0.09);
+  const dx = ((variant * 7) % 9) - 4;
+  const dy = ((variant * 5) % 7) - 3;
+  ctx.save();
+  ctx.translate(TILE / 2 + dx, TILE / 2 + dy);
+  ctx.rotate((variant % 4) * (Math.PI / 2));
+  ctx.scale(variant & 4 ? -1 : 1, 1);
+  ctx.drawImage(sourceImage(scene, TERRAIN_KEYS.boundaryFoliage), -size / 2, -size / 2, size, size);
+  ctx.restore();
+  tex.refresh();
+  return key;
 }
 
 // ---- path (earth fill + organic grass fringe) ------------------------------
@@ -263,7 +295,7 @@ export function terrainCellTextures(
   const kind = terrainAt(col, row, pathTiles);
 
   if (kind === 'thicket') {
-    return { key: TERRAIN_KEYS.thicket, shimmerAltKey: null };
+    return { key: buildThicketTexture(scene, col, row), shimmerAltKey: null };
   }
 
   if (kind === 'path') {

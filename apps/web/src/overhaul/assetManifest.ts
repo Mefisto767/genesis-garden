@@ -117,6 +117,20 @@ export const ASSET_MANIFEST: AssetManifestEntry[] = [
     status: 'temporary',
     note: 'Starting Garden Visual Pack C: файловый монумент заменяет пустой круг; слот и мировые координаты прежние.',
   },
+  {
+    id: 'boundary_hedge_v1',
+    group: 'paths_water_fences',
+    source: { kind: 'file', path: 'assets/v1/environment/boundary_hedge.png' },
+    purpose: 'Органичный исходник листвы для визуальной границы сектора',
+    sizePx: [64, 64],
+    frameCount: 1,
+    anchor: [0.5, 0.5],
+    collisionBox: null,
+    animationFps: null,
+    sortLayer: 'ground-decor',
+    status: 'temporary',
+    note: 'Композитор создаёт из одного cutout восемь coordinate-hash вариантов; collision остаётся в worldConfig.',
+  },
 
   // ---- buildings ------------------------------------------------------------
   {

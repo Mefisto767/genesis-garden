@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DIR_BITS,
   bankDecorAt,
+  boundaryFoliageVariant,
   classifyFourNeighbourMask,
   computeNeighbourMask,
   grassVariantAlt,
@@ -53,6 +54,15 @@ describe('grassVariantAlt — pure coordinate hash, not game RNG', () => {
     const results = Array.from({ length: 20 }, (_, col) => grassVariantAlt(col, row));
     const allSame = results.every((r) => r === results[0]);
     expect(allSame).toBe(false);
+  });
+});
+
+describe('boundaryFoliageVariant — deterministic organic boundary', () => {
+  it('is stable, bounded and produces multiple neighbouring variants', () => {
+    const values = Array.from({ length: 32 }, (_, col) => boundaryFoliageVariant(col, 7));
+    expect(values.every((value) => value >= 0 && value < 8)).toBe(true);
+    expect(new Set(values).size).toBeGreaterThan(3);
+    expect(boundaryFoliageVariant(9, 12)).toBe(boundaryFoliageVariant(9, 12));
   });
 });
 

@@ -51,6 +51,7 @@
 | `fence_gate` | procedural: `generateGateTexture` | temporary | ворота на границе сектора (2 из 4 переходов — восток/юг) |
 | `prop_ruined_passage` | `assets/v1/environment/boundary_ruined_passage.png` | temporary | разрушенный проход на границе сектора; визуал без изменения interaction/collision |
 | `landmark_clearing` | `assets/v1/environment/landmark_monument.png` | temporary | ботанический монумент в стабильном слоте `landmark_central` |
+| `boundary_hedge_v1` | `assets/v1/environment/boundary_hedge.png` | temporary | органичный cutout листвы; compositor создаёт 8 детерминированных граничных вариантов |
 
 ## buildings
 

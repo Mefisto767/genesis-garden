@@ -57,6 +57,7 @@ export class BootSceneOverhaul extends Phaser.Scene {
     this.load.image('tile_water_v1', 'assets/terrain/tile_water_v1.png');
     this.load.image('tile_water_v1_alt', 'assets/terrain/tile_water_v1_alt.png');
     this.load.image('tile_thicket_v1', 'assets/terrain/tile_thicket_v1.png');
+    this.load.image('boundary_hedge_v1', 'assets/v1/environment/boundary_hedge.png');
 
     if (GENETICS_V2_ENABLED) {
       this.load.image('plant_hybrid_unrevealed_v1', 'assets/plants/plant_hybrid_unrevealed.png');

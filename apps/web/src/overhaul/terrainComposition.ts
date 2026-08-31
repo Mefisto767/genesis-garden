@@ -100,6 +100,12 @@ export function grassVariantAlt(col: number, row: number): boolean {
   return mixHash(col, row) % 100 < GRASS_ALT_PERCENT;
 }
 
+/** One of eight deterministic crop/rotation variants for the organic hedge
+ * source. Pure presentation data: never touches the game RNG or collision. */
+export function boundaryFoliageVariant(col: number, row: number): number {
+  return mixHash(col * 3 + 17, row * 5 - 11) % 8;
+}
+
 export type BankDecor = 'none' | 'stone' | 'reed';
 
 /** Deterministic, sparse, mutually-exclusive per-tile decor pick for bank
