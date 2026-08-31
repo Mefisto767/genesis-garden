@@ -203,13 +203,13 @@ export const DECOR: WorldDecor[] = [
   { id: 'lantern_lab', assetId: 'decor_lantern', x: 1012, y: 760, displayWidth: 36, displayHeight: 54 },
 ];
 
-// Зарезервированная площадка landmark_central (см. estateBlueprint.ts) —
-// координаты в px, для отрисовки нейтральной "расчищенной поляны" (не
-// монумента — конкретный монумент этим этапом не придумывается).
+// Стабильный визуальный слот landmark_central (см. estateBlueprint.ts).
+// Starting Garden Visual Pack C заменил процедурную поляну файловым
+// монументом, не меняя саму точку мира.
 const centralLandmark = LANDMARK_SLOTS.find((l) => l.id === 'landmark_central')!;
 export const LANDMARK_CENTRAL_POS: Point = tileToPx(centralLandmark.tile.col, centralLandmark.tile.row);
 
-/** Visual V1: точка ОТРИСОВКИ декали "расчищенная поляна" — поднята на 16px
+/** Visual V1: точка ОТРИСОВКИ central landmark — поднята на 16px
  * от точки слота, чтобы 64×64 декаль не заезжала под footprint грядки 1
  * (грядки начинаются на y=688; сам слот landmark_central и его данные в
  * estateBlueprint.ts не меняются — это чисто презентационный сдвиг декали). */

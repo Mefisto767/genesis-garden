@@ -335,8 +335,7 @@ export class EstateScene extends Phaser.Scene {
     return [outer, inner];
   }
 
-  /** Зарезервированная площадка landmark_central — только расчищенная
-   * поляна, без монумента (см. estateBlueprint.ts LANDMARK_SLOTS). */
+  /** Визуальный объект в стабильном landmark_central slot. */
   private renderLandmarkClearing() {
     const img = this.add.image(LANDMARK_CLEARING_RENDER_POS.x, LANDMARK_CLEARING_RENDER_POS.y, 'landmark_clearing');
     img.setDepth(-900);

@@ -391,6 +391,37 @@ export const ASSET_MANIFEST_V1: AssetMetadataV1[] = [
     required: true,
     note: 'Environment Art Slice B — impassable boundary material; occupancy/collision unchanged (worldConfig.collisionRects() boundary bands).',
   },
+
+  // ---- Starting Garden Visual Pack C --------------------------------------
+  // Screenshot-gated visual replacements. They remain placeholder until the
+  // owner accepts their in-game scale and composition; runtime coordinates,
+  // interactions and collision continue to come from worldConfig.
+  {
+    id: 'landmark_monument',
+    file: 'assets/v1/environment/landmark_monument.png',
+    sourceSize: [64, 64],
+    displaySize: [64, 64],
+    anchor: [0.5, 0.5],
+    footprint: null,
+    interactionPoint: null,
+    depthOffset: 0,
+    status: 'placeholder',
+    required: true,
+    note: 'Visual replacement for runtime key landmark_clearing; no world-data change.',
+  },
+  {
+    id: 'boundary_ruined_passage',
+    file: 'assets/v1/environment/boundary_ruined_passage.png',
+    sourceSize: [96, 80],
+    displaySize: [90, 70],
+    anchor: [0.5, 1],
+    footprint: null,
+    interactionPoint: [0, 0],
+    depthOffset: 0,
+    status: 'placeholder',
+    required: true,
+    note: 'Visual replacement for runtime key prop_ruined_passage; existing interaction/collision contract stays intact.',
+  },
 ];
 
 export function assetV1ById(id: string): AssetMetadataV1 | undefined {
